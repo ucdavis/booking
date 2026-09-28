@@ -5,11 +5,17 @@ namespace Server.Core.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    public DbSet<Person> People => Set<Person>();
+
     public DbSet<WeatherForecast> WeatherForecasts => Set<WeatherForecast>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // Configure entity properties and relationships here if needed
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<Person>()
+            .HasKey(person => person.IamId)
+            .HasName("PK_People")
+            .IsClustered();
     }
 }
