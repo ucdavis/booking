@@ -180,7 +180,7 @@ The Docker sandbox enables fictional local users with `Auth__UseLocal=true`, byp
 
 For a new application registration, redirect URIs, and app-specific auth settings, follow [the customization guide](README.customization.md#3-microsoft-entra-id-azure-ad-app-sign-in-setup).
 
-To include the `ucdPersonIAMID` claim in the user profile, follow [Authentication](https://app.notion.com/p/caes-cru/Authentication-2eae70f674118020ba74e953828d2591?source=copy_link).
+Each login creates or updates a `Users` row by IAM ID, refreshing the name, email, and login timestamps while preserving application-managed flags. Sign-in requires a name and the `ucdPersonIAMID` claim and fails if the user record cannot be saved. To configure the IAM claim, follow [Authentication](https://app.notion.com/p/caes-cru/Authentication-2eae70f674118020ba74e953828d2591?source=copy_link).
 
 ### Google Analytics (GA4)
 

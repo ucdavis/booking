@@ -28,6 +28,7 @@ public static class AuthenticationHelper
                 {
                     options.Cookie.Name = cookieName;
                     options.LoginPath = "/login";
+                    options.Events.OnSigningIn = OnSigningIn;
                     options.Events.OnRedirectToLogin = ctx =>
                     {
                         if (ctx.Request.Path.StartsWithSegments("/api"))
@@ -82,6 +83,7 @@ public static class AuthenticationHelper
         {
             options.Events = new CookieAuthenticationEvents
             {
+                OnSigningIn = OnSigningIn,
                 OnValidatePrincipal = OnValidatePrincipal,
                 OnRedirectToAccessDenied = ctx =>
                 {
@@ -115,6 +117,15 @@ public static class AuthenticationHelper
         ctx.ProtocolMessage.DomainHint = "ucdavis.edu";
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Saves the user after authentication succeeds and before issuing the login cookie.
+    /// </summary>
+    private static async Task OnSigningIn(CookieSigningInContext ctx)
+    {
+        var userService = ctx.HttpContext.RequestServices.GetRequiredService<IUserService>();
+        await userService.UpdateUserOnLogin(ctx.Principal!, ctx.HttpContext.RequestAborted);
     }
 
     /// <summary>

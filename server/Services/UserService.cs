@@ -1,10 +1,13 @@
 using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
 using Server.Core.Data;
+using Server.Core.Domain;
 
 namespace Server.Services;
 
 public interface IUserService
 {
+    Task UpdateUserOnLogin(ClaimsPrincipal principal, CancellationToken cancellationToken = default);
     Task<ClaimsPrincipal?> UpdateUserPrincipalIfNeeded(ClaimsPrincipal principal);
 }
 
@@ -17,6 +20,64 @@ public class UserService : IUserService
     {
         _logger = logger;
         _dbContext = dbContext;
+    }
+
+    public async Task UpdateUserOnLogin(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
+    {
+        if (principal.Identity?.IsAuthenticated != true)
+        {
+            throw new InvalidOperationException("An authenticated identity is required to save the user at login.");
+        }
+
+        var iamId = principal.FindFirst("ucdPersonIAMID")?.Value;
+        var name = principal.FindFirst("name")?.Value ?? principal.Identity.Name;
+        if (string.IsNullOrWhiteSpace(iamId) || string.IsNullOrWhiteSpace(name))
+        {
+            throw new InvalidOperationException("An IAM ID and name are required to save the user at login.");
+        }
+
+        var email = principal.FindFirst("preferred_username")?.Value
+            ?? principal.FindFirst(ClaimTypes.Email)?.Value
+            ?? principal.FindFirst("email")?.Value;
+        var user = await _dbContext.Users.SingleOrDefaultAsync(user => user.IamId == iamId, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var isNewUser = user == null;
+        if (user == null)
+        {
+            user = new User
+            {
+                IamId = iamId,
+                Name = name,
+                CreatedAt = now,
+            };
+            _dbContext.Users.Add(user);
+        }
+
+        try
+        {
+            await SaveLoginDetails(user, name, email, now, cancellationToken);
+        }
+        catch (DbUpdateException) when (isNewUser)
+        {
+            // Another first login may have inserted the same IAM ID after our lookup.
+            _dbContext.Entry(user).State = EntityState.Detached;
+            var existingUser = await _dbContext.Users.SingleOrDefaultAsync(user => user.IamId == iamId, cancellationToken);
+            if (existingUser == null)
+            {
+                throw;
+            }
+
+            await SaveLoginDetails(existingUser, name, email, DateTimeOffset.UtcNow, cancellationToken);
+        }
+    }
+
+    private async Task SaveLoginDetails(User user, string name, string? email, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        user.Name = name;
+        user.Email = email;
+        user.UpdatedAt = now;
+        user.LastLoginAt = now;
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<List<string>> GetRolesForUser(string userId)
