@@ -8,11 +8,26 @@ namespace Server.Helpers;
 
 public static class AuthenticationHelper
 {
+    public const string SiteAdminPolicy = "SiteAdmin";
+
     /// <summary>
     /// Keeps Entra as the default; local sign-in must be explicitly enabled in Development.
     /// </summary>
     public static IServiceCollection AddAuthenticationServices(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
+        services.AddAuthorization(options => options.AddPolicy(SiteAdminPolicy, policy =>
+            policy.RequireAuthenticatedUser().RequireAssertion(async context =>
+            {
+                var httpContext = context.Resource as HttpContext;
+                if (httpContext == null)
+                {
+                    return false;
+                }
+
+                var userService = httpContext.RequestServices.GetRequiredService<IUserService>();
+                return await userService.IsSiteAdmin(context.User, httpContext.RequestAborted);
+            })));
+
         if (LocalAuthentication.IsEnabled(configuration, environment))
         {
             var cookieName = ".Grove.LocalSandbox";
@@ -28,6 +43,7 @@ public static class AuthenticationHelper
                 {
                     options.Cookie.Name = cookieName;
                     options.LoginPath = "/login";
+                    options.Events.OnSigningIn = OnSigningIn;
                     options.Events.OnRedirectToLogin = ctx =>
                     {
                         if (ctx.Request.Path.StartsWithSegments("/api"))
@@ -82,6 +98,7 @@ public static class AuthenticationHelper
         {
             options.Events = new CookieAuthenticationEvents
             {
+                OnSigningIn = OnSigningIn,
                 OnValidatePrincipal = OnValidatePrincipal,
                 OnRedirectToAccessDenied = ctx =>
                 {
@@ -115,6 +132,15 @@ public static class AuthenticationHelper
         ctx.ProtocolMessage.DomainHint = "ucdavis.edu";
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Saves the user after authentication succeeds and before issuing the login cookie.
+    /// </summary>
+    private static async Task OnSigningIn(CookieSigningInContext ctx)
+    {
+        var userService = ctx.HttpContext.RequestServices.GetRequiredService<IUserService>();
+        await userService.UpdateUserOnLogin(ctx.Principal!, ctx.HttpContext.RequestAborted);
     }
 
     /// <summary>

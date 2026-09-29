@@ -58,6 +58,40 @@ public class DbInitializer : IDbInitializer
             _db.WeatherForecasts.AddRange(forecasts);
             await _db.SaveChangesAsync(ct);
         }
+
+        if (!await _db.People.AnyAsync(ct))
+        {
+            var seedDate = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+            for (var i = 1; i <= 100; i++)
+            {
+                _db.People.Add(new Person
+                {
+                    IamId = $"FAKE{i:D6}",
+                    EmployeeId = $"FAKE{i:D4}",
+                    FirstName = $"Fake{i:D3}",
+                    LastName = $"User{i:D3}",
+                    FullName = $"Fake{i:D3} User{i:D3}",
+                    IsEmployee = true,
+                    IsHsEmployee = false,
+                    IsFaculty = false,
+                    IsStudent = false,
+                    IsStaff = true,
+                    IsExternal = false,
+                    IsCampusEmployee = "Y",
+                    UserId = $"fake{i:D4}",
+                    Email = $"fake.user{i:D3}@example.invalid",
+                    ModifyDate = seedDate,
+                    ModifyDateRaw = "2025-01-01 00:00:00",
+                    FirstIngestedAt = seedDate,
+                    LastFetchedAt = seedDate,
+                    SourceEndpoint = "development-seed",
+                    PromotedAt = seedDate
+                });
+            }
+
+            await _db.SaveChangesAsync(ct);
+        }
     }
 
     // just a placeholder for any production-safe seeding

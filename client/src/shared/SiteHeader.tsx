@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router';
+import { useMeQuery } from '@/queries/user.ts';
 
 const navigationItems = [
   ['Find resources', '/temp/resources'],
@@ -7,6 +8,8 @@ const navigationItems = [
 ] as const;
 
 export function SiteHeader() {
+  const userQuery = useMeQuery();
+
   return (
     <header className="bg-base-100">
       <div className="content-container flex flex-wrap items-center justify-between gap-4 py-4">
@@ -35,6 +38,15 @@ export function SiteHeader() {
               {label}
             </Link>
           ))}
+          {userQuery.isSuccess && userQuery.data.isSiteAdmin && (
+            <Link
+              activeProps={{ className: 'font-semibold text-primary' }}
+              className="text-base-content/70 transition-colors hover:text-base-content"
+              to="/admin"
+            >
+              Site admin
+            </Link>
+          )}
         </nav>
       </div>
     </header>

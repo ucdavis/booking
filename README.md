@@ -180,7 +180,17 @@ The Docker sandbox enables fictional local users with `Auth__UseLocal=true`, byp
 
 For a new application registration, redirect URIs, and app-specific auth settings, follow [the customization guide](README.customization.md#3-microsoft-entra-id-azure-ad-app-sign-in-setup).
 
-To include the `ucdPersonIAMID` claim in the user profile, follow [Authentication](https://app.notion.com/p/caes-cru/Authentication-2eae70f674118020ba74e953828d2591?source=copy_link).
+Each login creates or updates a `Users` row by IAM ID, refreshing the name, email, and login timestamps while preserving application-managed flags. Sign-in requires a name and the `ucdPersonIAMID` claim and fails if the user record cannot be saved. To configure the IAM claim, follow [Authentication](https://app.notion.com/p/caes-cru/Authentication-2eae70f674118020ba74e953828d2591?source=copy_link).
+
+To grant yourself or other users admin status during development, add a comma-separated list of IAM IDs to `server/.env`:
+
+```dotenv
+DevelopmentData__AdminIamIds="123456789,987654321"
+```
+
+Restart the backend and sign in again. In the `Development` environment, a matching IAM ID sets `Users.IsAdmin` to `true` when the user record is created or updated at login. The record does not need to exist beforehand. Matching uses complete, case-sensitive IAM IDs; surrounding spaces and empty entries are ignored. This setting is independent of sample-data seeding and is ignored outside Development. It leaves `IsActive` and other users' admin flags unchanged. Removing an ID or clearing the setting does not revoke an admin flag already saved in the database.
+
+For local sandbox users, the IAM IDs are `sandbox-10001` (Sample User) and `sandbox-10002` (Basic User). This setting updates the database admin flag; the template's fixed `User` and `SampleRole` claims stay unchanged. The Docker sandbox excludes host `.env` files, so pass `DevelopmentData__AdminIamIds` to the app container's environment when using Docker.
 
 ### Google Analytics (GA4)
 
