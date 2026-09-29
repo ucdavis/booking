@@ -81,7 +81,8 @@ public class AuthenticationHelperTests : IDisposable
 
         cache.NoStore.Should().BeTrue();
         cache.Location.Should().Be(ResponseCacheLocation.None);
-        new AdminController().Access().Should().BeOfType<NoContentResult>();
+        using var db = TestDbContextFactory.CreateInMemory();
+        new AdminController(db).Access().Should().BeOfType<NoContentResult>();
     }
 
     [Theory]

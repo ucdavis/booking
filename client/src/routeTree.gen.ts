@@ -24,8 +24,10 @@ import { Route as authenticatedFormRouteImport } from './routes/(authenticated)/
 import { Route as authenticatedFetchRouteImport } from './routes/(authenticated)/fetch'
 import { Route as authenticatedAdminRouteImport } from './routes/(authenticated)/admin'
 import { Route as TempResourcesIndexRouteImport } from './routes/temp/resources/index'
+import { Route as authenticatedAdminIndexRouteImport } from './routes/(authenticated)/admin.index'
 import { Route as TempResourcesResourceIdRouteImport } from './routes/temp/resources/$resourceId'
 import { Route as TempAdminResourcesRouteImport } from './routes/temp/admin/resources'
+import { Route as authenticatedAdminUsersRouteImport } from './routes/(authenticated)/admin.users'
 
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
@@ -103,6 +105,11 @@ const TempResourcesIndexRoute = TempResourcesIndexRouteImport.update({
   path: '/temp/resources/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const authenticatedAdminIndexRoute = authenticatedAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => authenticatedAdminRoute,
+} as any)
 const TempResourcesResourceIdRoute = TempResourcesResourceIdRouteImport.update({
   id: '/temp/resources/$resourceId',
   path: '/temp/resources/$resourceId',
@@ -113,10 +120,15 @@ const TempAdminResourcesRoute = TempAdminResourcesRouteImport.update({
   path: '/temp/admin/resources',
   getParentRoute: () => rootRouteImport,
 } as any)
+const authenticatedAdminUsersRoute = authenticatedAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => authenticatedAdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
-  '/admin': typeof authenticatedAdminRoute
+  '/admin': typeof authenticatedAdminRouteWithChildren
   '/fetch': typeof authenticatedFetchRoute
   '/form': typeof authenticatedFormRoute
   '/me': typeof authenticatedMeRoute
@@ -128,13 +140,14 @@ export interface FileRoutesByFullPath {
   '/temp/room': typeof TempRoomRoute
   '/': typeof authenticatedIndexRoute
   '/temp': typeof TempIndexRoute
+  '/admin/users': typeof authenticatedAdminUsersRoute
   '/temp/admin/resources': typeof TempAdminResourcesRoute
   '/temp/resources/$resourceId': typeof TempResourcesResourceIdRoute
+  '/admin/': typeof authenticatedAdminIndexRoute
   '/temp/resources': typeof TempResourcesIndexRoute
 }
 export interface FileRoutesByTo {
   '/about': typeof AboutRoute
-  '/admin': typeof authenticatedAdminRoute
   '/fetch': typeof authenticatedFetchRoute
   '/form': typeof authenticatedFormRoute
   '/me': typeof authenticatedMeRoute
@@ -146,15 +159,17 @@ export interface FileRoutesByTo {
   '/temp/room': typeof TempRoomRoute
   '/': typeof authenticatedIndexRoute
   '/temp': typeof TempIndexRoute
+  '/admin/users': typeof authenticatedAdminUsersRoute
   '/temp/admin/resources': typeof TempAdminResourcesRoute
   '/temp/resources/$resourceId': typeof TempResourcesResourceIdRoute
+  '/admin': typeof authenticatedAdminIndexRoute
   '/temp/resources': typeof TempResourcesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/(authenticated)': typeof authenticatedRouteRouteWithChildren
   '/about': typeof AboutRoute
-  '/(authenticated)/admin': typeof authenticatedAdminRoute
+  '/(authenticated)/admin': typeof authenticatedAdminRouteWithChildren
   '/(authenticated)/fetch': typeof authenticatedFetchRoute
   '/(authenticated)/form': typeof authenticatedFormRoute
   '/(authenticated)/me': typeof authenticatedMeRoute
@@ -166,8 +181,10 @@ export interface FileRoutesById {
   '/temp/room': typeof TempRoomRoute
   '/(authenticated)/': typeof authenticatedIndexRoute
   '/temp/': typeof TempIndexRoute
+  '/(authenticated)/admin/users': typeof authenticatedAdminUsersRoute
   '/temp/admin/resources': typeof TempAdminResourcesRoute
   '/temp/resources/$resourceId': typeof TempResourcesResourceIdRoute
+  '/(authenticated)/admin/': typeof authenticatedAdminIndexRoute
   '/temp/resources/': typeof TempResourcesIndexRoute
 }
 export interface FileRouteTypes {
@@ -186,13 +203,14 @@ export interface FileRouteTypes {
     | '/temp/room'
     | '/'
     | '/temp'
+    | '/admin/users'
     | '/temp/admin/resources'
     | '/temp/resources/$resourceId'
+    | '/admin/'
     | '/temp/resources'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/about'
-    | '/admin'
     | '/fetch'
     | '/form'
     | '/me'
@@ -204,8 +222,10 @@ export interface FileRouteTypes {
     | '/temp/room'
     | '/'
     | '/temp'
+    | '/admin/users'
     | '/temp/admin/resources'
     | '/temp/resources/$resourceId'
+    | '/admin'
     | '/temp/resources'
   id:
     | '__root__'
@@ -223,8 +243,10 @@ export interface FileRouteTypes {
     | '/temp/room'
     | '/(authenticated)/'
     | '/temp/'
+    | '/(authenticated)/admin/users'
     | '/temp/admin/resources'
     | '/temp/resources/$resourceId'
+    | '/(authenticated)/admin/'
     | '/temp/resources/'
   fileRoutesById: FileRoutesById
 }
@@ -347,6 +369,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TempResourcesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/(authenticated)/admin/': {
+      id: '/(authenticated)/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof authenticatedAdminIndexRouteImport
+      parentRoute: typeof authenticatedAdminRoute
+    }
     '/temp/resources/$resourceId': {
       id: '/temp/resources/$resourceId'
       path: '/temp/resources/$resourceId'
@@ -361,11 +390,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TempAdminResourcesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/(authenticated)/admin/users': {
+      id: '/(authenticated)/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof authenticatedAdminUsersRouteImport
+      parentRoute: typeof authenticatedAdminRoute
+    }
   }
 }
 
+interface authenticatedAdminRouteChildren {
+  authenticatedAdminUsersRoute: typeof authenticatedAdminUsersRoute
+  authenticatedAdminIndexRoute: typeof authenticatedAdminIndexRoute
+}
+
+const authenticatedAdminRouteChildren: authenticatedAdminRouteChildren = {
+  authenticatedAdminUsersRoute: authenticatedAdminUsersRoute,
+  authenticatedAdminIndexRoute: authenticatedAdminIndexRoute,
+}
+
+const authenticatedAdminRouteWithChildren =
+  authenticatedAdminRoute._addFileChildren(authenticatedAdminRouteChildren)
+
 interface authenticatedRouteRouteChildren {
-  authenticatedAdminRoute: typeof authenticatedAdminRoute
+  authenticatedAdminRoute: typeof authenticatedAdminRouteWithChildren
   authenticatedFetchRoute: typeof authenticatedFetchRoute
   authenticatedFormRoute: typeof authenticatedFormRoute
   authenticatedMeRoute: typeof authenticatedMeRoute
@@ -376,7 +425,7 @@ interface authenticatedRouteRouteChildren {
 }
 
 const authenticatedRouteRouteChildren: authenticatedRouteRouteChildren = {
-  authenticatedAdminRoute: authenticatedAdminRoute,
+  authenticatedAdminRoute: authenticatedAdminRouteWithChildren,
   authenticatedFetchRoute: authenticatedFetchRoute,
   authenticatedFormRoute: authenticatedFormRoute,
   authenticatedMeRoute: authenticatedMeRoute,

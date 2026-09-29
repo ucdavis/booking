@@ -38,22 +38,40 @@ describe('site administration', () => {
   it('lets a site admin navigate from resource inventory to the admin landing page', async () => {
     mockUser();
     server.use(
-      http.get('/api/admin/access', () => new HttpResponse(null, { status: 204 }))
+      http.get(
+        '/api/admin/access',
+        () => new HttpResponse(null, { status: 204 })
+      )
     );
     const rendered = renderRoute({ initialPath: '/temp/admin/resources' });
     cleanup = rendered.cleanup;
 
-    const adminLink = await screen.findByRole('link', { name: 'Site admin' });
-    expect(adminLink).toHaveAttribute('href', '/admin');
+    const adminMenu = await screen.findByRole('button', { name: 'Site admin' });
+    expect(adminMenu).toHaveAttribute('aria-expanded', 'false');
     expect(
       screen.getByRole('heading', { name: 'Resource inventory' })
     ).toBeInTheDocument();
+    fireEvent.click(adminMenu);
+    expect(adminMenu).toHaveAttribute('aria-expanded', 'true');
+    const adminLink = screen.getByRole('link', { name: 'Admin home' });
+    expect(adminLink).toHaveAttribute('href', '/admin');
+    expect(screen.getByRole('link', { name: 'Admin users' })).toHaveAttribute(
+      'href',
+      '/admin/users'
+    );
     fireEvent.click(adminLink);
 
     expect(
       await screen.findByRole('heading', { name: 'Site administration' })
     ).toBeInTheDocument();
     expect(rendered.router.state.location.pathname).toBe('/admin');
+    expect(screen.getByRole('button', { name: 'Site admin' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
+    expect(
+      screen.getByRole('link', { name: /site admin users/i })
+    ).toHaveAttribute('href', '/admin/users');
   });
 
   it('checks admin access when the landing page is opened directly', async () => {
@@ -84,7 +102,10 @@ describe('site administration', () => {
       silenceRouteErrors();
       mockUser({ ...siteAdmin, isSiteAdmin: false, roles });
       server.use(
-        http.get('/api/admin/access', () => new HttpResponse(null, { status: 403 }))
+        http.get(
+          '/api/admin/access',
+          () => new HttpResponse(null, { status: 403 })
+        )
       );
       const rendered = renderRoute({ initialPath: '/admin' });
       cleanup = rendered.cleanup;
@@ -95,13 +116,12 @@ describe('site administration', () => {
       expect(
         screen.getByText("You don't have permission to view this page.")
       ).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Back to Grove' })).toHaveAttribute(
-        'href',
-        '/temp'
-      );
+      expect(
+        screen.getByRole('link', { name: 'Back to Grove' })
+      ).toHaveAttribute('href', '/temp');
       expect(rendered.router.state.location.pathname).toBe('/admin');
       expect(
-        screen.queryByRole('link', { name: 'Site admin' })
+        screen.queryByRole('button', { name: 'Site admin' })
       ).not.toBeInTheDocument();
       expect(
         screen.queryByRole('heading', { name: 'Site administration' })
@@ -126,7 +146,7 @@ describe('site administration', () => {
     });
     expect(rendered.router.state.location.pathname).toBe('/about');
     expect(
-      screen.queryByRole('link', { name: 'Site admin' })
+      screen.queryByRole('button', { name: 'Site admin' })
     ).not.toBeInTheDocument();
   });
 
@@ -134,7 +154,10 @@ describe('site administration', () => {
     silenceRouteErrors();
     mockUser();
     server.use(
-      http.get('/api/admin/access', () => new HttpResponse(null, { status: 403 }))
+      http.get(
+        '/api/admin/access',
+        () => new HttpResponse(null, { status: 403 })
+      )
     );
     const queryClient = new QueryClient();
     queryClient.setQueryData(meQueryOptions().queryKey, siteAdmin);
@@ -152,7 +175,10 @@ describe('site administration', () => {
     silenceRouteErrors();
     mockUser();
     server.use(
-      http.get('/api/admin/access', () => new HttpResponse(null, { status: 500 }))
+      http.get(
+        '/api/admin/access',
+        () => new HttpResponse(null, { status: 500 })
+      )
     );
     ({ cleanup } = renderRoute({ initialPath: '/admin' }));
 
@@ -172,7 +198,10 @@ describe('site administration', () => {
   it('replaces protected content when a background user check denies access despite a cached user', async () => {
     mockUser();
     server.use(
-      http.get('/api/admin/access', () => new HttpResponse(null, { status: 204 }))
+      http.get(
+        '/api/admin/access',
+        () => new HttpResponse(null, { status: 204 })
+      )
     );
     const rendered = renderRoute({ initialPath: '/admin' });
     cleanup = rendered.cleanup;
@@ -208,12 +237,12 @@ describe('site administration', () => {
     expect(rendered.router.state.location.pathname).toBe('/admin');
   });
 
-  it('hides the site admin link after a background user check loses authentication', async () => {
+  it('hides the site admin menu after a background user check loses authentication', async () => {
     mockUser();
     const rendered = renderRoute({ initialPath: '/about' });
     cleanup = rendered.cleanup;
     expect(
-      await screen.findByRole('link', { name: 'Site admin' })
+      await screen.findByRole('button', { name: 'Site admin' })
     ).toBeInTheDocument();
 
     server.use(
@@ -227,7 +256,7 @@ describe('site administration', () => {
 
     await waitFor(() => {
       expect(
-        screen.queryByRole('link', { name: 'Site admin' })
+        screen.queryByRole('button', { name: 'Site admin' })
       ).not.toBeInTheDocument();
     });
     expect(
@@ -248,7 +277,10 @@ describe('site administration', () => {
     });
     cleanup = () => queryClient.clear();
     const href = '/me?view=profile#details';
-    const context = { context: { queryClient }, location: { href } } as Parameters<
+    const context = {
+      context: { queryClient },
+      location: { href },
+    } as Parameters<
       NonNullable<typeof AuthenticatedRoute.options.beforeLoad>
     >[0];
 
@@ -264,14 +296,19 @@ describe('site administration', () => {
 
   it('redirects an expired admin access check to login with its return URL', async () => {
     server.use(
-      http.get('/api/admin/access', () => new HttpResponse(null, { status: 401 }))
+      http.get(
+        '/api/admin/access',
+        () => new HttpResponse(null, { status: 401 })
+      )
     );
     const href = '/admin?view=overview#settings';
     const context = { location: { href } } as Parameters<
       NonNullable<typeof AdminRoute.options.beforeLoad>
     >[0];
 
-    await expect(AdminRoute.options.beforeLoad?.(context)).rejects.toMatchObject({
+    await expect(
+      AdminRoute.options.beforeLoad?.(context)
+    ).rejects.toMatchObject({
       options: {
         href: `/login?returnUrl=${encodeURIComponent(href)}`,
         reloadDocument: true,
