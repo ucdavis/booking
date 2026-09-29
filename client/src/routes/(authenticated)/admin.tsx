@@ -1,6 +1,7 @@
 import { ShieldCheckIcon } from '@heroicons/react/24/outline';
 import { createFileRoute, Link, redirect, type ErrorComponentProps } from '@tanstack/react-router';
 import { fetchJson, HttpError } from '@/lib/api.ts';
+import { NotAuthorizedPage } from '@/shared/auth/NotAuthorizedPage.tsx';
 
 export const Route = createFileRoute('/(authenticated)/admin')({
   beforeLoad: async ({ location }) => {
@@ -58,18 +59,18 @@ function SiteAdminPage() {
 }
 
 function SiteAdminError({ error }: ErrorComponentProps<unknown>) {
-  const forbidden = error instanceof HttpError && error.status === 403;
+  if (error instanceof HttpError && error.status === 403) {
+    return <NotAuthorizedPage />;
+  }
 
   return (
     <main className="content-container py-12 sm:py-16">
       <section className="max-w-2xl">
         <h1 className="text-3xl font-semibold text-primary">
-          {forbidden ? 'Site admin access required' : 'We could not load site administration'}
+          We could not load site administration
         </h1>
         <p className="mt-4 text-base-content/70">
-          {forbidden
-            ? 'This page is available only to Grove site administrators. Team administrator permissions do not grant access.'
-            : 'Refresh the page or try again later.'}
+          Refresh the page or try again later.
         </p>
         <Link className="btn btn-primary mt-6" to="/temp">Back to Grove</Link>
       </section>

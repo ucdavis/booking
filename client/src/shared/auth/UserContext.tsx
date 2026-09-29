@@ -1,6 +1,7 @@
 import { useMeQuery, User } from '@/queries/user.ts';
 import { HttpError } from '@/lib/api.ts';
 import { createContext, useContext, useEffect } from 'react';
+import { NotAuthorizedPage } from './NotAuthorizedPage.tsx';
 
 /**
  * React context for managing authenticated user state throughout the application.
@@ -25,6 +26,10 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
 
   if (error instanceof HttpError && error.status === 401) {
     return <p className="content-container py-12" role="status">Redirecting to sign in…</p>;
+  }
+
+  if (error instanceof HttpError && error.status === 403) {
+    return <NotAuthorizedPage />;
   }
 
   if (isLoading) {

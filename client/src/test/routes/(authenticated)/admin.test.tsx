@@ -86,11 +86,20 @@ describe('site administration', () => {
       server.use(
         http.get('/api/admin/access', () => new HttpResponse(null, { status: 403 }))
       );
-      ({ cleanup } = renderRoute({ initialPath: '/admin' }));
+      const rendered = renderRoute({ initialPath: '/admin' });
+      cleanup = rendered.cleanup;
 
       expect(
-        await screen.findByRole('heading', { name: 'Site admin access required' })
+        await screen.findByRole('heading', { name: 'Not authorized' })
       ).toBeInTheDocument();
+      expect(
+        screen.getByText("You don't have permission to view this page.")
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Back to Grove' })).toHaveAttribute(
+        'href',
+        '/temp'
+      );
+      expect(rendered.router.state.location.pathname).toBe('/admin');
       expect(
         screen.queryByRole('link', { name: 'Site admin' })
       ).not.toBeInTheDocument();
@@ -132,11 +141,71 @@ describe('site administration', () => {
     ({ cleanup } = renderRoute({ initialPath: '/admin', queryClient }));
 
     expect(
-      await screen.findByRole('heading', { name: 'Site admin access required' })
+      await screen.findByRole('heading', { name: 'Not authorized' })
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('heading', { name: 'Site administration' })
     ).not.toBeInTheDocument();
+  });
+
+  it('shows a loading error when the admin access check fails on the server', async () => {
+    silenceRouteErrors();
+    mockUser();
+    server.use(
+      http.get('/api/admin/access', () => new HttpResponse(null, { status: 500 }))
+    );
+    ({ cleanup } = renderRoute({ initialPath: '/admin' }));
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'We could not load site administration',
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Not authorized' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Site administration' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('replaces protected content when a background user check denies access despite a cached user', async () => {
+    mockUser();
+    server.use(
+      http.get('/api/admin/access', () => new HttpResponse(null, { status: 204 }))
+    );
+    const rendered = renderRoute({ initialPath: '/admin' });
+    cleanup = rendered.cleanup;
+    expect(
+      await screen.findByRole('heading', { name: 'Site administration' })
+    ).toBeInTheDocument();
+
+    server.use(
+      http.get('/api/user/me', () => new HttpResponse(null, { status: 403 }))
+    );
+    await act(async () => {
+      await rendered.queryClient.invalidateQueries({
+        queryKey: meQueryOptions().queryKey,
+      });
+    });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Not authorized' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("You don't have permission to view this page.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to Grove' })).toHaveAttribute(
+      'href',
+      '/temp'
+    );
+    expect(
+      screen.queryByRole('heading', { name: 'Site administration' })
+    ).not.toBeInTheDocument();
+    expect(
+      rendered.queryClient.getQueryData(meQueryOptions().queryKey)
+    ).toMatchObject({ isSiteAdmin: true });
+    expect(rendered.router.state.location.pathname).toBe('/admin');
   });
 
   it('hides the site admin link after a background user check loses authentication', async () => {
