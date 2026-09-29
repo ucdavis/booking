@@ -1,19 +1,23 @@
-import { fetchJson } from '../lib/api.ts';
+import { fetchJson, HttpError } from '../lib/api.ts';
 import { useQuery } from '@tanstack/react-query';
 
 export type User = {
   email: string;
   iamId: string | null;
   id: string;
+  isSiteAdmin: boolean;
   name: string;
   roles: string[];
 };
 
 export const meQueryOptions = () => ({
   queryFn: async (): Promise<User> => {
-    return await fetchJson<User>('/api/user/me');
+    return await fetchJson<User>('/api/user/me', { skipRedirectOn401: true });
   },
   queryKey: ['users', 'me'] as const,
+  retry: (failureCount: number, error: Error) =>
+    !(error instanceof HttpError && (error.status === 401 || error.status === 403)) &&
+    failureCount < 3,
   staleTime: 5 * 60_000, // 5 minutes
 });
 
