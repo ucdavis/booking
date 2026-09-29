@@ -1,13 +1,35 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Server.Core.Domain.Administration;
 
-namespace Server.Core.Data.Configurations.Administration;
+namespace Server.Core.Domain;
 
-public class SpaceConfiguration : IEntityTypeConfiguration<Space>
+public class Space
 {
-    public void Configure(EntityTypeBuilder<Space> builder)
+    public int Id { get; set; }
+
+    public required string Slug { get; set; }
+
+    public required string Name { get; set; }
+
+    public string? Description { get; set; }
+
+    public string? Address { get; set; }
+
+    public bool IsOfficialFacility { get; set; }
+
+    public string? ReferenceNumber { get; set; }
+
+    public required string TimeZoneId { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    protected internal static void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var builder = modelBuilder.Entity<Space>();
+
         builder.ToTable("Spaces", table => table.HasCheckConstraint(
             "CK_Spaces_OfficialReference", "[IsOfficialFacility] = 0 OR [ReferenceNumber] IS NOT NULL"));
         builder.HasKey(space => space.Id);

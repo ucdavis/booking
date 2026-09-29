@@ -1,9 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Domain;
-using Server.Core.Domain.Administration;
-using Server.Core.Domain.Bookings;
-using Server.Core.Domain.CalendarPublication;
-using Server.Core.Domain.ResourceSetup;
 
 namespace Server.Core.Data;
 
@@ -47,7 +43,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
+        User.OnModelCreating(modelBuilder);
+        Team.OnModelCreating(modelBuilder);
+        TeamPermission.OnModelCreating(modelBuilder);
+        Space.OnModelCreating(modelBuilder);
+        TeamSpace.OnModelCreating(modelBuilder);
+        Resource.OnModelCreating(modelBuilder);
+        ResourceTemplate.OnModelCreating(modelBuilder);
+        ResourceConfig.OnModelCreating(modelBuilder);
+        CatalogFile.OnModelCreating(modelBuilder);
+        Domain.ReservationSeries.OnModelCreating(modelBuilder);
+        Reservation.OnModelCreating(modelBuilder);
+        ReservationEvent.OnModelCreating(modelBuilder);
+        ReservationNotification.OnModelCreating(modelBuilder);
+        ScheduleException.OnModelCreating(modelBuilder);
+        CalendarFeed.OnModelCreating(modelBuilder);
 
         // Fabric owns this lookup; Grove can query it without managing its schema.
         modelBuilder.Entity<Person>()

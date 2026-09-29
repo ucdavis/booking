@@ -1,13 +1,67 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Server.Core.Domain.Bookings;
 
-namespace Server.Core.Data.Configurations.Bookings;
+namespace Server.Core.Domain;
 
-public class ReservationConfiguration : IEntityTypeConfiguration<Reservation>
+public class Reservation
 {
-    public void Configure(EntityTypeBuilder<Reservation> builder)
+    public int Id { get; set; }
+
+    public int ReservationSeriesId { get; set; }
+
+    public ReservationSeries ReservationSeries { get; set; } = null!;
+
+    public int OccurrenceNumber { get; set; }
+
+    public DateTimeOffset StartsAt { get; set; }
+
+    public DateTimeOffset EndsAt { get; set; }
+
+    public string Status { get; set; } = "pending";
+
+    public int? DecidedByUserId { get; set; }
+
+    public User? DecidedByUser { get; set; }
+
+    public DateTimeOffset? DecidedAt { get; set; }
+
+    public string? DecisionNote { get; set; }
+
+    public Guid? ShareToken { get; set; }
+
+    public DateTimeOffset BillingDueAt { get; set; }
+
+    public string BillingStatus { get; set; } = "waiting";
+
+    public DateTimeOffset? BillingPreparedAt { get; set; }
+
+    public decimal? Amount { get; set; }
+
+    public string? BillingSnapshotJson { get; set; }
+
+    public DateTimeOffset? BillingDispatchStartedAt { get; set; }
+
+    public int? PaymentsInvoiceId { get; set; }
+
+    public string? PaymentsLinkId { get; set; }
+
+    public string? PaymentsStatus { get; set; }
+
+    public DateTimeOffset? PaymentsSyncedAt { get; set; }
+
+    public bool BillingAttentionRequired { get; set; }
+
+    public string? BillingAttentionNote { get; set; }
+
+    public int Revision { get; set; } = 1;
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    protected internal static void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var builder = modelBuilder.Entity<Reservation>();
+
         builder.ToTable("Reservations", table =>
         {
             table.HasCheckConstraint("CK_Reservations_Interval", "[OccurrenceNumber] > 0 AND [Revision] > 0 AND [EndsAt] > [StartsAt]");

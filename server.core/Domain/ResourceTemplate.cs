@@ -1,13 +1,27 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Server.Core.Domain.ResourceSetup;
 
-namespace Server.Core.Data.Configurations.ResourceSetup;
+namespace Server.Core.Domain;
 
-public class ResourceTemplateConfiguration : IEntityTypeConfiguration<ResourceTemplate>
+public class ResourceTemplate
 {
-    public void Configure(EntityTypeBuilder<ResourceTemplate> builder)
+    public int Id { get; set; }
+    public int? TeamId { get; set; }
+    public Team? Team { get; set; }
+    public required string Name { get; set; }
+    public int FormSchemaVersion { get; set; }
+    public required string FormJson { get; set; }
+
+    // Copy-once defaults; the destination team supplies its own billing account.
+    public string? ResourceDefaultsJson { get; set; }
+    public bool IsActive { get; set; } = true;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public int UpdatedByUserId { get; set; }
+    public User UpdatedByUser { get; set; } = null!;
+
+    protected internal static void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var builder = modelBuilder.Entity<ResourceTemplate>();
         builder.ToTable("ResourceTemplates", table =>
         {
             table.HasCheckConstraint("CK_ResourceTemplates_Form", "FormSchemaVersion > 0 AND ISJSON(FormJson) = 1");

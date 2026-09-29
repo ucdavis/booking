@@ -1,13 +1,27 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Server.Core.Domain.ResourceSetup;
 
-namespace Server.Core.Data.Configurations.ResourceSetup;
+namespace Server.Core.Domain;
 
-public class CatalogFileConfiguration : IEntityTypeConfiguration<CatalogFile>
+public class CatalogFile
 {
-    public void Configure(EntityTypeBuilder<CatalogFile> builder)
+    public int Id { get; set; }
+    public int? SpaceId { get; set; }
+    public Space? Space { get; set; }
+    public int? ResourceId { get; set; }
+    public Resource? Resource { get; set; }
+    public required string StorageKey { get; set; }
+    public required string Name { get; set; }
+    public required string ContentType { get; set; }
+    public long SizeBytes { get; set; }
+    public string? AltText { get; set; }
+    public int SortOrder { get; set; }
+    public int CreatedByUserId { get; set; }
+    public User CreatedByUser { get; set; } = null!;
+    public DateTimeOffset CreatedAt { get; set; }
+
+    protected internal static void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var builder = modelBuilder.Entity<CatalogFile>();
         builder.ToTable("Files", table =>
         {
             table.HasCheckConstraint("CK_Files_OneOwner", "(SpaceId IS NOT NULL AND ResourceId IS NULL) OR (SpaceId IS NULL AND ResourceId IS NOT NULL)");

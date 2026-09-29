@@ -1,13 +1,21 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Server.Core.Domain.Administration;
 
-namespace Server.Core.Data.Configurations.Administration;
+namespace Server.Core.Domain;
 
-public class TeamSpaceConfiguration : IEntityTypeConfiguration<TeamSpace>
+public class TeamSpace
 {
-    public void Configure(EntityTypeBuilder<TeamSpace> builder)
+    public int TeamId { get; set; }
+
+    public int SpaceId { get; set; }
+
+    public Team Team { get; set; } = null!;
+
+    public Space Space { get; set; } = null!;
+
+    protected internal static void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var builder = modelBuilder.Entity<TeamSpace>();
+
         builder.ToTable("TeamSpaces");
         builder.HasKey(teamSpace => new { teamSpace.TeamId, teamSpace.SpaceId });
 

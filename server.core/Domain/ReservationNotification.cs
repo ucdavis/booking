@@ -1,13 +1,43 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Server.Core.Domain.Bookings;
 
-namespace Server.Core.Data.Configurations.Bookings;
+namespace Server.Core.Domain;
 
-public class ReservationNotificationConfiguration : IEntityTypeConfiguration<ReservationNotification>
+public class ReservationNotification
 {
-    public void Configure(EntityTypeBuilder<ReservationNotification> builder)
+    public int Id { get; set; }
+
+    public int ReservationSeriesId { get; set; }
+
+    public ReservationSeries ReservationSeries { get; set; } = null!;
+
+    public int? ReservationId { get; set; }
+
+    public Reservation? Reservation { get; set; }
+
+    public int RecipientUserId { get; set; }
+
+    public User RecipientUser { get; set; } = null!;
+
+    public required string Kind { get; set; }
+
+    public required string DeduplicationKey { get; set; }
+
+    public required string PayloadJson { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset? SentAt { get; set; }
+
+    public int AttemptCount { get; set; }
+
+    public DateTimeOffset? NextAttemptAt { get; set; }
+
+    public string? LastError { get; set; }
+
+    protected internal static void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var builder = modelBuilder.Entity<ReservationNotification>();
+
         builder.ToTable("Notifications", table =>
         {
             table.HasCheckConstraint("CK_Notifications_Payload", "[AttemptCount] >= 0 AND ISJSON([PayloadJson]) = 1");

@@ -1,13 +1,31 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Server.Core.Domain.Administration;
 
-namespace Server.Core.Data.Configurations.Administration;
+namespace Server.Core.Domain;
 
-public class UserConfiguration : IEntityTypeConfiguration<User>
+public class User
 {
-    public void Configure(EntityTypeBuilder<User> builder)
+    public int Id { get; set; }
+
+    public required string IamId { get; set; }
+
+    public required string Name { get; set; }
+
+    public string? Email { get; set; }
+
+    public bool IsAdmin { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    public DateTimeOffset? LastLoginAt { get; set; }
+
+    protected internal static void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var builder = modelBuilder.Entity<User>();
+
         builder.ToTable("Users");
         builder.HasKey(user => user.Id);
         builder.Property(user => user.Id).ValueGeneratedOnAdd();

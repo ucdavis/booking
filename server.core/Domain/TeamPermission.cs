@@ -1,13 +1,23 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Server.Core.Domain.Administration;
 
-namespace Server.Core.Data.Configurations.Administration;
+namespace Server.Core.Domain;
 
-public class TeamPermissionConfiguration : IEntityTypeConfiguration<TeamPermission>
+public class TeamPermission
 {
-    public void Configure(EntityTypeBuilder<TeamPermission> builder)
+    public int UserId { get; set; }
+
+    public int TeamId { get; set; }
+
+    public required string Role { get; set; }
+
+    public User User { get; set; } = null!;
+
+    public Team Team { get; set; } = null!;
+
+    protected internal static void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var builder = modelBuilder.Entity<TeamPermission>();
+
         builder.ToTable("TeamPermissions", table => table.HasCheckConstraint(
             "CK_TeamPermissions_Role", "[Role] IN ('admin', 'editor', 'viewer')"));
         builder.HasKey(permission => new { permission.TeamId, permission.UserId });

@@ -1,13 +1,27 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Server.Core.Domain.ResourceSetup;
 
-namespace Server.Core.Data.Configurations.ResourceSetup;
+namespace Server.Core.Domain;
 
-public class ScheduleExceptionConfiguration : IEntityTypeConfiguration<ScheduleException>
+public class ScheduleException
 {
-    public void Configure(EntityTypeBuilder<ScheduleException> builder)
+    public int Id { get; set; }
+    public int? TeamId { get; set; }
+    public Team? Team { get; set; }
+    public int? ResourceId { get; set; }
+    public Resource? Resource { get; set; }
+    public DateOnly LocalDate { get; set; }
+    public required string Kind { get; set; }
+    public string? IntervalsJson { get; set; }
+    public required string Label { get; set; }
+    public string Source { get; set; } = "manual";
+    public int CreatedByUserId { get; set; }
+    public User CreatedByUser { get; set; } = null!;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    protected internal static void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var builder = modelBuilder.Entity<ScheduleException>();
         builder.ToTable("ScheduleExceptions", table =>
         {
             table.HasCheckConstraint("CK_ScheduleExceptions_Scope", "(TeamId IS NOT NULL AND ResourceId IS NULL) OR (TeamId IS NULL AND ResourceId IS NOT NULL)");
