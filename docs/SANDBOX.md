@@ -21,7 +21,7 @@ Try these flows:
 4. Visit `/login`, switch to Basic User, and request `/api/weatherforecast`. It returns `403` because this user lacks `SampleRole`. `/api/user/me` still returns their identity.
 5. Visit `/login` and sign out. `/api/user/me` returns `401`. The public `/about` page still opens.
 
-Sample User has ID `sandbox-sample`, email `sample@example.test`, IAM ID `sandbox-10001`, and roles `User` and `SampleRole`. Basic User has ID `sandbox-basic`, email `basic@example.test`, IAM ID `sandbox-10002`, and only `User`. They are fixed claims, not database user rows. Extend `LocalAuthentication.cs` when adding application roles, and `DbInitializer.cs` when adding fixtures.
+Sample User has ID `sandbox-sample`, email `sample@example.test`, IAM ID `sandbox-10001`, and roles `User` and `SampleRole`. Basic User has ID `sandbox-basic`, email `basic@example.test`, IAM ID `sandbox-10002`, and only `User`. Their claims and roles are fixed; each login creates or updates the matching `Users` row by IAM ID, including profile details and login timestamps. Extend `LocalAuthentication.cs` when adding application roles, and `DbInitializer.cs` when adding fixtures.
 
 ## Stop, rebuild, and reset
 
