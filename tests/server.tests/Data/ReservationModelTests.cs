@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Server.Core.Data;
 using Server.Core.Domain;
 
@@ -10,7 +11,7 @@ namespace Server.Tests.Data;
 public class ReservationModelTests
 {
     [Fact]
-    public void SqlServer_model_generates_all_reservation_tables_without_connecting_to_a_database()
+    public void SqlServer_model_generates_all_application_tables_without_connecting_to_a_database()
     {
         using var context = CreateContext();
 
@@ -20,7 +21,7 @@ public class ReservationModelTests
 
         string[] tables =
         [
-            "Users", "Teams", "TeamPermissions", "Spaces", "TeamSpaces", "Resources",
+            "People", "Users", "Teams", "TeamPermissions", "Spaces", "TeamSpaces", "Resources",
             "ResourceTemplates", "ResourceConfigs", "Files", "ReservationSeries",
             "Reservations", "ReservationEvents", "Notifications", "ScheduleExceptions", "CalendarFeeds"
         ];
@@ -31,11 +32,34 @@ public class ReservationModelTests
         }
 
         script.Should().Contain("[IamId] varchar(50) NOT NULL");
+        script.Should().Contain("[IamId] char(10) NOT NULL");
         script.Should().Contain("[Amount] decimal(12,2) NULL");
         script.Should().Contain("[LocalDate] date NOT NULL");
         script.Should().Contain("[StartsAt] datetimeoffset NOT NULL");
         script.Should().NotContain("ON DELETE CASCADE");
-        script.Should().NotContain("CREATE TABLE [People]", "Fabric owns the People table");
+    }
+
+    [Fact]
+    public void People_migration_creates_the_missing_lookup_without_dropping_existing_tables()
+    {
+        using var context = CreateContext();
+
+        var script = context.GetService<IMigrator>().GenerateScript(
+            "20260929153644_GroveInitialSetup", "20260929215006_AddPeopleTable");
+
+        script.Should().Contain("CREATE TABLE [People]");
+        script.Should().Contain("[IamId] char(10) NOT NULL");
+        script.Should().Contain("CONSTRAINT [PK_People] PRIMARY KEY CLUSTERED ([IamId])");
+        script.Should().NotContain("DROP TABLE");
+        script.Should().NotContain("DROP COLUMN");
+    }
+
+    [Fact]
+    public void Latest_migration_snapshot_matches_the_current_model()
+    {
+        using var context = CreateContext();
+
+        context.Database.HasPendingModelChanges().Should().BeFalse();
     }
 
     [Fact]
@@ -123,9 +147,9 @@ public class ReservationModelTests
             .Should().OnlyContain(key => key.DeleteBehavior == DeleteBehavior.NoAction);
 
         var person = model.FindEntityType(typeof(Person))!;
-        person.IsTableExcludedFromMigrations().Should().BeTrue();
+        person.IsTableExcludedFromMigrations().Should().BeFalse("Grove manages the People schema");
         person.GetForeignKeys().Should().BeEmpty();
-        person.GetReferencingForeignKeys().Should().BeEmpty("Fabric People is an external lookup");
+        person.GetReferencingForeignKeys().Should().BeEmpty("People remains a lookup without reservation relationships");
     }
 
     [Fact]
