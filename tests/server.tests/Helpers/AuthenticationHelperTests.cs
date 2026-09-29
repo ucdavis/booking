@@ -29,7 +29,8 @@ public class AuthenticationHelperTests : IDisposable
         _scope = _provider.CreateScope();
     }
 
-    private static ServiceProvider CreateProvider(bool local = false, Func<AppDbContext>? createDbContext = null)
+    private static ServiceProvider CreateProvider(bool local = false, Func<AppDbContext>? createDbContext = null,
+        string? adminIamIds = null, string? environmentName = null)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -37,18 +38,21 @@ public class AuthenticationHelperTests : IDisposable
             ["Auth:TenantId"] = "11111111-1111-1111-1111-111111111111",
             ["Auth:ClientId"] = "22222222-2222-2222-2222-222222222222",
             ["Auth:UseLocal"] = local.ToString(),
+            ["DevelopmentData:AdminIamIds"] = adminIamIds,
         }).Build();
+        var environment = new TestEnvironment
+        {
+            EnvironmentName = environmentName ?? (local ? Environments.Development : Environments.Production),
+        };
 
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<IDataProtectionProvider>(new EphemeralDataProtectionProvider());
         services.AddSingleton<IConfiguration>(configuration);
+        services.AddSingleton<IHostEnvironment>(environment);
         services.AddScoped(_ => createDbContext?.Invoke() ?? TestDbContextFactory.CreateInMemory());
         services.AddScoped<IUserService, UserService>();
-        services.AddAuthenticationServices(configuration, new TestEnvironment
-        {
-            EnvironmentName = local ? Environments.Development : Environments.Production,
-        });
+        services.AddAuthenticationServices(configuration, environment);
         return services.BuildServiceProvider();
     }
 
@@ -77,6 +81,105 @@ public class AuthenticationHelperTests : IDisposable
         user.UpdatedAt.Should().Be(user.CreatedAt);
         user.LastLoginAt.Should().Be(user.CreatedAt);
         context.Response.Headers.SetCookie.Should().NotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(false, "sandbox-10001", true)]
+    [InlineData(true, "sandbox-10001", true)]
+    [InlineData(false, "other-id, , sandbox-10001 , sandbox-10001,,", true)]
+    [InlineData(false, null, false)]
+    [InlineData(false, "", false)]
+    [InlineData(true, " , , ", false)]
+    [InlineData(false, "sample-user", false)]
+    [InlineData(false, "sandbox-1000,sandbox-100010,other-id", false)]
+    public async Task Development_login_grants_admin_only_for_a_configured_exact_IAM_ID(
+        bool local, string? adminIamIds, bool expectedAdmin)
+    {
+        using var provider = CreateProvider(local, adminIamIds: adminIamIds, environmentName: Environments.Development);
+        using var scope = provider.CreateScope();
+
+        var context = await SignIn(scope.ServiceProvider, CreatePrincipal(), local);
+
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.ChangeTracker.Clear();
+        var user = await db.Users.SingleAsync();
+        user.IsAdmin.Should().Be(expectedAdmin);
+        user.IsActive.Should().BeTrue();
+        context.Response.Headers.SetCookie.Should().NotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("Production")]
+    [InlineData("Staging")]
+    public async Task Login_ignores_development_admin_configuration_outside_Development(string environmentName)
+    {
+        using var provider = CreateProvider(adminIamIds: "sandbox-10001", environmentName: environmentName);
+        using var scope = provider.CreateScope();
+
+        await SignIn(scope.ServiceProvider, CreatePrincipal());
+
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.ChangeTracker.Clear();
+        (await db.Users.SingleAsync()).IsAdmin.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Development_login_promotes_an_existing_user_without_reactivating_the_account(bool local)
+    {
+        using var provider = CreateProvider(local, adminIamIds: "sandbox-10001", environmentName: Environments.Development);
+        using var scope = provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var createdAt = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var user = new Server.Core.Domain.User
+        {
+            IamId = "sandbox-10001",
+            Name = "Previous Name",
+            CreatedAt = createdAt,
+            IsAdmin = false,
+            IsActive = false,
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+        var userId = user.Id;
+        db.ChangeTracker.Clear();
+
+        await SignIn(scope.ServiceProvider, CreatePrincipal(), local);
+
+        db.ChangeTracker.Clear();
+        user = await db.Users.SingleAsync();
+        user.Id.Should().Be(userId);
+        user.CreatedAt.Should().Be(createdAt);
+        user.IsAdmin.Should().BeTrue();
+        user.IsActive.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("other-id")]
+    public async Task Removing_a_development_admin_from_configuration_does_not_demote_the_user(string? adminIamIds)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase($"DevelopmentAdmin_{Guid.NewGuid():N}", new InMemoryDatabaseRoot()).Options;
+        using (var provider = CreateProvider(createDbContext: () => new AppDbContext(options),
+            adminIamIds: "sandbox-10001", environmentName: Environments.Development))
+        using (var scope = provider.CreateScope())
+        {
+            await SignIn(scope.ServiceProvider, CreatePrincipal());
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            (await db.Users.SingleAsync()).IsAdmin.Should().BeTrue();
+        }
+
+        using var laterProvider = CreateProvider(createDbContext: () => new AppDbContext(options),
+            adminIamIds: adminIamIds, environmentName: Environments.Development);
+        using var laterScope = laterProvider.CreateScope();
+
+        await SignIn(laterScope.ServiceProvider, CreatePrincipal());
+
+        var laterDb = laterScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        laterDb.ChangeTracker.Clear();
+        (await laterDb.Users.SingleAsync()).IsAdmin.Should().BeTrue();
     }
 
     [Theory]
@@ -121,9 +224,12 @@ public class AuthenticationHelperTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Concurrent_first_login_refreshes_the_competing_user_without_losing_application_fields(bool local)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Concurrent_first_login_refreshes_the_competing_user_without_losing_application_fields(
+        bool local, bool configureAdmin)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase($"LoginCollision_{Guid.NewGuid():N}", new InMemoryDatabaseRoot()).Options;
@@ -137,7 +243,7 @@ public class AuthenticationHelperTests : IDisposable
             CreatedAt = createdAt,
             UpdatedAt = createdAt,
             LastLoginAt = createdAt,
-            IsAdmin = true,
+            IsAdmin = !configureAdmin,
             IsActive = false,
         };
         using var provider = CreateProvider(local, () => new FirstSaveFailureDbContext(options, async () =>
@@ -147,7 +253,7 @@ public class AuthenticationHelperTests : IDisposable
             competingUser.CreatedAt = createdAt;
             competingDb.Users.Add(competingUser);
             await competingDb.SaveChangesAsync();
-        }));
+        }), adminIamIds: configureAdmin ? "sandbox-10001" : null, environmentName: Environments.Development);
         using var scope = provider.CreateScope();
         var principal = CreatePrincipal();
         ((ClaimsIdentity)principal.Identity!).AddClaim(new Claim("preferred_username", "current@example.test"));

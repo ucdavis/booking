@@ -15,11 +15,17 @@ public class UserService : IUserService
 {
     private readonly ILogger<UserService> _logger;
     private readonly AppDbContext _dbContext;
+    private readonly HashSet<string> _developmentAdminIamIds;
 
-    public UserService(ILogger<UserService> logger, AppDbContext dbContext)
+    public UserService(ILogger<UserService> logger, AppDbContext dbContext, IConfiguration configuration, IHostEnvironment environment)
     {
         _logger = logger;
         _dbContext = dbContext;
+        _developmentAdminIamIds = environment.IsDevelopment()
+            ? (configuration["DevelopmentData:AdminIamIds"] ?? string.Empty)
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .ToHashSet(StringComparer.Ordinal)
+            : [];
     }
 
     public async Task UpdateUserOnLogin(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
@@ -77,6 +83,10 @@ public class UserService : IUserService
         user.Email = email;
         user.UpdatedAt = now;
         user.LastLoginAt = now;
+        if (_developmentAdminIamIds.Contains(user.IamId))
+        {
+            user.IsAdmin = true;
+        }
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
