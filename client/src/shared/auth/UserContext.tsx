@@ -1,5 +1,6 @@
 import { useMeQuery, User } from '@/queries/user.ts';
-import { createContext, useContext } from 'react';
+import { HttpError } from '@/lib/api.ts';
+import { createContext, useContext, useEffect } from 'react';
 
 /**
  * React context for managing authenticated user state throughout the application.
@@ -14,6 +15,17 @@ const UserContext = createContext<User | undefined>(undefined);
  */
 export const UserProvider = ({ children }: { children: React.ReactNode }) => {
   const { data, error, isLoading } = useMeQuery();
+
+  useEffect(() => {
+    if (error instanceof HttpError && error.status === 401) {
+      const returnUrl = window.location.pathname + window.location.search;
+      window.location.href = `/login?returnUrl=${encodeURIComponent(returnUrl)}`;
+    }
+  }, [error]);
+
+  if (error instanceof HttpError && error.status === 401) {
+    return <p className="content-container py-12" role="status">Redirecting to sign in…</p>;
+  }
 
   if (isLoading) {
     return (

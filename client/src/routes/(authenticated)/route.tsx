@@ -1,16 +1,26 @@
 import {
   createFileRoute,
   Outlet,
+  redirect,
   type ErrorComponentProps,
 } from '@tanstack/react-router';
 import { HttpError } from '../../lib/api.ts';
-import { RouterContext } from '../../main.tsx';
 import { meQueryOptions } from '../../queries/user.ts';
 import { UserProvider } from '@/shared/auth/UserContext.tsx';
 
 export const Route = createFileRoute('/(authenticated)')({
-  beforeLoad: async ({ context }: { context: RouterContext }) => {
-    await context.queryClient.ensureQueryData(meQueryOptions());
+  beforeLoad: async ({ context, location }) => {
+    try {
+      await context.queryClient.ensureQueryData(meQueryOptions());
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 401) {
+        throw redirect({
+          href: `/login?returnUrl=${encodeURIComponent(location.href)}`,
+          reloadDocument: true,
+        });
+      }
+      throw error;
+    }
   },
   component: () => (
     <UserProvider>

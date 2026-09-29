@@ -1,12 +1,14 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using Server.Services;
 
 namespace Server.Controllers;
 
-public class UserController : ApiControllerBase
+public class UserController(IUserService userService) : ApiControllerBase
 {
     [HttpGet("me")]
-    public IActionResult Me()
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> Me(CancellationToken cancellationToken = default)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var userName = User.FindFirst("name")?.Value;
@@ -26,6 +28,7 @@ public class UserController : ApiControllerBase
             Name = userName,
             Email = userEmail,
             IamId = iamId,
+            IsSiteAdmin = await userService.IsSiteAdmin(User, cancellationToken),
             Roles = userRoles,
         };
 

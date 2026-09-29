@@ -7,6 +7,7 @@ namespace Server.Services;
 
 public interface IUserService
 {
+    Task<bool> IsSiteAdmin(ClaimsPrincipal principal, CancellationToken cancellationToken = default);
     Task UpdateUserOnLogin(ClaimsPrincipal principal, CancellationToken cancellationToken = default);
     Task<ClaimsPrincipal?> UpdateUserPrincipalIfNeeded(ClaimsPrincipal principal);
 }
@@ -26,6 +27,18 @@ public class UserService : IUserService
                 .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
                 .ToHashSet(StringComparer.Ordinal)
             : [];
+    }
+
+    public async Task<bool> IsSiteAdmin(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
+    {
+        var iamId = principal.FindFirst("ucdPersonIAMID")?.Value;
+        if (principal.Identity?.IsAuthenticated != true || string.IsNullOrWhiteSpace(iamId))
+        {
+            return false;
+        }
+
+        return await _dbContext.Users.AnyAsync(
+            user => user.IamId == iamId && user.IsAdmin && user.IsActive, cancellationToken);
     }
 
     public async Task UpdateUserOnLogin(ClaimsPrincipal principal, CancellationToken cancellationToken = default)

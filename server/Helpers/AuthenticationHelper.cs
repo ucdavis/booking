@@ -8,11 +8,26 @@ namespace Server.Helpers;
 
 public static class AuthenticationHelper
 {
+    public const string SiteAdminPolicy = "SiteAdmin";
+
     /// <summary>
     /// Keeps Entra as the default; local sign-in must be explicitly enabled in Development.
     /// </summary>
     public static IServiceCollection AddAuthenticationServices(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
+        services.AddAuthorization(options => options.AddPolicy(SiteAdminPolicy, policy =>
+            policy.RequireAuthenticatedUser().RequireAssertion(async context =>
+            {
+                var httpContext = context.Resource as HttpContext;
+                if (httpContext == null)
+                {
+                    return false;
+                }
+
+                var userService = httpContext.RequestServices.GetRequiredService<IUserService>();
+                return await userService.IsSiteAdmin(context.User, httpContext.RequestAborted);
+            })));
+
         if (LocalAuthentication.IsEnabled(configuration, environment))
         {
             var cookieName = ".Grove.LocalSandbox";

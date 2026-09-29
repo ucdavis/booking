@@ -1,10 +1,13 @@
+using System.Reflection;
 using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
@@ -12,6 +15,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Server.Controllers;
 using Server.Core.Data;
 using Server.Helpers;
 using Server.Services;
@@ -54,6 +58,30 @@ public class AuthenticationHelperTests : IDisposable
         services.AddScoped<IUserService, UserService>();
         services.AddAuthenticationServices(configuration, environment);
         return services.BuildServiceProvider();
+    }
+
+    [Fact]
+    public void Admin_access_endpoint_requires_the_site_admin_policy()
+    {
+        var controllerType = typeof(AdminController);
+        var action = controllerType.GetMethod(nameof(AdminController.Access))!;
+
+        controllerType.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+            .Should().Contain(attribute => attribute.Policy == AuthenticationHelper.SiteAdminPolicy);
+        controllerType.GetCustomAttributes<AllowAnonymousAttribute>(inherit: true).Should().BeEmpty();
+        action.GetCustomAttributes<AllowAnonymousAttribute>(inherit: true).Should().BeEmpty();
+        controllerType.GetCustomAttribute<RouteAttribute>(inherit: true)!.Template.Should().Be("api/[controller]");
+        action.GetCustomAttribute<HttpGetAttribute>()!.Template.Should().Be("access");
+    }
+
+    [Fact]
+    public void Admin_access_endpoint_returns_no_content_and_disables_response_caching()
+    {
+        var cache = typeof(AdminController).GetCustomAttribute<ResponseCacheAttribute>()!;
+
+        cache.NoStore.Should().BeTrue();
+        cache.Location.Should().Be(ResponseCacheLocation.None);
+        new AdminController().Access().Should().BeOfType<NoContentResult>();
     }
 
     [Theory]
@@ -106,6 +134,139 @@ public class AuthenticationHelperTests : IDisposable
         user.IsAdmin.Should().Be(expectedAdmin);
         user.IsActive.Should().BeTrue();
         context.Response.Headers.SetCookie.Should().NotBeEmpty();
+        (await AuthorizeSiteAdmin(scope.ServiceProvider, CreatePrincipal())).Succeeded.Should().Be(expectedAdmin);
+    }
+
+    [Theory]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, true)]
+    public async Task Site_admin_policy_requires_an_active_global_admin_regardless_of_team_or_claim_roles(
+        bool isAdmin, bool isActive, bool expectedAccess)
+    {
+        var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = new Server.Core.Domain.User
+        {
+            IamId = "sandbox-10001",
+            Name = "Team Admin",
+            IsAdmin = isAdmin,
+            IsActive = isActive,
+        };
+        db.TeamPermissions.Add(new Server.Core.Domain.TeamPermission
+        {
+            User = user,
+            Team = new Server.Core.Domain.Team { Name = "Test Team", Slug = "test-team" },
+            Role = "admin",
+        });
+        await db.SaveChangesAsync();
+        var principal = CreatePrincipal();
+        var identity = (ClaimsIdentity)principal.Identity!;
+        identity.AddClaim(new Claim(ClaimTypes.Role, "Admin"));
+        identity.AddClaim(new Claim(ClaimTypes.Role, "SiteAdmin"));
+        identity.AddClaim(new Claim(ClaimTypes.Role, "SampleRole"));
+
+        var result = await AuthorizeSiteAdmin(_scope.ServiceProvider, principal);
+
+        result.Succeeded.Should().Be(expectedAccess);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("another-iam-id")]
+    [InlineData("sample-user")]
+    public async Task Site_admin_policy_denies_missing_or_nonmatching_IAM_IDs(string? iamId)
+    {
+        var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Users.Add(new Server.Core.Domain.User
+        {
+            IamId = "sandbox-10001",
+            Name = "Site Admin",
+            IsAdmin = true,
+        });
+        await db.SaveChangesAsync();
+        var principal = CreatePrincipal();
+        var identity = (ClaimsIdentity)principal.Identity!;
+        identity.RemoveClaim(identity.FindFirst("ucdPersonIAMID")!);
+        if (iamId != null)
+        {
+            identity.AddClaim(new Claim("ucdPersonIAMID", iamId));
+        }
+
+        var result = await AuthorizeSiteAdmin(_scope.ServiceProvider, principal);
+
+        result.Succeeded.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Site_admin_policy_denies_users_without_a_database_record()
+    {
+        var result = await AuthorizeSiteAdmin(_scope.ServiceProvider, CreatePrincipal());
+
+        result.Succeeded.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Site_admin_policy_denies_unauthenticated_principals_with_matching_admin_claims()
+    {
+        var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Users.Add(new Server.Core.Domain.User
+        {
+            IamId = "sandbox-10001",
+            Name = "Site Admin",
+            IsAdmin = true,
+        });
+        await db.SaveChangesAsync();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(CreatePrincipal().Claims));
+
+        var result = await AuthorizeSiteAdmin(_scope.ServiceProvider, principal);
+
+        result.Succeeded.Should().BeFalse();
+        (await _scope.ServiceProvider.GetRequiredService<IUserService>().IsSiteAdmin(principal)).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Site_admin_policy_denies_without_an_HTTP_resource(bool useNullResource)
+    {
+        var authorization = _scope.ServiceProvider.GetRequiredService<IAuthorizationService>();
+
+        var result = await authorization.AuthorizeAsync(CreatePrincipal(),
+            useNullResource ? null : new object(), AuthenticationHelper.SiteAdminPolicy);
+
+        result.Succeeded.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Site_admin_policy_reads_revoked_access_from_the_database_without_a_new_login()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase($"SiteAdminRevocation_{Guid.NewGuid():N}", new InMemoryDatabaseRoot()).Options;
+        using var provider = CreateProvider(createDbContext: () => new AppDbContext(options));
+        using var scope = provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Users.Add(new Server.Core.Domain.User
+        {
+            IamId = "sandbox-10001",
+            Name = "Site Admin",
+            IsAdmin = true,
+        });
+        await db.SaveChangesAsync();
+        var principal = CreatePrincipal();
+        (await AuthorizeSiteAdmin(scope.ServiceProvider, principal)).Succeeded.Should().BeTrue();
+
+        using (var updateScope = provider.CreateScope())
+        {
+            var updateDb = updateScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            (await updateDb.Users.SingleAsync()).IsAdmin = false;
+            await updateDb.SaveChangesAsync();
+        }
+
+        var result = await AuthorizeSiteAdmin(scope.ServiceProvider, principal);
+
+        result.Succeeded.Should().BeFalse();
     }
 
     [Theory]
@@ -566,6 +727,13 @@ public class AuthenticationHelperTests : IDisposable
 
     private static string GetCookieScheme(bool local)
         => local ? LocalAuthentication.Scheme : CookieAuthenticationDefaults.AuthenticationScheme;
+
+    private static Task<AuthorizationResult> AuthorizeSiteAdmin(IServiceProvider services, ClaimsPrincipal principal)
+    {
+        var context = new DefaultHttpContext { RequestServices = services, User = principal };
+        return services.GetRequiredService<IAuthorizationService>()
+            .AuthorizeAsync(principal, context, AuthenticationHelper.SiteAdminPolicy);
+    }
 
     private static async Task<DefaultHttpContext> SignIn(
         IServiceProvider services, ClaimsPrincipal principal, bool local = false)
