@@ -59,9 +59,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         ScheduleException.OnModelCreating(modelBuilder);
         CalendarFeed.OnModelCreating(modelBuilder);
 
-        // Fabric owns this lookup; Grove can query it without managing its schema.
+        // Grove manages the lookup schema; Fabric supplies the people data.
         modelBuilder.Entity<Person>()
-            .ToTable("People", table => table.ExcludeFromMigrations());
+            .ToTable("People");
 
         modelBuilder.Entity<Person>()
             .HasKey(person => person.IamId)
