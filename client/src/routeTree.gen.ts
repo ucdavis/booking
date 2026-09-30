@@ -22,9 +22,12 @@ import { Route as authenticatedNotificationRouteImport } from './routes/(authent
 import { Route as authenticatedMeRouteImport } from './routes/(authenticated)/me'
 import { Route as authenticatedFormRouteImport } from './routes/(authenticated)/form'
 import { Route as authenticatedFetchRouteImport } from './routes/(authenticated)/fetch'
+import { Route as authenticatedAdminRouteImport } from './routes/(authenticated)/admin'
 import { Route as TempResourcesIndexRouteImport } from './routes/temp/resources/index'
+import { Route as authenticatedAdminIndexRouteImport } from './routes/(authenticated)/admin.index'
 import { Route as TempResourcesResourceIdRouteImport } from './routes/temp/resources/$resourceId'
 import { Route as TempAdminResourcesRouteImport } from './routes/temp/admin/resources'
+import { Route as authenticatedAdminUsersRouteImport } from './routes/(authenticated)/admin.users'
 
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
@@ -92,10 +95,20 @@ const authenticatedFetchRoute = authenticatedFetchRouteImport.update({
   path: '/fetch',
   getParentRoute: () => authenticatedRouteRoute,
 } as any)
+const authenticatedAdminRoute = authenticatedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => authenticatedRouteRoute,
+} as any)
 const TempResourcesIndexRoute = TempResourcesIndexRouteImport.update({
   id: '/temp/resources/',
   path: '/temp/resources/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const authenticatedAdminIndexRoute = authenticatedAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => authenticatedAdminRoute,
 } as any)
 const TempResourcesResourceIdRoute = TempResourcesResourceIdRouteImport.update({
   id: '/temp/resources/$resourceId',
@@ -107,9 +120,15 @@ const TempAdminResourcesRoute = TempAdminResourcesRouteImport.update({
   path: '/temp/admin/resources',
   getParentRoute: () => rootRouteImport,
 } as any)
+const authenticatedAdminUsersRoute = authenticatedAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => authenticatedAdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
+  '/admin': typeof authenticatedAdminRouteWithChildren
   '/fetch': typeof authenticatedFetchRoute
   '/form': typeof authenticatedFormRoute
   '/me': typeof authenticatedMeRoute
@@ -121,8 +140,10 @@ export interface FileRoutesByFullPath {
   '/temp/room': typeof TempRoomRoute
   '/': typeof authenticatedIndexRoute
   '/temp': typeof TempIndexRoute
+  '/admin/users': typeof authenticatedAdminUsersRoute
   '/temp/admin/resources': typeof TempAdminResourcesRoute
   '/temp/resources/$resourceId': typeof TempResourcesResourceIdRoute
+  '/admin/': typeof authenticatedAdminIndexRoute
   '/temp/resources': typeof TempResourcesIndexRoute
 }
 export interface FileRoutesByTo {
@@ -138,14 +159,17 @@ export interface FileRoutesByTo {
   '/temp/room': typeof TempRoomRoute
   '/': typeof authenticatedIndexRoute
   '/temp': typeof TempIndexRoute
+  '/admin/users': typeof authenticatedAdminUsersRoute
   '/temp/admin/resources': typeof TempAdminResourcesRoute
   '/temp/resources/$resourceId': typeof TempResourcesResourceIdRoute
+  '/admin': typeof authenticatedAdminIndexRoute
   '/temp/resources': typeof TempResourcesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/(authenticated)': typeof authenticatedRouteRouteWithChildren
   '/about': typeof AboutRoute
+  '/(authenticated)/admin': typeof authenticatedAdminRouteWithChildren
   '/(authenticated)/fetch': typeof authenticatedFetchRoute
   '/(authenticated)/form': typeof authenticatedFormRoute
   '/(authenticated)/me': typeof authenticatedMeRoute
@@ -157,14 +181,17 @@ export interface FileRoutesById {
   '/temp/room': typeof TempRoomRoute
   '/(authenticated)/': typeof authenticatedIndexRoute
   '/temp/': typeof TempIndexRoute
+  '/(authenticated)/admin/users': typeof authenticatedAdminUsersRoute
   '/temp/admin/resources': typeof TempAdminResourcesRoute
   '/temp/resources/$resourceId': typeof TempResourcesResourceIdRoute
+  '/(authenticated)/admin/': typeof authenticatedAdminIndexRoute
   '/temp/resources/': typeof TempResourcesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/about'
+    | '/admin'
     | '/fetch'
     | '/form'
     | '/me'
@@ -176,8 +203,10 @@ export interface FileRouteTypes {
     | '/temp/room'
     | '/'
     | '/temp'
+    | '/admin/users'
     | '/temp/admin/resources'
     | '/temp/resources/$resourceId'
+    | '/admin/'
     | '/temp/resources'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -193,13 +222,16 @@ export interface FileRouteTypes {
     | '/temp/room'
     | '/'
     | '/temp'
+    | '/admin/users'
     | '/temp/admin/resources'
     | '/temp/resources/$resourceId'
+    | '/admin'
     | '/temp/resources'
   id:
     | '__root__'
     | '/(authenticated)'
     | '/about'
+    | '/(authenticated)/admin'
     | '/(authenticated)/fetch'
     | '/(authenticated)/form'
     | '/(authenticated)/me'
@@ -211,8 +243,10 @@ export interface FileRouteTypes {
     | '/temp/room'
     | '/(authenticated)/'
     | '/temp/'
+    | '/(authenticated)/admin/users'
     | '/temp/admin/resources'
     | '/temp/resources/$resourceId'
+    | '/(authenticated)/admin/'
     | '/temp/resources/'
   fileRoutesById: FileRoutesById
 }
@@ -321,12 +355,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authenticatedFetchRouteImport
       parentRoute: typeof authenticatedRouteRoute
     }
+    '/(authenticated)/admin': {
+      id: '/(authenticated)/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof authenticatedAdminRouteImport
+      parentRoute: typeof authenticatedRouteRoute
+    }
     '/temp/resources/': {
       id: '/temp/resources/'
       path: '/temp/resources'
       fullPath: '/temp/resources'
       preLoaderRoute: typeof TempResourcesIndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/(authenticated)/admin/': {
+      id: '/(authenticated)/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof authenticatedAdminIndexRouteImport
+      parentRoute: typeof authenticatedAdminRoute
     }
     '/temp/resources/$resourceId': {
       id: '/temp/resources/$resourceId'
@@ -342,10 +390,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TempAdminResourcesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/(authenticated)/admin/users': {
+      id: '/(authenticated)/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof authenticatedAdminUsersRouteImport
+      parentRoute: typeof authenticatedAdminRoute
+    }
   }
 }
 
+interface authenticatedAdminRouteChildren {
+  authenticatedAdminUsersRoute: typeof authenticatedAdminUsersRoute
+  authenticatedAdminIndexRoute: typeof authenticatedAdminIndexRoute
+}
+
+const authenticatedAdminRouteChildren: authenticatedAdminRouteChildren = {
+  authenticatedAdminUsersRoute: authenticatedAdminUsersRoute,
+  authenticatedAdminIndexRoute: authenticatedAdminIndexRoute,
+}
+
+const authenticatedAdminRouteWithChildren =
+  authenticatedAdminRoute._addFileChildren(authenticatedAdminRouteChildren)
+
 interface authenticatedRouteRouteChildren {
+  authenticatedAdminRoute: typeof authenticatedAdminRouteWithChildren
   authenticatedFetchRoute: typeof authenticatedFetchRoute
   authenticatedFormRoute: typeof authenticatedFormRoute
   authenticatedMeRoute: typeof authenticatedMeRoute
@@ -356,6 +425,7 @@ interface authenticatedRouteRouteChildren {
 }
 
 const authenticatedRouteRouteChildren: authenticatedRouteRouteChildren = {
+  authenticatedAdminRoute: authenticatedAdminRouteWithChildren,
   authenticatedFetchRoute: authenticatedFetchRoute,
   authenticatedFormRoute: authenticatedFormRoute,
   authenticatedMeRoute: authenticatedMeRoute,

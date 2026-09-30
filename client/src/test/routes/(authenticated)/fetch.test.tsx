@@ -25,15 +25,19 @@ describe('fetch route', () => {
     let cleanup: (() => void) | undefined;
 
     try {
-      ({ cleanup } = renderRoute({ initialPath: '/fetch' }));
+      const rendered = renderRoute({ initialPath: '/fetch' });
+      cleanup = rendered.cleanup;
       expect(
-        await screen.findByRole('heading', { name: 'Access unavailable' })
+        await screen.findByRole('heading', { name: 'Not authorized' })
       ).toBeInTheDocument();
       expect(
-        screen.getByText(
-          'You are signed in, but your account is not authorized to use this application.'
-        )
+        screen.getByText("You don't have permission to view this page.")
       ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Back to Booking' })).toHaveAttribute(
+        'href',
+        '/temp'
+      );
+      expect(rendered.router.state.location.pathname).toBe('/fetch');
       expect(
         screen.queryByRole('heading', { name: 'Weather forecast' })
       ).not.toBeInTheDocument();
