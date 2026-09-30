@@ -7,9 +7,9 @@ Booking is a UC Davis application built from [web-app-template](https://github.c
 - Repository: [ucdavis/booking](https://github.com/ucdavis/booking).
 - Local development uses a dedicated `booking_devcontainer` SQL container on `127.0.0.1:14335`, with database `Booking`.
 - To run before Entra is configured, copy `server/.env.example` to `server/.env` and set `Auth__UseLocal="true"`. Set `DevelopmentData__SeedOnStartup="true"` to load the sample weather records.
-- Test is deployed at https://booking-test.ucdavis.edu using the existing `rg-grove-test` resources and `DefaultPlan2` plan. GitHub's `test` environment explicitly retains `APP_NAME=grove` so configuration runs target those resources.
-- Production uses https://booking.ucdavis.edu, backed by `web-grove-prod-6ro5cj` in `rg-grove-prod` on the existing `Nibbler` plan. The GitHub `prod` environment configures deployment through the renamed repository.
-- Pushes and pull requests run validation. Automatic test deployment is enabled with `AZURE_TEST_READY=true`.
+- Test targets `rg-booking-test` using `APP_NAME=booking` and the shared `DefaultPlan2` plan. Its public URL is https://booking-test.ucdavis.edu.
+- Production targets `rg-booking-prod` using `APP_NAME=booking` and the shared `Nibbler` plan. Its public URL is https://booking.ucdavis.edu.
+- Pushes and pull requests run validation. `AZURE_TEST_READY` controls automatic test deployment; it is paused during the Azure rebuild and DNS cutover.
 - The starter's sample routes, weather schema, and notification examples remain as development references. Replace them as Booking's application features are implemented. Application roles still use the starter's sample policy in `UserService.cs`.
 - GA4, SMTP, and external telemetry are not configured.
 
@@ -212,7 +212,7 @@ The health check endpoint (`/health`) is configured to return the status of the 
 
 GitHub Actions is the primary deployment path. Start with the [Azure deployment guide](infrastructure/azure/README.md); it links to the detailed bootstrap instructions and describes the production SQL networking prerequisite.
 
-Cloud deployments use `test` and `prod`. Existing Azure resource names retain `grove`; keep `APP_NAME=grove` and `RESOURCE_GROUP=rg-grove-test` when configuring the existing test environment. New deployments default to `booking`. Production uses `APP_NAME=grove` and `RESOURCE_GROUP=rg-grove-prod` with the existing `Nibbler` plan. SQL permits the App Service’s possible outbound addresses through individual firewall rules.
+Cloud deployments use `APP_NAME=booking`, with `rg-booking-test` and `rg-booking-prod` in their respective subscriptions. Shared plans remain `DefaultPlan2` and `Nibbler`. Production SQL permits the App Service’s possible outbound addresses through individual firewall rules. See [Azure deployment](infrastructure/azure/README.md) for rebuild and DNS cutover status.
 
 For GitHub Environments, the one-time OIDC bootstrap, deployment settings sync, local deploy scripts, and first-deploy caveats, see [Azure Deployment Setup](README.customization.md#5-azure-deployment-setup). For the hosting flow and key deployment files, see [Development Architecture](docs/ARCHITECTURE.md#azure-hosting-flow).
 
