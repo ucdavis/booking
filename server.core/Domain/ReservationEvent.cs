@@ -1,9 +1,13 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Server.Core.Domain;
 
+[Table("ReservationEvents")]
 public class ReservationEvent
 {
+    [Key]
     public int Id { get; set; }
 
     public int ReservationId { get; set; }
@@ -12,32 +16,33 @@ public class ReservationEvent
 
     public int ReservationRevision { get; set; }
 
+    [Required]
+    [MaxLength(60)]
     public required string EventType { get; set; }
 
     public int? ActorUserId { get; set; }
 
     public User? ActorUser { get; set; }
 
+    [Required]
+    [MaxLength(200)]
     public required string ActorName { get; set; }
 
     public DateTimeOffset OccurredAt { get; set; }
 
+    [Required]
     public required string DetailsJson { get; set; }
 
     protected internal static void OnModelCreating(ModelBuilder modelBuilder)
     {
         var builder = modelBuilder.Entity<ReservationEvent>();
 
-        builder.ToTable("ReservationEvents", table =>
+        builder.ToTable(table =>
         {
             table.HasCheckConstraint("CK_ReservationEvents_Details", "[ReservationRevision] > 0 AND ISJSON([DetailsJson]) = 1");
         });
 
-        builder.HasKey(reservationEvent => reservationEvent.Id);
         builder.Property(reservationEvent => reservationEvent.Id).UseIdentityColumn();
-        builder.Property(reservationEvent => reservationEvent.EventType).HasMaxLength(60).IsRequired();
-        builder.Property(reservationEvent => reservationEvent.ActorName).HasMaxLength(200).IsRequired();
-        builder.Property(reservationEvent => reservationEvent.DetailsJson).IsRequired();
 
         builder.HasIndex(reservationEvent => new { reservationEvent.ReservationId, reservationEvent.ReservationRevision }).IsUnique();
 

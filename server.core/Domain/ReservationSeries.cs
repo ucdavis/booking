@@ -1,9 +1,13 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Server.Core.Domain;
 
+[Table("ReservationSeries")]
 public class ReservationSeries
 {
+    [Key]
     public int Id { get; set; }
 
     public int ResourceId { get; set; }
@@ -18,10 +22,14 @@ public class ReservationSeries
 
     public ResourceConfig ResourceConfig { get; set; } = null!;
 
+    [MaxLength(200)]
     public string? Title { get; set; }
 
+    [Required]
     public required string FormResponsesJson { get; set; }
 
+    [Required]
+    [MaxLength(100)]
     public required string TimeZoneId { get; set; }
 
     public string? RecurrenceJson { get; set; }
@@ -40,17 +48,13 @@ public class ReservationSeries
     {
         var builder = modelBuilder.Entity<ReservationSeries>();
 
-        builder.ToTable("ReservationSeries", table =>
+        builder.ToTable(table =>
         {
             table.HasCheckConstraint("CK_ReservationSeries_Responses", "ISJSON([FormResponsesJson]) = 1");
             table.HasCheckConstraint("CK_ReservationSeries_Recurrence", "[RecurrenceJson] IS NULL OR ISJSON([RecurrenceJson]) = 1");
         });
 
-        builder.HasKey(series => series.Id);
         builder.Property(series => series.Id).UseIdentityColumn();
-        builder.Property(series => series.Title).HasMaxLength(200);
-        builder.Property(series => series.FormResponsesJson).IsRequired();
-        builder.Property(series => series.TimeZoneId).HasMaxLength(100).IsRequired();
 
         builder.HasIndex(series => series.SubmissionKey).IsUnique();
         builder.HasIndex(series => series.ShareToken).IsUnique().HasFilter("[ShareToken] IS NOT NULL");
