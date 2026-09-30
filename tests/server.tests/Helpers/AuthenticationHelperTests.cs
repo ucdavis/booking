@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Routing;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
@@ -742,6 +744,80 @@ public class AuthenticationHelperTests : IDisposable
         ticket.Principal.IsInRole("SampleRole").Should().Be(hasSampleRole);
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         (await db.Users.CountAsync()).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task People_login_saves_directory_profile_and_preserves_existing_application_permissions(bool existingUser, bool isAdmin)
+    {
+        using var provider = CreateProvider(local: true);
+        using var scope = provider.CreateScope();
+        var services = scope.ServiceProvider;
+        var db = services.GetRequiredService<AppDbContext>();
+        var person = new Person
+        {
+            IamId = "10010001", FullName = "Jordan Demo", Email = "jordan@example.test", UserId = "jdemo", IsActiveInIam = true,
+        };
+        db.People.Add(person);
+        var createdAt = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var previousUser = new User
+        {
+            IamId = person.IamId, Name = "Previous Name", Email = "previous@example.test", IsAdmin = isAdmin,
+            CreatedAt = createdAt, UpdatedAt = createdAt, LastLoginAt = createdAt,
+        };
+        if (existingUser)
+        {
+            db.TeamPermissions.Add(new TeamPermission
+            {
+                User = previousUser, Team = new Team { Name = "Demo", Slug = "demo" }, Role = TeamRole.Admin,
+            });
+        }
+        await db.SaveChangesAsync();
+        var controller = new AccountController(services.GetRequiredService<IConfiguration>(), services.GetRequiredService<IHostEnvironment>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { RequestServices = services }, RouteData = new RouteData(),
+            },
+        };
+        controller.Url = new UrlHelper(controller.ControllerContext);
+        var startedAt = DateTimeOffset.UtcNow;
+
+        var result = await controller.LocalPersonLogin(person.Email, "/teams/demo", db);
+
+        result.Should().BeOfType<LocalRedirectResult>().Which.Url.Should().Be("/teams/demo");
+        db.ChangeTracker.Clear();
+        var user = await db.Users.SingleAsync();
+        user.IamId.Should().Be(person.IamId);
+        user.Name.Should().Be(person.FullName);
+        user.Email.Should().Be(person.Email);
+        user.IsAdmin.Should().Be(isAdmin);
+        user.IsActive.Should().BeTrue();
+        user.LastLoginAt.Should().Be(user.UpdatedAt);
+        user.UpdatedAt.Should().BeOnOrAfter(startedAt).And.BeOnOrBefore(DateTimeOffset.UtcNow);
+        if (existingUser)
+        {
+            user.Id.Should().Be(previousUser.Id);
+            user.CreatedAt.Should().Be(createdAt);
+            (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Admin);
+        }
+        else
+        {
+            user.CreatedAt.Should().BeOnOrAfter(startedAt);
+            (await db.TeamPermissions.AnyAsync()).Should().BeFalse();
+        }
+
+        var options = services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>().Get(LocalAuthentication.Scheme);
+        var cookieValue = controller.Response.Headers.SetCookie.Single()!.Split(';')[0].Split('=', 2)[1];
+        var ticket = options.TicketDataFormat.Unprotect(Uri.UnescapeDataString(cookieValue));
+        ticket.Should().NotBeNull();
+        ticket!.Principal.FindFirst(ClaimTypes.NameIdentifier)!.Value.Should().Be("local-person:10010001");
+        ticket.Principal.FindAll(ClaimTypes.Role).Select(claim => claim.Value).Should().Equal("User");
+        (await AuthorizeSiteAdmin(services, ticket.Principal)).Succeeded.Should().Be(isAdmin);
+        (await AuthorizeTeam(services, ticket.Principal, "demo", AuthenticationHelper.TeamAdminPolicy))
+            .Succeeded.Should().Be(existingUser);
     }
 
     [Fact]

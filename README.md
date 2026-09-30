@@ -39,7 +39,7 @@ Use a distinct `SANDBOX_PROJECT` for every checkout and different app and inbox 
 
 Open [the sandbox](http://localhost:5280) and choose **Sign in as Sample User**. The image builds the current checkout's React app and .NET server. SQL Server starts first, then the app applies migrations and seeds ten weather records dated January 1–10, 2025. No host Node, .NET, `.env`, Entra registration, or SMTP account is needed. The first build needs internet access to download images and dependencies.
 
-The [local inbox](http://localhost:8025) captures mail from the Notification page. Use **Basic User** at [local sign-in](http://localhost:5280/login) to test the weather API's `403` response, or sign out there. These fictional users have fixed identities and claims; the template does not have a user table.
+The [local inbox](http://localhost:8025) captures mail from the Notification page. Use **Basic User** at [local sign-in](http://localhost:5280/login) to test the weather API's `403` response, or sign out there. Sample User and Basic User have fixed identities and claims. The **Sign in as a person** option also accepts an exact email, IAM ID, or Kerberos ID from the sandbox's `People` table.
 
 Restarting preserves database changes. To return to the original fixtures, remove this sandbox's containers and volumes, then start it again:
 
@@ -176,7 +176,9 @@ Useful companion commands:
 
 By default, the app uses OIDC with Microsoft Entra ID (Azure AD). In this mode, set `Auth__ClientId` in `server/.env` to your app registration's client ID before starting the backend. Startup rejects the template's placeholder so copied projects cannot accidentally authenticate as the template app.
 
-The Docker sandbox enables fictional local users with `Auth__UseLocal=true`, bypassing Entra configuration. To use these users in ordinary development, set the same flag in `server/.env`. The flag defaults to false, and startup rejects it outside the `Development` environment.
+The Docker sandbox enables local sign-in with `Auth__UseLocal=true`, bypassing Entra configuration. To use it in ordinary development, set the same flag in `server/.env`. The flag defaults to false, and startup rejects it outside the `Development` environment.
+
+Local sign-in keeps the Sample User and Basic User choices and adds **Sign in as a person**. Enter an exact email, IAM ID, or Kerberos ID from `People`; if more than one person matches, use their unique IAM ID. The person must be active in IAM, and an existing inactive application user cannot sign in. No password is required in this development-only mode. The local identity uses the person's IAM ID, name, and email, receives the `User` application role, and uses their existing database site-admin flag and team memberships. Signing in creates their `Users` row if needed without creating team memberships or granting extra permissions, except for any explicitly configured development admin IAM IDs described below.
 
 For a new application registration, redirect URIs, and app-specific auth settings, follow [the customization guide](README.customization.md#3-microsoft-entra-id-azure-ad-app-sign-in-setup).
 
