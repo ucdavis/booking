@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +7,7 @@ using Server.Core.Data;
 using Server.Core.Domain;
 using Server.Helpers;
 using Server.Models.Admin;
+using Server.Models.Teams;
 
 namespace Server.Controllers;
 
@@ -19,6 +21,63 @@ public class AdminController(AppDbContext dbContext) : ApiControllerBase
     [HttpGet("antiforgery")]
     public IActionResult AntiforgeryToken([FromServices] IAntiforgery antiforgery)
         => Ok(new { Token = antiforgery.GetAndStoreTokens(HttpContext).RequestToken });
+
+    [HttpGet("teams")]
+    public async Task<ActionResult<List<TeamSummaryResponse>>> GetTeams(CancellationToken cancellationToken = default)
+    {
+        var teams = await dbContext.Teams.AsNoTracking()
+            .OrderBy(team => team.Name)
+            .ThenBy(team => team.Slug)
+            .Select(team => new TeamSummaryResponse { Id = team.Id, Name = team.Name, Slug = team.Slug })
+            .ToListAsync(cancellationToken);
+
+        return Ok(teams);
+    }
+
+    [HttpPost("teams")]
+    [ValidateAntiForgeryToken]
+    public async Task<ActionResult<TeamSummaryResponse>> CreateTeam(
+        [FromBody] CreateTeamRequest request, CancellationToken cancellationToken = default)
+    {
+        var name = request.Name?.Trim();
+        var slug = request.Slug?.Trim();
+        if (string.IsNullOrEmpty(name) || name.Length > 200)
+        {
+            return BadRequest("Enter a team name of no more than 200 characters.");
+        }
+
+        if (string.IsNullOrEmpty(slug) || slug.Length > 100 ||
+            !Regex.IsMatch(slug, @"\A[a-z0-9]+(?:-[a-z0-9]+)*\z", RegexOptions.CultureInvariant))
+        {
+            return BadRequest("Enter a slug of no more than 100 lowercase letters, numbers, and single hyphens between words.");
+        }
+
+        if (await dbContext.Teams.AnyAsync(team => team.Slug == slug, cancellationToken))
+        {
+            return Conflict("That team slug is already in use. Choose another slug.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var team = new Team { Name = name, Slug = slug, CreatedAt = now, UpdatedAt = now };
+        dbContext.Teams.Add(team);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            dbContext.Entry(team).State = EntityState.Detached;
+            if (await dbContext.Teams.AnyAsync(existing => existing.Slug == slug, cancellationToken))
+            {
+                return Conflict("That team slug is already in use. Choose another slug.");
+            }
+
+            throw;
+        }
+
+        return CreatedAtAction(nameof(TeamsController.GetTeam), "Teams", new { teamSlug = team.Slug },
+            new TeamSummaryResponse { Id = team.Id, Name = team.Name, Slug = team.Slug });
+    }
 
     [HttpGet("users")]
     public async Task<ActionResult<List<AdminUserResponse>>> GetUsers(CancellationToken cancellationToken = default)

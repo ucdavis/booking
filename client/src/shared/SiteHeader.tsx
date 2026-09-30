@@ -1,6 +1,7 @@
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import { Link, useLocation } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
+import { TeamAdminMenu } from '@/features/teams/TeamAdminMenu.tsx';
 import { useMeQuery } from '@/queries/user.ts';
 
 const navigationItems = [
@@ -60,6 +61,13 @@ export function SiteHeader() {
               {label}
             </Link>
           ))}
+          {userQuery.isSuccess && (
+            <TeamAdminMenu
+              isSiteAdmin={userQuery.data.isSiteAdmin}
+              key={userQuery.data.id}
+              userId={userQuery.data.id}
+            />
+          )}
           {userQuery.isSuccess && userQuery.data.isSiteAdmin && (
             <div
               className="relative"
@@ -109,6 +117,15 @@ export function SiteHeader() {
                       to="/admin/users"
                     >
                       Admin users
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      activeProps={{ className: 'font-semibold text-primary' }}
+                      onClick={() => setAdminMenuOpen(false)}
+                      to="/admin/teams"
+                    >
+                      Teams
                     </Link>
                   </li>
                 </ul>

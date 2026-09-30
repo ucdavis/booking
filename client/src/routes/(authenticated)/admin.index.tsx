@@ -1,6 +1,7 @@
 import {
   ArrowRightIcon,
   ShieldCheckIcon,
+  UserGroupIcon,
   UsersIcon,
 } from '@heroicons/react/24/outline';
 import { createFileRoute, Link } from '@tanstack/react-router';
@@ -56,6 +57,25 @@ function SiteAdminPage() {
           </p>
           <span className="mt-6 flex items-center gap-2 font-semibold text-primary">
             Manage admin users
+            <ArrowRightIcon
+              aria-hidden="true"
+              className="h-4 w-4 transition-transform group-hover:translate-x-1"
+            />
+          </span>
+        </Link>
+        <Link
+          className="group flex flex-col rounded-2xl border border-base-300 bg-base-100 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
+          to="/admin/teams"
+        >
+          <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <UserGroupIcon aria-hidden="true" className="h-7 w-7" />
+          </span>
+          <h2 className="mt-6 text-xl font-semibold text-primary">Teams</h2>
+          <p className="mt-3 grow text-base-content/70">
+            View all teams, open team administration, and create new teams.
+          </p>
+          <span className="mt-6 flex items-center gap-2 font-semibold text-primary">
+            Manage teams
             <ArrowRightIcon
               aria-hidden="true"
               className="h-4 w-4 transition-transform group-hover:translate-x-1"

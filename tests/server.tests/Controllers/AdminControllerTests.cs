@@ -10,11 +10,147 @@ using Server.Core.Data;
 using Server.Core.Domain;
 using Server.Helpers;
 using Server.Models.Admin;
+using Server.Models.Teams;
 
 namespace Server.Tests.Controllers;
 
 public class AdminControllerTests
 {
+    [Fact]
+    public async Task GetTeams_returns_all_teams_in_name_and_slug_order()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        db.Teams.AddRange(
+            new Team { Name = "Zoology", Slug = "zoology" },
+            new Team { Name = "Biology", Slug = "biology-z" },
+            new Team { Name = "Biology", Slug = "biology-a" });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var teams = ReadValue<List<TeamSummaryResponse>>(await CreateController(db).GetTeams());
+
+        teams.Select(team => team.Slug).Should().Equal("biology-a", "biology-z", "zoology");
+        db.ChangeTracker.Entries().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateTeam_saves_trimmed_identity_and_timestamps_without_assigning_membership()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var started = DateTimeOffset.UtcNow;
+
+        var result = await CreateController(db).CreateTeam(new CreateTeamRequest
+        {
+            Name = "  Biology  ", Slug = " biology-2 ",
+        });
+
+        var created = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject;
+        var response = created.Value.Should().BeOfType<TeamSummaryResponse>().Subject;
+        created.ActionName.Should().Be(nameof(TeamsController.GetTeam));
+        created.ControllerName.Should().Be("Teams");
+        created.RouteValues!["teamSlug"].Should().Be("biology-2");
+        db.ChangeTracker.Clear();
+        var team = await db.Teams.SingleAsync();
+        response.Id.Should().Be(team.Id);
+        response.Name.Should().Be("Biology");
+        response.Slug.Should().Be("biology-2");
+        team.CreatedAt.Should().BeOnOrAfter(started);
+        team.UpdatedAt.Should().Be(team.CreatedAt);
+        team.PaymentsTeamSlug.Should().BeNull();
+        team.PaymentsApiKeySecretName.Should().BeNull();
+        (await db.TeamPermissions.AnyAsync()).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("", "biology")]
+    [InlineData("   ", "biology")]
+    [InlineData("Biology", "")]
+    [InlineData("Biology", "   ")]
+    [InlineData("Biology", "Biology")]
+    [InlineData("Biology", "-biology")]
+    [InlineData("Biology", "biology-")]
+    [InlineData("Biology", "biology--labs")]
+    [InlineData("Biology", "biology_labs")]
+    [InlineData("Biology", "biology/labs")]
+    [InlineData("Biology", "biología")]
+    public async Task CreateTeam_rejects_invalid_names_and_slugs_without_saving(string name, string slug)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+
+        var result = await CreateController(db).CreateTeam(new CreateTeamRequest { Name = name, Slug = slug });
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        (await db.Teams.AnyAsync()).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(201, 100)]
+    [InlineData(200, 101)]
+    public async Task CreateTeam_rejects_oversized_names_or_slugs(int nameLength, int slugLength)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+
+        var result = await CreateController(db).CreateTeam(new CreateTeamRequest
+        {
+            Name = new string('a', nameLength), Slug = new string('a', slugLength),
+        });
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        (await db.Teams.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CreateTeam_accepts_maximum_lengths()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+
+        var result = await CreateController(db).CreateTeam(new CreateTeamRequest
+        {
+            Name = new string('a', 200), Slug = new string('a', 100),
+        });
+
+        result.Result.Should().BeOfType<CreatedAtActionResult>();
+    }
+
+    [Fact]
+    public async Task CreateTeam_returns_a_conflict_without_changing_the_existing_team()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        db.Teams.Add(new Team { Name = "Original Name", Slug = "biology" });
+        await db.SaveChangesAsync();
+
+        var result = await CreateController(db).CreateTeam(new CreateTeamRequest { Name = "New Name", Slug = "biology" });
+
+        result.Result.Should().BeOfType<ConflictObjectResult>();
+        (await db.Teams.SingleAsync()).Name.Should().Be("Original Name");
+    }
+
+    [Fact]
+    public async Task CreateTeam_returns_a_conflict_when_another_request_inserts_the_slug()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase($"TeamRace_{Guid.NewGuid():N}").Options;
+        using var db = new TeamInsertFailureDbContext(options, insertConcurrentTeam: true);
+
+        var result = await CreateController(db).CreateTeam(new CreateTeamRequest { Name = "Biology", Slug = "biology" });
+
+        result.Result.Should().BeOfType<ConflictObjectResult>();
+        (await db.Teams.SingleAsync()).Name.Should().Be("Concurrent Team");
+        db.ChangeTracker.Entries<Team>().Should().OnlyContain(entry => entry.State != EntityState.Added);
+    }
+
+    [Fact]
+    public async Task CreateTeam_does_not_report_unrelated_save_failures_as_duplicate_slugs()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase($"TeamFailure_{Guid.NewGuid():N}").Options;
+        using var db = new TeamInsertFailureDbContext(options, insertConcurrentTeam: false);
+
+        var create = () => CreateController(db).CreateTeam(new CreateTeamRequest { Name = "Biology", Slug = "biology" });
+
+        await create.Should().ThrowAsync<DbUpdateException>();
+    }
+
     [Fact]
     public async Task GetUsers_returns_only_admins_in_name_order_including_inactive_admins()
     {
@@ -346,6 +482,7 @@ public class AdminControllerTests
             nameof(AdminController.Access), nameof(AdminController.AntiforgeryToken),
             nameof(AdminController.GetUsers), nameof(AdminController.SearchPeople),
             nameof(AdminController.AddUser), nameof(AdminController.RemoveUser),
+            nameof(AdminController.GetTeams), nameof(AdminController.CreateTeam),
         })
         {
             controller.GetMethod(name)!.GetCustomAttributes<AllowAnonymousAttribute>(inherit: true).Should().BeEmpty();
@@ -353,6 +490,8 @@ public class AdminControllerTests
         controller.GetMethod(nameof(AdminController.AddUser))!
             .GetCustomAttribute<ValidateAntiForgeryTokenAttribute>().Should().NotBeNull();
         controller.GetMethod(nameof(AdminController.RemoveUser))!
+            .GetCustomAttribute<ValidateAntiForgeryTokenAttribute>().Should().NotBeNull();
+        controller.GetMethod(nameof(AdminController.CreateTeam))!
             .GetCustomAttribute<ValidateAntiForgeryTokenAttribute>().Should().NotBeNull();
     }
 
@@ -379,6 +518,32 @@ public class AdminControllerTests
                 HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test")) },
             },
         };
+    }
+
+    private sealed class TeamInsertFailureDbContext : AppDbContext
+    {
+        private readonly DbContextOptions<AppDbContext> _options;
+        private readonly bool _insertConcurrentTeam;
+
+        public TeamInsertFailureDbContext(DbContextOptions<AppDbContext> options, bool insertConcurrentTeam)
+            : base(options)
+        {
+            _options = options;
+            _insertConcurrentTeam = insertConcurrentTeam;
+        }
+
+        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            var candidate = ChangeTracker.Entries<Team>().Single(entry => entry.State == EntityState.Added);
+            if (_insertConcurrentTeam)
+            {
+                using var concurrentDb = new AppDbContext(_options);
+                concurrentDb.Teams.Add(new Team { Name = "Concurrent Team", Slug = candidate.Entity.Slug });
+                await concurrentDb.SaveChangesAsync(cancellationToken);
+            }
+
+            throw new DbUpdateException("Simulated team persistence failure.");
+        }
     }
 
     private sealed class ConcurrentInsertDbContext(DbContextOptions<AppDbContext> options, bool isActive)

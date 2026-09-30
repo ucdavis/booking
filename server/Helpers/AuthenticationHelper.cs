@@ -9,14 +9,17 @@ namespace Server.Helpers;
 public static class AuthenticationHelper
 {
     public const string SiteAdminPolicy = "SiteAdmin";
+    public const string TeamAccessPolicy = "TeamAccess";
 
     /// <summary>
     /// Keeps Entra as the default; local sign-in must be explicitly enabled in Development.
     /// </summary>
     public static IServiceCollection AddAuthenticationServices(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
-        services.AddAuthorization(options => options.AddPolicy(SiteAdminPolicy, policy =>
-            policy.RequireAuthenticatedUser().RequireAssertion(async context =>
+        services.AddScoped<TeamAccessService>();
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy(SiteAdminPolicy, policy => policy.RequireAuthenticatedUser().RequireAssertion(async context =>
             {
                 var httpContext = context.Resource as HttpContext;
                 if (httpContext == null)
@@ -26,7 +29,20 @@ public static class AuthenticationHelper
 
                 var userService = httpContext.RequestServices.GetRequiredService<IUserService>();
                 return await userService.IsSiteAdmin(context.User, httpContext.RequestAborted);
-            })));
+            }));
+            options.AddPolicy(TeamAccessPolicy, policy => policy.RequireAuthenticatedUser().RequireAssertion(async context =>
+            {
+                var httpContext = context.Resource as HttpContext;
+                if (httpContext == null)
+                {
+                    return false;
+                }
+
+                var teamSlug = httpContext.Request.RouteValues["teamSlug"] as string;
+                var teamAccessService = httpContext.RequestServices.GetRequiredService<TeamAccessService>();
+                return await teamAccessService.CanAccessTeam(context.User, teamSlug, httpContext.RequestAborted);
+            }));
+        });
 
         if (LocalAuthentication.IsEnabled(configuration, environment))
         {

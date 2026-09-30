@@ -1,9 +1,24 @@
 import { queryOptions } from '@tanstack/react-query';
 import type { AdminPerson } from '@/features/admin/models/AdminPerson.ts';
 import type { AdminUser } from '@/features/admin/models/AdminUser.ts';
+import type { CreateTeamRequest } from '@/features/teams/models/CreateTeamRequest.ts';
+import type { TeamSummary } from '@/features/teams/models/TeamSummary.ts';
 import { fetchJson, HttpError } from '@/lib/api.ts';
 
 export const adminUsersQueryKey = ['admin', 'users'] as const;
+export const adminTeamsQueryKey = ['admin', 'teams'] as const;
+
+export const adminTeamsQueryOptions = () =>
+  queryOptions({
+    queryFn: ({ signal }) =>
+      fetchJson<TeamSummary[]>('/api/admin/teams', { cache: 'no-store' }, signal),
+    queryKey: adminTeamsQueryKey,
+    retry: (failureCount, error) =>
+      !(
+        error instanceof HttpError &&
+        (error.status === 401 || error.status === 403)
+      ) && failureCount < 2,
+  });
 
 export const adminUsersQueryOptions = () =>
   queryOptions({
@@ -53,3 +68,9 @@ export const addAdminUser = (iamId: string) =>
 
 export const removeAdminUser = (id: number) =>
   adminRequest<void>(`/api/admin/users/${id}`, { method: 'DELETE' });
+
+export const createTeam = (request: CreateTeamRequest) =>
+  adminRequest<TeamSummary>('/api/admin/teams', {
+    body: JSON.stringify(request),
+    method: 'POST',
+  });

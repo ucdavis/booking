@@ -74,6 +74,113 @@ public class AuthenticationHelperTests : IDisposable
         action.GetCustomAttribute<HttpGetAttribute>()!.Template.Should().Be("access");
     }
 
+    [Theory]
+    [InlineData(false, true, "admin", "team-a", true)]
+    [InlineData(false, true, "editor", "team-a", true)]
+    [InlineData(false, true, "viewer", "team-a", true)]
+    [InlineData(false, true, "admin", "team-b", false)]
+    [InlineData(false, true, "unknown", "team-a", false)]
+    [InlineData(false, true, null, "team-a", false)]
+    [InlineData(false, false, "admin", "team-a", false)]
+    [InlineData(true, true, null, "team-b", true)]
+    [InlineData(true, true, "viewer", "team-b", true)]
+    [InlineData(true, false, "admin", "team-a", false)]
+    public async Task Team_policy_uses_active_database_access_for_the_requested_slug(
+        bool isAdmin, bool isActive, string? role, string slug, bool expectedAccess)
+    {
+        var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = new Server.Core.Domain.User
+        {
+            IamId = "sandbox-10001", Name = "Member", IsAdmin = isAdmin, IsActive = isActive,
+        };
+        var team = new Server.Core.Domain.Team { Name = "Team A", Slug = "team-a" };
+        db.Users.Add(user);
+        db.Teams.AddRange(team, new Server.Core.Domain.Team { Name = "Team B", Slug = "team-b" });
+        if (role != null)
+        {
+            db.TeamPermissions.Add(new Server.Core.Domain.TeamPermission { User = user, Team = team, Role = role });
+        }
+        await db.SaveChangesAsync();
+        var principal = CreatePrincipal();
+        ((ClaimsIdentity)principal.Identity!).AddClaim(new Claim(ClaimTypes.Role, "Admin"));
+
+        var result = await AuthorizeTeam(_scope.ServiceProvider, principal, slug);
+
+        result.Succeeded.Should().Be(expectedAccess);
+    }
+
+    [Fact]
+    public async Task Team_policy_denies_missing_or_unauthenticated_identity_even_with_admin_claims()
+    {
+        var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Users.Add(new Server.Core.Domain.User { IamId = "sandbox-10001", Name = "Admin", IsAdmin = true });
+        await db.SaveChangesAsync();
+        var missingIam = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, "Admin")], "Test"));
+        var unauthenticated = new ClaimsPrincipal(new ClaimsIdentity(CreatePrincipal().Claims));
+
+        (await AuthorizeTeam(_scope.ServiceProvider, missingIam, "team-a")).Succeeded.Should().BeFalse();
+        (await AuthorizeTeam(_scope.ServiceProvider, unauthenticated, "team-a")).Succeeded.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task Team_policy_denies_missing_slug_even_for_site_admins(string? slug)
+    {
+        var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Users.Add(new Server.Core.Domain.User { IamId = "sandbox-10001", Name = "Admin", IsAdmin = true });
+        await db.SaveChangesAsync();
+
+        (await AuthorizeTeam(_scope.ServiceProvider, CreatePrincipal(), slug)).Succeeded.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Team_policy_denies_missing_http_context(bool nullResource)
+    {
+        var result = await _scope.ServiceProvider.GetRequiredService<IAuthorizationService>()
+            .AuthorizeAsync(CreatePrincipal(), nullResource ? null : new object(), AuthenticationHelper.TeamAccessPolicy);
+
+        result.Succeeded.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Team_policy_observes_membership_and_site_admin_revocation_without_a_new_login()
+    {
+        var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = new Server.Core.Domain.User { IamId = "sandbox-10001", Name = "Member" };
+        var permission = new Server.Core.Domain.TeamPermission
+        {
+            User = user, Team = new Server.Core.Domain.Team { Name = "Team A", Slug = "team-a" }, Role = "viewer",
+        };
+        db.TeamPermissions.Add(permission);
+        await db.SaveChangesAsync();
+        var principal = CreatePrincipal();
+
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a")).Succeeded.Should().BeTrue();
+        db.TeamPermissions.Remove(permission);
+        await db.SaveChangesAsync();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a")).Succeeded.Should().BeFalse();
+        user.IsAdmin = true;
+        await db.SaveChangesAsync();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a")).Succeeded.Should().BeTrue();
+        user.IsAdmin = false;
+        await db.SaveChangesAsync();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a")).Succeeded.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Team_policy_allows_site_admins_to_reach_not_found_handling_for_unknown_slugs()
+    {
+        var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Users.Add(new Server.Core.Domain.User { IamId = "sandbox-10001", Name = "Admin", IsAdmin = true });
+        await db.SaveChangesAsync();
+
+        (await AuthorizeTeam(_scope.ServiceProvider, CreatePrincipal(), "missing")).Succeeded.Should().BeTrue();
+    }
+
     [Fact]
     public void Admin_access_endpoint_returns_no_content_and_disables_response_caching()
     {
@@ -734,6 +841,18 @@ public class AuthenticationHelperTests : IDisposable
         var context = new DefaultHttpContext { RequestServices = services, User = principal };
         return services.GetRequiredService<IAuthorizationService>()
             .AuthorizeAsync(principal, context, AuthenticationHelper.SiteAdminPolicy);
+    }
+
+    private static Task<AuthorizationResult> AuthorizeTeam(IServiceProvider services, ClaimsPrincipal principal, string? slug)
+    {
+        var context = new DefaultHttpContext { RequestServices = services, User = principal };
+        if (slug != null)
+        {
+            context.Request.RouteValues["teamSlug"] = slug;
+        }
+
+        return services.GetRequiredService<IAuthorizationService>()
+            .AuthorizeAsync(principal, context, AuthenticationHelper.TeamAccessPolicy);
     }
 
     private static async Task<DefaultHttpContext> SignIn(
