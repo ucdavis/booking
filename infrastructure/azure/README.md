@@ -4,7 +4,7 @@ GitHub Actions is the primary deployment path. Follow [Azure deployment setup](.
 
 Booking uses GitHub's immutable OIDC subject prefix `repo:ucdavis@573450/booking@1380597438`. The bootstrap defaults to this prefix for `ucdavis/booking`. Before bootstrapping a different repository, read `gh api repos/OWNER/REPO/actions/oidc/customization/sub` and pass its `sub_claim_prefix` as the `repositorySubjectPrefix` Bicep parameter. A name-only subject will not match Booking's tokens.
 
-The existing test environment retains `APP_NAME=grove` and `RESOURCE_GROUP=rg-grove-test`. Changing those values provisions different resources. Its public URL is https://booking-test.ucdavis.edu. Production uses `APP_NAME=grove` and `RESOURCE_GROUP=rg-grove-prod`, with public URL https://booking.ucdavis.edu. Both environments trust the renamed repository.
+Both GitHub environments use `APP_NAME=booking`. Test targets `rg-booking-test` and production targets `rg-booking-prod`. Shared plans remain `DefaultPlan2` and `Nibbler`. Public URLs are https://booking-test.ucdavis.edu and https://booking.ucdavis.edu.
 
 1. Run **Configure Azure** for infrastructure or runtime setting changes.
 2. Run **CI/CD** for a package deployment. Pushes to `main` deploy to test; manual runs can select test or prod.
@@ -24,8 +24,14 @@ The broader documentation rewrite is tracked in [issue #39](https://github.com/u
 
 ## Booking rename
 
-The repository is `ucdavis/booking`; the solution and deployment package are `booking.sln` and `booking.zip`. Existing Azure resource names and applied EF migration IDs retain `grove` to preserve their identity. Do not change the existing GitHub environments’ `APP_NAME` to `booking` without planning a resource migration.
+The repository is `ucdavis/booking`; the solution and deployment package are `booking.sln` and `booking.zip`. Azure resources are rebuilt with Booking names and fresh `booking` databases. Historical EF migration IDs retain `Grove` because they identify existing migrations.
 
-The Entra application is `CAES Booking App`. Its Web callbacks include both Booking domains, the original test Azure hostname, and localhost. Production SQL allows the App Service’s 31 possible outbound addresses individually; revisit those rules if the hosting plan or outbound addresses change.
+The Entra application is `CAES Booking App`. Its Web callbacks include both Booking domains, the replacement Azure hostnames, and localhost. Production SQL allows the App Service’s 31 possible outbound addresses individually; revisit those rules if the hosting plan or outbound addresses change.
 
 For the local rename, clone into a `booking` directory and preserve any uncommitted files and `server/.env` before removing the old checkout. Local development now uses `booking_devcontainer` and database `Booking`. Existing Grove Docker volumes are not migrated or deleted automatically.
+
+## Azure rebuild and DNS cutover
+
+The new Booking groups replace `rg-grove-test` and `rg-grove-prod`. The old groups remain until both public domains are verified against the new apps. Automatic test deployment stays paused during the cutover. Do not run Configure Azure against the old groups using the new SQL credentials.
+
+After deployment, request the new CNAME targets from campus DNS and compare the `asuid` TXT records with each new app's `customDomainVerificationId`. Preserve Cloudflare proxying for test, which uses an Origin CA certificate. Production uses an App Service managed certificate. Transfer custom-domain bindings and verify HTTPS, database health, and sign-in before removing the old groups, their shared-plan role assignments, and obsolete Entra callbacks.
