@@ -11,7 +11,7 @@ export function NotAuthorizedPage({
         <h1 className="text-3xl font-semibold text-primary">Not authorized</h1>
         <p className="mt-4 text-base-content/70">{description}</p>
         <Link className="btn btn-primary mt-6" to="/temp">
-          Back to Grove
+          Back to Booking
         </Link>
       </section>
     </main>
