@@ -191,6 +191,33 @@ public class AdminControllerTests
         person.Kerberos.Should().Be("person1");
         person.IsAdmin.Should().BeFalse();
         person.IsActive.Should().BeTrue();
+        person.IsActiveInIam.Should().BeTrue();
+        db.ChangeTracker.Entries().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SearchPeople_returns_iam_inactive_people_without_changing_booking_activity(bool hasExistingUser)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var person = CreatePerson();
+        person.IsActiveInIam = false;
+        db.People.Add(person);
+        if (hasExistingUser)
+        {
+            db.Users.Add(new User { IamId = person.IamId, Name = "Active Booking User" });
+        }
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await CreateController(db).SearchPeople("person1");
+
+        var match = ReadValue<List<AdminPersonResponse>>(result).Should().ContainSingle().Which;
+        match.IamId.Should().Be(person.IamId);
+        match.IsActiveInIam.Should().BeFalse();
+        match.IsActive.Should().BeTrue();
+        match.IsAdmin.Should().BeFalse();
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
 
@@ -243,6 +270,7 @@ public class AdminControllerTests
                 IamId = $"{index:D10}",
                 FullName = $"Person {index:D2}",
                 Email = "shared@example.test",
+                IsActiveInIam = true,
             });
         }
         db.Users.Add(new User
@@ -257,6 +285,7 @@ public class AdminControllerTests
         people.Should().HaveCount(10);
         people[0].IsAdmin.Should().BeTrue();
         people[0].IsActive.Should().BeFalse();
+        people[0].IsActiveInIam.Should().BeTrue();
     }
 
     [Fact]
@@ -360,6 +389,66 @@ public class AdminControllerTests
         var user = await db.Users.SingleAsync();
         user.IsActive.Should().BeFalse();
         user.IsAdmin.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AddUser_rejects_iam_inactive_people_without_creating_or_promoting_a_user(bool hasExistingUser)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var person = CreatePerson();
+        person.IsActiveInIam = false;
+        db.People.Add(person);
+        var originalTime = DateTimeOffset.UtcNow.AddDays(-1);
+        if (hasExistingUser)
+        {
+            db.Users.Add(new User
+            {
+                IamId = person.IamId, Name = "Active Booking User", IsActive = true, UpdatedAt = originalTime,
+            });
+        }
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await CreateController(db).AddUser(new AddAdminUserRequest { IamId = person.IamId });
+
+        result.Result.Should().BeOfType<ConflictObjectResult>().Which.Value.Should()
+            .Be("This person is inactive in IAM and cannot be added as a site admin.");
+        db.ChangeTracker.HasChanges().Should().BeFalse();
+        if (hasExistingUser)
+        {
+            var user = await db.Users.SingleAsync();
+            user.IsAdmin.Should().BeFalse();
+            user.IsActive.Should().BeTrue();
+            user.UpdatedAt.Should().Be(originalTime);
+        }
+        else
+        {
+            (await db.Users.AnyAsync()).Should().BeFalse();
+        }
+    }
+
+    [Fact]
+    public async Task AddUser_rechecks_iam_activity_after_search()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var person = CreatePerson();
+        db.People.Add(person);
+        await db.SaveChangesAsync();
+        var controller = CreateController(db);
+        var searchResult = await controller.SearchPeople("person1");
+        var match = ReadValue<List<AdminPersonResponse>>(searchResult).Should().ContainSingle().Which;
+        match.IsActiveInIam.Should().BeTrue();
+        person.IsActiveInIam = false;
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await controller.AddUser(new AddAdminUserRequest { IamId = match.IamId });
+
+        result.Result.Should().BeOfType<ConflictObjectResult>().Which.Value.Should()
+            .Be("This person is inactive in IAM and cannot be added as a site admin.");
+        (await db.Users.AnyAsync()).Should().BeFalse();
     }
 
     [Fact]
@@ -502,6 +591,7 @@ public class AdminControllerTests
     {
         IamId = "0000000001", FullName = "Directory Person",
         Email = "directory@example.test", UserId = "person1",
+        IsActiveInIam = true,
     };
 
     private static AdminController CreateController(AppDbContext db, string? iamId = "current-admin")

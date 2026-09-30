@@ -9,7 +9,7 @@ Booking is a UC Davis application built from [web-app-template](https://github.c
 - To run before Entra is configured, copy `server/.env.example` to `server/.env` and set `Auth__UseLocal="true"`. Set `DevelopmentData__SeedOnStartup="true"` to load the sample weather records.
 - Test targets `rg-booking-test` using `APP_NAME=booking` and the shared `DefaultPlan2` plan. Its public URL is https://booking-test.ucdavis.edu.
 - Production targets `rg-booking-prod` using `APP_NAME=booking` and the shared `Nibbler` plan. Its public URL is https://booking.ucdavis.edu.
-- Pushes and pull requests run validation. `AZURE_TEST_READY` controls automatic test deployment; it is paused during the Azure rebuild and DNS cutover.
+- Pushes and pull requests run validation. Automatic test deployment is enabled with `AZURE_TEST_READY=true`.
 - The starter's sample routes, weather schema, and notification examples remain as development references. Replace them as Booking's application features are implemented. Application roles still use the starter's sample policy in `UserService.cs`.
 - GA4, SMTP, and external telemetry are not configured.
 

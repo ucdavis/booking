@@ -72,6 +72,7 @@ public class DbInitializer : IDbInitializer
                     FirstName = $"Fake{i:D3}",
                     LastName = $"User{i:D3}",
                     FullName = $"Fake{i:D3} User{i:D3}",
+                    IsActiveInIam = i != 10,
                     IsEmployee = true,
                     IsHsEmployee = false,
                     IsFaculty = false,
