@@ -70,13 +70,13 @@ jobs:
         run: npm test -- --run
 
       - name: Restore .NET projects
-        run: dotnet restore grove.sln
+        run: dotnet restore booking.sln
 
       - name: Build .NET projects
-        run: dotnet build grove.sln --configuration Release --no-restore
+        run: dotnet build booking.sln --configuration Release --no-restore
 
       - name: Test .NET projects
-        run: dotnet test grove.sln --configuration Release --no-build
+        run: dotnet test booking.sln --configuration Release --no-build
 
   deploy_test:
     name: Deploy test

@@ -14,7 +14,7 @@ Required for infrastructure deployments:
   SQL_ADMIN_PASSWORD     SQL admin password used by Azure SQL.
 
 Common configuration:
-  APP_NAME               Base Azure resource name. Default: grove
+  APP_NAME               Base Azure resource name. Default: booking
   AZURE_SUBSCRIPTION_ID  Expected subscription. Default: current az account
   AZURE_LOCATION         Azure region used when creating the resource group. Default: westus2
   RESOURCE_GROUP         Target resource group. Default: rg-${APP_NAME}-${DEPLOY_ENV}
@@ -103,7 +103,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 
 DEPLOY_ENV="${DEPLOY_ENV:-}"
-APP_NAME="${APP_NAME:-grove}"
+APP_NAME="${APP_NAME:-booking}"
 AZURE_LOCATION="${AZURE_LOCATION:-westus2}"
 RESOURCE_GROUP="${RESOURCE_GROUP:-rg-${APP_NAME}-${DEPLOY_ENV}}"
 DEPLOY_INFRA="${DEPLOY_INFRA:-true}"
@@ -112,7 +112,7 @@ RUN_TESTS="${RUN_TESTS:-true}"
 SQL_ADMIN_LOGIN="${SQL_ADMIN_LOGIN:-sqladmin}"
 PUBLISH_ROOT="${PUBLISH_ROOT:-$repo_root/publish}"
 PUBLISH_WEB_DIR="${PUBLISH_WEB_DIR:-$PUBLISH_ROOT/web}"
-PACKAGE_PATH="${PACKAGE_PATH:-$PUBLISH_ROOT/grove.zip}"
+PACKAGE_PATH="${PACKAGE_PATH:-$PUBLISH_ROOT/booking.zip}"
 
 case "$DEPLOY_ENV" in
   test|prod) ;;
@@ -173,11 +173,11 @@ if is_true "$BUILD_APP"; then
     npm --prefix "$repo_root/client" test -- --run
   fi
 
-  dotnet restore "$repo_root/grove.sln"
-  dotnet build "$repo_root/grove.sln" --configuration Release --no-restore
+  dotnet restore "$repo_root/booking.sln"
+  dotnet build "$repo_root/booking.sln" --configuration Release --no-restore
 
   if is_true "$RUN_TESTS"; then
-    dotnet test "$repo_root/grove.sln" --configuration Release --no-build
+    dotnet test "$repo_root/booking.sln" --configuration Release --no-build
   fi
 
   rm -rf "$PUBLISH_WEB_DIR" "$PACKAGE_PATH"

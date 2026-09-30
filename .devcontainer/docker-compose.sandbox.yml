@@ -11,7 +11,7 @@ services:
       ASPNETCORE_URLS: http://+:8080
       Auth__UseLocal: "true"
       Auth__LocalCookieSuffix: ${COMPOSE_PROJECT_NAME}
-      DB_CONNECTION: Server=sql,1433;Database=GroveSandbox;User ID=sa;Password=SandboxOnly123!;Encrypt=False;TrustServerCertificate=True;
+      DB_CONNECTION: Server=sql,1433;Database=BookingSandbox;User ID=sa;Password=SandboxOnly123!;Encrypt=False;TrustServerCertificate=True;
       DevelopmentData__SeedOnStartup: "true"
       OTEL_SDK_DISABLED: "true"
       Smtp__Host: mailpit
@@ -20,7 +20,7 @@ services:
       Smtp__Username: sandbox
       Smtp__Password: sandbox
       Smtp__FromEmail: no-reply@example.test
-      Smtp__FromName: GROVE sandbox
+      Smtp__FromName: Booking sandbox
       Notification__BaseUrl: http://localhost:${SANDBOX_PORT:-5280}
     ports:
       - "127.0.0.1:${SANDBOX_PORT:-5280}:8080"

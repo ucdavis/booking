@@ -59,7 +59,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         ScheduleException.OnModelCreating(modelBuilder);
         CalendarFeed.OnModelCreating(modelBuilder);
 
-        // Grove manages the lookup schema; Fabric supplies the people data.
+        // Booking manages the lookup schema; Fabric supplies the people data.
         modelBuilder.Entity<Person>()
             .HasKey(person => person.IamId)
             .HasName("PK_People")

@@ -6,7 +6,7 @@
         <path d="M49.999,6.497 L49.9999811,13.9734968 L49.9999811,43.999975 L0,43.999975 L0,0 L49.9999811,0 Z" id="path-2"></path>
         <polygon id="path-3" points="0 0 49.9999811 0 49.9999811 43.999975 0 43.999975"></polygon>
     </defs>
-    <g id="grovemark" stroke="none" fill="none" xlink:href="#path-1">
+    <g id="bookingmark" stroke="none" fill="none" xlink:href="#path-1">
         <g transform="translate(5, 8)" xlink:href="#path-2">
             <mask id="mask-4" fill="white">
                 <use xlink:href="#path-3"></use>

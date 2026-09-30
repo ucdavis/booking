@@ -11,7 +11,7 @@ on:
         description: Application tag used to find the existing App Service.
         required: false
         type: string
-        default: grove
+        default: booking
       web_app_name:
         description: Existing App Service name. Defaults to tag-based discovery.
         required: false
@@ -114,13 +114,13 @@ jobs:
         run: npm test -- --run
 
       - name: Restore .NET projects
-        run: dotnet restore grove.sln
+        run: dotnet restore booking.sln
 
       - name: Build .NET projects
-        run: dotnet build grove.sln --configuration Release --no-restore
+        run: dotnet build booking.sln --configuration Release --no-restore
 
       - name: Test .NET projects
-        run: dotnet test grove.sln --configuration Release --no-build
+        run: dotnet test booking.sln --configuration Release --no-build
 
       - name: Publish app
         run: dotnet publish server/server.csproj --configuration Release --output "$PWD/publish/web"
@@ -131,7 +131,7 @@ jobs:
           set -euo pipefail
           mkdir -p publish
           cd publish/web
-          zip -qr ../grove.zip .
+          zip -qr ../booking.zip .
 
       - name: Azure login
         uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
@@ -206,7 +206,7 @@ jobs:
         uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3
         with:
           app-name: ${{ steps.resolve_app.outputs.web_app_name }}
-          package: publish/grove.zip
+          package: publish/booking.zip
 
       - name: Verify application health
         shell: bash
