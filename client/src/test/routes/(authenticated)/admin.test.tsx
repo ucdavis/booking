@@ -117,7 +117,7 @@ describe('site administration', () => {
         screen.getByText("You don't have permission to view this page.")
       ).toBeInTheDocument();
       expect(
-        screen.getByRole('link', { name: 'Back to Grove' })
+        screen.getByRole('link', { name: 'Back to Booking' })
       ).toHaveAttribute('href', '/temp');
       expect(rendered.router.state.location.pathname).toBe('/admin');
       expect(
@@ -137,7 +137,7 @@ describe('site administration', () => {
     cleanup = rendered.cleanup;
 
     expect(
-      await screen.findByRole('heading', { name: 'About GROVE' })
+      await screen.findByRole('heading', { name: 'About Booking' })
     ).toBeInTheDocument();
     await waitFor(() => {
       expect(
@@ -224,7 +224,7 @@ describe('site administration', () => {
     expect(
       screen.getByText("You don't have permission to view this page.")
     ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to Grove' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Back to Booking' })).toHaveAttribute(
       'href',
       '/temp'
     );
@@ -263,7 +263,7 @@ describe('site administration', () => {
       rendered.queryClient.getQueryData(meQueryOptions().queryKey)
     ).toMatchObject({ isSiteAdmin: true });
     expect(
-      screen.getByRole('heading', { name: 'About GROVE' })
+      screen.getByRole('heading', { name: 'About Booking' })
     ).toBeInTheDocument();
     expect(rendered.router.state.location.pathname).toBe('/about');
   });

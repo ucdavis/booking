@@ -1,15 +1,26 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Server.Core.Domain;
 
+[Table("Users")]
 public class User
 {
+    [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
 
+    [Required]
+    [MaxLength(50)]
+    [Unicode(false)]
     public required string IamId { get; set; }
 
+    [Required]
+    [MaxLength(200)]
     public required string Name { get; set; }
 
+    [MaxLength(320)]
     public string? Email { get; set; }
 
     public bool IsAdmin { get; set; }
@@ -26,12 +37,6 @@ public class User
     {
         var builder = modelBuilder.Entity<User>();
 
-        builder.ToTable("Users");
-        builder.HasKey(user => user.Id);
-        builder.Property(user => user.Id).ValueGeneratedOnAdd();
-        builder.Property(user => user.IamId).HasMaxLength(50).IsUnicode(false).IsRequired();
-        builder.Property(user => user.Name).HasMaxLength(200).IsRequired();
-        builder.Property(user => user.Email).HasMaxLength(320);
         builder.Property(user => user.IsAdmin).HasDefaultValue(false);
         builder.Property(user => user.IsActive).HasDefaultValue(true);
 

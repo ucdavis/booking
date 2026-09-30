@@ -61,9 +61,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         // Grove manages the lookup schema; Fabric supplies the people data.
         modelBuilder.Entity<Person>()
-            .ToTable("People");
-
-        modelBuilder.Entity<Person>()
             .HasKey(person => person.IamId)
             .HasName("PK_People")
             .IsClustered();

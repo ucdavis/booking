@@ -1,18 +1,30 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Server.Core.Domain;
 
+[Table("ScheduleExceptions")]
 public class ScheduleException
 {
+    [Key]
     public int Id { get; set; }
     public int? TeamId { get; set; }
     public Team? Team { get; set; }
     public int? ResourceId { get; set; }
     public Resource? Resource { get; set; }
+    [Column(TypeName = "date")]
     public DateOnly LocalDate { get; set; }
+    [Required]
+    [MaxLength(20)]
     public required string Kind { get; set; }
+    [Column(TypeName = "nvarchar(max)")]
     public string? IntervalsJson { get; set; }
+    [Required]
+    [MaxLength(200)]
     public required string Label { get; set; }
+    [Required]
+    [MaxLength(20)]
     public string Source { get; set; } = "manual";
     public int CreatedByUserId { get; set; }
     public User CreatedByUser { get; set; } = null!;
@@ -22,20 +34,15 @@ public class ScheduleException
     protected internal static void OnModelCreating(ModelBuilder modelBuilder)
     {
         var builder = modelBuilder.Entity<ScheduleException>();
-        builder.ToTable("ScheduleExceptions", table =>
+        builder.ToTable(table =>
         {
             table.HasCheckConstraint("CK_ScheduleExceptions_Scope", "(TeamId IS NOT NULL AND ResourceId IS NULL) OR (TeamId IS NULL AND ResourceId IS NOT NULL)");
             table.HasCheckConstraint("CK_ScheduleExceptions_Kind", "Kind IN ('closed', 'hours') AND Source IN ('manual', 'holiday_import')");
             table.HasCheckConstraint("CK_ScheduleExceptions_Intervals", "(Kind = 'closed' AND IntervalsJson IS NULL) OR (Kind = 'hours' AND ResourceId IS NOT NULL AND IntervalsJson IS NOT NULL AND ISJSON(IntervalsJson) = 1)");
         });
 
-        builder.HasKey(exception => exception.Id);
         builder.Property(exception => exception.Id).UseIdentityColumn();
-        builder.Property(exception => exception.LocalDate).HasColumnType("date");
-        builder.Property(exception => exception.Kind).HasMaxLength(20).IsRequired();
-        builder.Property(exception => exception.IntervalsJson).HasColumnType("nvarchar(max)");
-        builder.Property(exception => exception.Label).HasMaxLength(200).IsRequired();
-        builder.Property(exception => exception.Source).HasMaxLength(20).IsRequired().HasDefaultValue("manual");
+        builder.Property(exception => exception.Source).HasDefaultValue("manual");
         builder.HasIndex(exception => new { exception.TeamId, exception.LocalDate })
             .IsUnique()
             .HasFilter("[TeamId] IS NOT NULL");

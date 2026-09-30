@@ -116,14 +116,14 @@ function SiteAdminUsersPage() {
           <div className="flex items-center gap-3 text-primary">
             <UserGroupIcon aria-hidden="true" className="h-6 w-6" />
             <p className="text-sm font-semibold tracking-wide uppercase">
-              Grove administration
+              Booking administration
             </p>
           </div>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
             Site admin users
           </h1>
           <p className="mt-3 max-w-2xl text-base-content/70">
-            Manage who can administer Grove. You can add a person or remove
+            Manage who can administer Booking. You can add a person or remove
             another user&apos;s admin access.
           </p>
         </div>

@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Server.Core.Domain;
@@ -6,10 +8,14 @@ namespace Server.Core.Domain;
 /// Publishes a fixed calendar view. Team and scope are immutable after creation;
 /// feed tokens must not be included in ordinary catalog responses.
 /// </summary>
+[Table("CalendarFeeds")]
 public class CalendarFeed
 {
+    [Key]
     public int Id { get; set; }
 
+    [Required]
+    [MaxLength(200)]
     public required string Name { get; set; }
 
     public int? TeamId { get; set; }
@@ -24,6 +30,8 @@ public class CalendarFeed
 
     public Resource? Resource { get; set; }
 
+    [Required]
+    [MaxLength(20)]
     public string DisplayMode { get; set; } = "availability";
 
     public Guid ShareToken { get; set; } = Guid.NewGuid();
@@ -46,7 +54,7 @@ public class CalendarFeed
     {
         var builder = modelBuilder.Entity<CalendarFeed>();
 
-        builder.ToTable("CalendarFeeds", table =>
+        builder.ToTable(table =>
         {
             table.HasCheckConstraint("CK_CalendarFeeds_Scope",
                 "([SpaceId] IS NOT NULL AND [ResourceId] IS NULL) OR ([SpaceId] IS NULL AND [ResourceId] IS NOT NULL)");
@@ -56,11 +64,8 @@ public class CalendarFeed
                 "[DisplayMode] IN ('availability', 'titles', 'details')");
         });
 
-        builder.HasKey(feed => feed.Id);
         builder.Property(feed => feed.Id).UseIdentityColumn();
-        builder.Property(feed => feed.Name).HasMaxLength(200).IsRequired();
-        builder.Property(feed => feed.DisplayMode).HasMaxLength(20).IsRequired()
-            .HasDefaultValue("availability");
+        builder.Property(feed => feed.DisplayMode).HasDefaultValue("availability");
         builder.HasIndex(feed => feed.ShareToken).IsUnique();
 
         builder.HasOne(feed => feed.Team).WithMany()

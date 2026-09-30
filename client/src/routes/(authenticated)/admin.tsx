@@ -44,7 +44,7 @@ function SiteAdminError({ error }: ErrorComponentProps<unknown>) {
           Refresh the page or try again later.
         </p>
         <Link className="btn btn-primary mt-6" to="/temp">
-          Back to Grove
+          Back to Booking
         </Link>
       </section>
     </main>

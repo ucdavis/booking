@@ -1,13 +1,18 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Server.Core.Domain;
 
+[Table("TeamPermissions")]
 public class TeamPermission
 {
     public int UserId { get; set; }
 
     public int TeamId { get; set; }
 
+    [Required]
+    [MaxLength(20)]
     public required string Role { get; set; }
 
     public User User { get; set; } = null!;
@@ -18,10 +23,9 @@ public class TeamPermission
     {
         var builder = modelBuilder.Entity<TeamPermission>();
 
-        builder.ToTable("TeamPermissions", table => table.HasCheckConstraint(
+        builder.ToTable(table => table.HasCheckConstraint(
             "CK_TeamPermissions_Role", "[Role] IN ('admin', 'editor', 'viewer')"));
         builder.HasKey(permission => new { permission.TeamId, permission.UserId });
-        builder.Property(permission => permission.Role).HasMaxLength(20).IsRequired();
 
         builder.HasOne(permission => permission.User)
             .WithMany()

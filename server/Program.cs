@@ -73,7 +73,7 @@ try
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(options =>
     {
-        options.SwaggerDoc("v1", new() { Title = "GROVE API", Version = "v1" });
+        options.SwaggerDoc("v1", new() { Title = "Booking API", Version = "v1" });
     });
 
     // Configure data protection for auth cookies and related framework secrets.

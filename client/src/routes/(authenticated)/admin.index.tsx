@@ -26,14 +26,14 @@ function SiteAdminPage() {
       <div className="flex items-center gap-3 text-primary">
         <ShieldCheckIcon aria-hidden="true" className="h-6 w-6" />
         <p className="text-sm font-semibold tracking-wide uppercase">
-          Grove administration
+          Booking administration
         </p>
       </div>
       <h1 className="mt-3 text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
         Site administration
       </h1>
       <p className="mt-3 max-w-2xl text-lg text-base-content/70">
-        Manage access and administration across Grove.
+        Manage access and administration across Booking.
       </p>
 
       <section
@@ -64,7 +64,7 @@ function SiteAdminPage() {
         </Link>
       </section>
       <p className="mt-8 max-w-2xl text-sm text-base-content/60">
-        Site administrators have access across Grove. Team administrators manage
+        Site administrators have access across Booking. Team administrators manage
         their own teams and resources; team permissions do not grant access
         here.
       </p>
