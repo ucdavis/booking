@@ -1,5 +1,5 @@
 {
-    "name": "grove (React + .NET + SQL)",
+    "name": "booking (React + .NET + SQL)",
     "dockerComposeFile": "docker-compose.yml",
     "service": "devcontainer",
     "workspaceFolder": "/workspace",
@@ -24,7 +24,7 @@
     "containerEnv": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "ASPNETCORE_URLS": "http://0.0.0.0:5165",
-        "DB_CONNECTION": "Server=sql,1433;Database=Grove;User ID=sa;Password=LocalDev123!;Encrypt=False;TrustServerCertificate=True;"
+        "DB_CONNECTION": "Server=sql,1433;Database=Booking;User ID=sa;Password=LocalDev123!;Encrypt=False;TrustServerCertificate=True;"
     },
     "postCreateCommand": "bash .devcontainer/setup.sh",
     "postStartCommand": "bash .devcontainer/wait-for-sql.sh && npm run start",

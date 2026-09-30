@@ -1,12 +1,12 @@
-# GROVE customization guide
+# Booking customization guide
 
-This guide retains the starter's setup reference. Grove's project names, solution, local database, and deployment defaults have been updated. See [bootstrap status](README.md#bootstrap-status) for completed and pending setup.
+This guide retains the starter's setup reference. Booking's project names, solution, local database, and deployment defaults have been updated. See [bootstrap status](README.md#bootstrap-status) for completed and pending setup.
 
 ## 1. Project Identity & Metadata (optional)
 
 - Rename the repository, solution, and npm package names so deployment artifacts read correctly:
   - Update `name` in `package.json` (root) and `client/package.json`.
-  - If you rename the solution or projects, update `grove.sln`, `server/server.csproj`, `server.core/server.core.csproj`, and any CI references.
+  - If you rename the solution or projects, update `booking.sln`, `server/server.csproj`, `server.core/server.core.csproj`, and any CI references.
 
 ## 2. Dev Ports & SPA Proxy Wiring (optional)
 
@@ -62,11 +62,11 @@ Customize `GetRolesForUser` in [UserService.cs](server/Services/UserService.cs) 
 
 ## 5. Azure Deployment Setup
 
-Grove uses these deployment defaults:
+New Booking environments use these deployment defaults. The existing test environment overrides these with `APP_NAME=grove` and `RESOURCE_GROUP=rg-grove-test` to preserve its resources:
 
-- `APP_NAME=grove`
-- `RESOURCE_GROUP=rg-grove-test` for `test`
-- `RESOURCE_GROUP=rg-grove-prod` for `prod`
+- `APP_NAME=booking`
+- `RESOURCE_GROUP=rg-booking-test` for `test`
+- `RESOURCE_GROUP=rg-booking-prod` for `prod`
 
 The Azure deployment templates only allow `test` and `prod`. Resource groups must end with the matching environment suffix, and deployments must pass the expected subscription ID guard before resources are created.
 
@@ -236,7 +236,7 @@ az deployment sub create \
     webPlanResourceGroup="$web_plan_resource_group"
 ```
 
-For example, with the default `APP_NAME=grove`, use `deployment_name="github-oidc-grove"`. For production, repeat with `env="prod"`, a production deployment name such as `deployment_name="github-oidc-<app-name>-prod"`, a `-prod` resource group, `webPlanName="Nibbler"`, and `webPlanResourceGroup="service-plans-linux"`. The bootstrap output should include `deploymentGuardPassed=true`, `deploymentIdentityName`, `clientId`, `tenantId`, `subscriptionId`, `principalId`, `resourceGroupName`, `federatedCredentialSubject`, and `webPlanRoleAssignmentId`.
+For example, with the default `APP_NAME=booking`, use `deployment_name="github-oidc-booking"`. For production, repeat with `env="prod"`, a production deployment name such as `deployment_name="github-oidc-<app-name>-prod"`, a `-prod` resource group, `webPlanName="Nibbler"`, and `webPlanResourceGroup="service-plans-linux"`. The bootstrap output should include `deploymentGuardPassed=true`, `deploymentIdentityName`, `clientId`, `tenantId`, `subscriptionId`, `principalId`, `resourceGroupName`, `federatedCredentialSubject`, and `webPlanRoleAssignmentId`.
 
 If you did not set `--name`, Azure CLI usually names the deployment after the template file, for example `github-oidc`. Find recent subscription deployments with:
 

@@ -30,7 +30,7 @@ public static class AuthenticationHelper
 
         if (LocalAuthentication.IsEnabled(configuration, environment))
         {
-            var cookieName = ".Grove.LocalSandbox";
+            var cookieName = ".Booking.LocalSandbox";
             var cookieSuffix = configuration["Auth:LocalCookieSuffix"];
             if (!string.IsNullOrEmpty(cookieSuffix))
             {

@@ -1,7 +1,7 @@
 targetScope = 'resourceGroup'
 
 @description('Base name used for generated Azure resource names.')
-param appName string = 'grove'
+param appName string = 'booking'
 
 @allowed([
   'test'

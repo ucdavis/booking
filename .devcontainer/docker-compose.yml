@@ -1,4 +1,4 @@
-name: grove_devcontainer
+name: booking_devcontainer
 
 services:
   devcontainer:

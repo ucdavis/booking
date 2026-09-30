@@ -1,10 +1,13 @@
 targetScope = 'subscription'
 
 @description('Base application name used for generated Azure resource names.')
-param appName string = 'grove'
+param appName string = 'booking'
 
 @description('GitHub repository in owner/name format.')
 param repository string = 'owner/repository'
+
+@description('Exact GitHub OIDC subject prefix from the repository OIDC settings API. Booking uses the immutable owner and repository IDs.')
+param repositorySubjectPrefix string = repository == 'ucdavis/booking' ? 'repo:ucdavis@573450/booking@1380597438' : 'repo:${repository}'
 
 @description('Azure region for the environment resource group.')
 param location string = deployment().location
@@ -49,7 +52,7 @@ var repositoryParts = split(repository, '/')
 var repositoryIsConfigured = length(repositoryParts) == 2 && !empty(repositoryParts[0]) && !empty(repositoryParts[1]) && repository != 'owner/repository'
 var deploymentGuardPassed = !empty(expectedSubscriptionId) && repositoryIsConfigured && normalizedCurrentSubscriptionId == normalizedExpectedSubscriptionId && endsWith(normalizedResourceGroupName, expectedResourceGroupSuffix)
 var federatedCredentialName = 'github-environment-${env}'
-var federatedCredentialSubject = 'repo:${repository}:environment:${env}'
+var federatedCredentialSubject = '${repositorySubjectPrefix}:environment:${env}'
 
 resource environmentResourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' = if (deploymentGuardPassed) {
   name: resourceGroupName

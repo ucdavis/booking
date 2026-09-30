@@ -26,7 +26,7 @@ jobs:
       cancel-in-progress: false
       queue: max
     env:
-      APP_NAME: ${{ vars.APP_NAME || 'grove' }}
+      APP_NAME: ${{ vars.APP_NAME || 'booking' }}
       # <deployment-settings:workflow-env>
       AUTH_CALLBACK_PATH: ${{ vars.AUTH_CALLBACK_PATH || '/signin-oidc' }}
       AUTH_CLIENT_ID: ${{ vars.AUTH_CLIENT_ID }}

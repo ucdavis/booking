@@ -2,6 +2,10 @@
 
 GitHub Actions is the primary deployment path. Follow [Azure deployment setup](../../README.customization.md#5-azure-deployment-setup) for the one-time OIDC bootstrap and GitHub Environment configuration.
 
+Booking uses GitHub's immutable OIDC subject prefix `repo:ucdavis@573450/booking@1380597438`. The bootstrap defaults to this prefix for `ucdavis/booking`. Before bootstrapping a different repository, read `gh api repos/OWNER/REPO/actions/oidc/customization/sub` and pass its `sub_claim_prefix` as the `repositorySubjectPrefix` Bicep parameter. A name-only subject will not match Booking's tokens.
+
+The existing test environment retains `APP_NAME=grove` and `RESOURCE_GROUP=rg-grove-test`. Changing those values provisions different resources. Its public URL is https://booking-test.ucdavis.edu. Production currently has only the DNS bootstrap App Service in `rg-grove-prod`.
+
 1. Run **Configure Azure** for infrastructure or runtime setting changes.
 2. Run **CI/CD** for a package deployment. Pushes to `main` deploy to test; manual runs can select test or prod.
 3. Check the deployment's application health result and verify sign-in at the app's hostname.

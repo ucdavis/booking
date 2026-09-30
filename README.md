@@ -1,16 +1,16 @@
-# GROVE
+# Booking
 
-GROVE is a UC Davis application built from [web-app-template](https://github.com/ucdavis/web-app-template), with a .NET 10 backend and React frontend.
+Booking is a UC Davis application built from [web-app-template](https://github.com/ucdavis/web-app-template), with a .NET 10 backend and React frontend.
 
 ## Bootstrap status
 
-- Repository: [ucdavis/grove](https://github.com/ucdavis/grove).
-- Local development uses a dedicated `grove_devcontainer` SQL container on `127.0.0.1:14335`, with database `Grove`.
+- Repository: [ucdavis/booking](https://github.com/ucdavis/booking).
+- Local development uses a dedicated `booking_devcontainer` SQL container on `127.0.0.1:14335`, with database `Booking`.
 - To run before Entra is configured, copy `server/.env.example` to `server/.env` and set `Auth__UseLocal="true"`. Set `DevelopmentData__SeedOnStartup="true"` to load the sample weather records.
-- Entra sign-in and Azure test deployment are pending an app registration. The signed-in Azure account could not create it because of directory permissions.
-- The intended test target is `rg-grove-test` in `UC Davis CAES Test`, using the existing `DefaultPlan2` in `Default-Web-WestUS`. No Grove cloud resources have been deployed.
-- Pushes and pull requests run validation. Automatic test deployment requires the repository variable `AZURE_TEST_READY=true`, after Entra, the GitHub `test` environment, OIDC bootstrap, and Configure Azure are complete.
-- The starter's sample routes, weather schema, and notification examples remain as development references. Replace them as Grove's application features are implemented. Application roles still use the starter's sample policy in `UserService.cs`.
+- Test is deployed at https://booking-test.ucdavis.edu using the existing `rg-grove-test` resources and `DefaultPlan2` plan. GitHub's `test` environment explicitly retains `APP_NAME=grove` so configuration runs target those resources.
+- Production DNS points `booking.ucdavis.edu` to `web-grove-prod-6ro5cj.azurewebsites.net`. Production provisioning and deployment remain pending.
+- Pushes and pull requests run validation. Automatic test deployment is enabled with `AZURE_TEST_READY=true`.
+- The starter's sample routes, weather schema, and notification examples remain as development references. Replace them as Booking's application features are implemented. Application roles still use the starter's sample policy in `UserService.cs`.
 - GA4, SMTP, and external telemetry are not configured.
 
 See [the customization guide](README.customization.md) for the remaining setup steps.
@@ -29,7 +29,7 @@ See [the customization guide](README.customization.md) for the remaining setup s
 With Docker and Compose installed, choose a unique project name for this checkout or worktree, then run these commands from its root:
 
 ```bash
-export SANDBOX_PROJECT=grove-sandbox
+export SANDBOX_PROJECT=booking-sandbox
 export SANDBOX_PORT=5280
 export SANDBOX_MAIL_PORT=8025
 docker compose -p "$SANDBOX_PROJECT" -f .devcontainer/docker-compose.sandbox.yml up --build --wait
@@ -55,8 +55,8 @@ This deletes the sandbox database and local sign-in keys. It does not affect the
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/ucdavis/grove/
-   cd grove
+   git clone https://github.com/ucdavis/booking/
+   cd booking
    ```
 
 2. **Configure authentication before starting**
@@ -119,7 +119,7 @@ _Using the DevContainer is optional, but it will get you the right version of do
    npm run db:up
    ```
 
-   Then open `grove.sln`, set the `server` project as the startup project, and press `F5`. `SpaProxy` starts Vite if needed and redirects the browser to the frontend dev server.
+   Then open `booking.sln`, set the `server` project as the startup project, and press `F5`. `SpaProxy` starts Vite if needed and redirects the browser to the frontend dev server.
 
    **Visual Studio Code**:
 
@@ -194,12 +194,12 @@ For local sandbox users, the IAM IDs are `sandbox-10001` (Sample User) and `sand
 
 ### Google Analytics (GA4)
 
-GROVE retains the starter's route-change tracking helper:
+Booking retains the starter's route-change tracking helper:
 
 - Add the GA bootstrap script in `client/index.html` when analytics is configured
 - Route-change page view tracking is in `client/src/shared/analytics/AnalyticsListener.tsx`
 
-The GA bootstrap script is disabled until GROVE has a real measurement ID. Add the script to `client/index.html` with that ID in both places:
+The GA bootstrap script is disabled until Booking has a real measurement ID. Add the script to `client/index.html` with that ID in both places:
 
 1. `https://www.googletagmanager.com/gtag/js?id=...`
 2. `gtag('config', '...')`
@@ -212,7 +212,7 @@ The health check endpoint (`/health`) is configured to return the status of the 
 
 GitHub Actions is the primary deployment path. Start with the [Azure deployment guide](infrastructure/azure/README.md); it links to the detailed bootstrap instructions and describes the production SQL networking prerequisite.
 
-Cloud deployments use `test` and `prod`, with `APP_NAME=grove` and resource groups `rg-grove-test` and `rg-grove-prod`. Production setup has not been performed.
+Cloud deployments use `test` and `prod`. Existing Azure resource names retain `grove`; keep `APP_NAME=grove` and `RESOURCE_GROUP=rg-grove-test` when configuring the existing test environment. New deployments default to `booking`. Production currently has only its DNS bootstrap App Service in `rg-grove-prod`.
 
 For GitHub Environments, the one-time OIDC bootstrap, deployment settings sync, local deploy scripts, and first-deploy caveats, see [Azure Deployment Setup](README.customization.md#5-azure-deployment-setup). For the hosting flow and key deployment files, see [Development Architecture](docs/ARCHITECTURE.md#azure-hosting-flow).
 
@@ -261,7 +261,7 @@ After sign-in, `/login?returnUrl=...` accepts only local paths such as `/fetch?s
 
 ### Server tests
 
-- Run `dotnet test` from the repository root to execute the .NET test project included in `grove.sln`.
+- Run `dotnet test` from the repository root to execute the .NET test project included in `booking.sln`.
 - Alternatively, target the project directly with `dotnet test tests/server.tests/server.tests.csproj`.
 - The tests use EF Core's in-memory provider (see `tests/server.tests/TestDbContextFactory.cs`) so no SQL Server instance is required.
 
@@ -315,7 +315,7 @@ And as always, after updating dependencies, make sure to run `dotnet build` and 
 ├── infrastructure/azure/    # Azure Bicep templates and local deployment scripts
 ├── .github/workflows/       # CI/CD and reusable Azure App Service deployment workflow
 ├── package.json             # Root dev orchestration scripts
-└── grove.sln                  # Visual Studio solution file
+└── booking.sln                  # Visual Studio solution file
 ```
 
 ## Available Scripts

@@ -147,7 +147,7 @@ public class ReservationModelTests
             .Should().OnlyContain(key => key.DeleteBehavior == DeleteBehavior.NoAction);
 
         var person = model.FindEntityType(typeof(Person))!;
-        person.IsTableExcludedFromMigrations().Should().BeFalse("Grove manages the People schema");
+        person.IsTableExcludedFromMigrations().Should().BeFalse("Booking manages the People schema");
         person.GetForeignKeys().Should().BeEmpty();
         person.GetReferencingForeignKeys().Should().BeEmpty("People remains a lookup without reservation relationships");
     }
@@ -190,7 +190,7 @@ public class ReservationModelTests
     private static AppDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlServer("Server=(local);Database=GroveModelTests;Integrated Security=True;TrustServerCertificate=True")
+            .UseSqlServer("Server=(local);Database=BookingModelTests;Integrated Security=True;TrustServerCertificate=True")
             .Options;
         return new AppDbContext(options);
     }
