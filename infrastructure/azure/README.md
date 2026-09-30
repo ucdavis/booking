@@ -32,6 +32,13 @@ For the local rename, clone into a `booking` directory and preserve any uncommit
 
 ## Azure rebuild and DNS cutover
 
-The new Booking groups replace `rg-grove-test` and `rg-grove-prod`. The old groups remain until both public domains are verified against the new apps. Automatic test deployment stays paused during the cutover. Do not run Configure Azure against the old groups using the new SQL credentials.
+The September 30, 2026 cutover replaced the Grove resource groups with `rg-booking-test` and `rg-booking-prod`. Both public hostnames are bound to the Booking apps. The Grove groups and their deployment identities' shared-plan role assignments have been removed. Automatic test deployment is enabled again.
 
-After deployment, request the new CNAME targets from campus DNS and compare the `asuid` TXT records with each new app's `customDomainVerificationId`. Preserve Cloudflare proxying for test, which uses an Origin CA certificate. Production uses an App Service managed certificate. Transfer custom-domain bindings and verify HTTPS, database health, and sign-in before removing the old groups, their shared-plan role assignments, and obsolete Entra callbacks.
+| Environment | Public hostname | App Service |
+| --- | --- | --- |
+| Test | `booking-test.ucdavis.edu` | `web-booking-test-rpeipu` |
+| Production | `booking.ucdavis.edu` | `web-booking-prod-wngjis` |
+
+Test retains Cloudflare proxying and its Origin CA certificate, stored in `rg-booking-test`. Production uses an App Service managed certificate in `rg-booking-prod`. The existing `asuid` TXT values remain valid. Custom-domain and certificate bindings are managed separately from the base Bicep template.
+
+Public HTTPS, `/health`, unauthenticated API protection, and Entra login redirects were checked with the old apps stopped. A fresh authenticated UC Davis browser sign-in remains a manual verification step.
