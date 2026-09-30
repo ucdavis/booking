@@ -33,7 +33,7 @@ describe('fetch route', () => {
       expect(
         screen.getByText("You don't have permission to view this page.")
       ).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Back to Grove' })).toHaveAttribute(
+      expect(screen.getByRole('link', { name: 'Back to Booking' })).toHaveAttribute(
         'href',
         '/temp'
       );
