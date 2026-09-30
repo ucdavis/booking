@@ -15,6 +15,7 @@ import {
   it,
   vi,
 } from 'vitest';
+import type { AdminPerson } from '@/features/admin/models/AdminPerson.ts';
 import { type User } from '@/queries/user.ts';
 import { server } from '@/test/mswUtils.ts';
 import { renderRoute } from '@/test/routerUtils.tsx';
@@ -48,10 +49,11 @@ const person = {
   email: 'sam@example.com',
   iamId: '100003',
   isActive: true,
+  isActiveInIam: true,
   isAdmin: false,
   kerberos: 'samsmith',
   name: 'Sam Smith',
-};
+} satisfies AdminPerson;
 
 let cleanup: (() => void) | undefined;
 const originalShowModal = Object.getOwnPropertyDescriptor(
@@ -206,6 +208,8 @@ describe('site admin users', () => {
       expect(dialog.getByText(person.email)).toBeInTheDocument();
       expect(dialog.getByText(new RegExp(person.iamId))).toBeInTheDocument();
       expect(dialog.getByText(new RegExp(person.kerberos))).toBeInTheDocument();
+      expect(dialog.getByText('IAM status')).toBeInTheDocument();
+      expect(dialog.getByText('Active')).toBeInTheDocument();
       expect(searchQueries).toEqual([identifier]);
     }
   );
@@ -298,7 +302,7 @@ describe('site admin users', () => {
     ).toBeDisabled();
   });
 
-  it('does not offer an existing admin or inactive person for selection', async () => {
+  it('disables existing admins and inactive matches while allowing an active person', async () => {
     mockAdminAccess();
     server.use(
       http.get('/api/admin/people', () =>
@@ -310,6 +314,13 @@ describe('site admin users', () => {
             isActive: false,
             name: 'Inactive Person',
           },
+          {
+            ...person,
+            iamId: '100005',
+            isActiveInIam: false,
+            name: 'Inactive IAM Person',
+          },
+          { ...person, iamId: '100006', name: 'Active Person' },
         ])
       )
     );
@@ -328,8 +339,50 @@ describe('site admin users', () => {
       dialog.getByRole('radio', { name: /Inactive Person/ })
     ).toBeDisabled();
     expect(
+      dialog.getByRole('radio', { name: 'Inactive IAM Person' })
+    ).toBeDisabled();
+    expect(
       dialog.getByRole('button', { name: 'Add admin user' })
     ).toBeDisabled();
+
+    fireEvent.click(dialog.getByRole('radio', { name: 'Active Person' }));
+    expect(
+      dialog.getByRole('button', { name: 'Add admin user' })
+    ).toBeEnabled();
+  });
+
+  it('shows a sole IAM-inactive match without allowing an add request', async () => {
+    mockAdminAccess();
+    const addRequests = vi.fn(() => HttpResponse.json({ ...person, id: 3 }));
+    server.use(
+      http.get('/api/admin/people', () =>
+        HttpResponse.json([{ ...person, isActiveInIam: false }])
+      ),
+      http.post('/api/admin/users', addRequests)
+    );
+    ({ cleanup } = renderRoute({ initialPath: '/admin/users' }));
+    const dialog = await openAddDialog();
+    fireEvent.change(
+      dialog.getByRole('textbox', { name: 'Email, IAM ID, or Kerberos ID' }),
+      { target: { value: person.email } }
+    );
+    fireEvent.click(dialog.getByRole('button', { name: 'Search' }));
+
+    const match = await dialog.findByRole('radio', { name: 'Sam Smith' });
+    expect(match).toBeDisabled();
+    expect(match).not.toBeChecked();
+    expect(dialog.getByText('IAM status')).toBeInTheDocument();
+    expect(dialog.getByText('Inactive')).toBeInTheDocument();
+    expect(
+      dialog.getByText('This person is inactive in IAM and cannot be added.')
+    ).toBeInTheDocument();
+    expect(
+      dialog.queryByText(/Adding Sam Smith grants access/)
+    ).not.toBeInTheDocument();
+    const addButton = dialog.getByRole('button', { name: 'Add admin user' });
+    expect(addButton).toBeDisabled();
+    fireEvent.click(addButton);
+    expect(addRequests).not.toHaveBeenCalled();
   });
 
   it('shows a search error and lets the user cancel without adding anyone', async () => {

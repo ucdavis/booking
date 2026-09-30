@@ -67,6 +67,7 @@ public class AdminController(AppDbContext dbContext) : ApiControllerBase
                 Kerberos = person.UserId == null ? null : person.UserId.Trim(),
                 IsAdmin = user != null && user.IsAdmin,
                 IsActive = user == null || user.IsActive,
+                IsActiveInIam = person.IsActiveInIam,
             })
             .Take(10)
             .ToListAsync(cancellationToken);
@@ -88,11 +89,19 @@ public class AdminController(AppDbContext dbContext) : ApiControllerBase
         // Resolve the selected person again; names, email, and privileges never come from the client.
         var person = await dbContext.People.AsNoTracking()
             .Where(person => person.IamId == iamId)
-            .Select(person => new { person.IamId, person.FullName, person.FirstName, person.LastName, person.Email })
+            .Select(person => new
+            {
+                person.IamId, person.FullName, person.FirstName, person.LastName, person.Email, person.IsActiveInIam,
+            })
             .SingleOrDefaultAsync(cancellationToken);
         if (person == null)
         {
             return NotFound("That person could not be found. Search again before adding an admin.");
+        }
+
+        if (!person.IsActiveInIam)
+        {
+            return Conflict("This person is inactive in IAM and cannot be added as a site admin.");
         }
 
         iamId = person.IamId.Trim();

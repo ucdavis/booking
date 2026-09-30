@@ -48,6 +48,8 @@ public class Person
     [Column(TypeName = "nvarchar(64)")]
     public string? Pronouns { get; set; }
 
+    public bool IsActiveInIam { get; set; }
+
     public bool? IsEmployee { get; set; }
 
     public bool? IsHsEmployee { get; set; }
