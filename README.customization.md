@@ -62,7 +62,7 @@ Customize `GetRolesForUser` in [UserService.cs](server/Services/UserService.cs) 
 
 ## 5. Azure Deployment Setup
 
-New Booking environments use these deployment defaults. The existing test environment overrides these with `APP_NAME=grove` and `RESOURCE_GROUP=rg-grove-test` to preserve its resources:
+Booking environments use these deployment defaults:
 
 - `APP_NAME=booking`
 - `RESOURCE_GROUP=rg-booking-test` for `test`
