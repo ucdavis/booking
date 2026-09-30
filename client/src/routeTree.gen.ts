@@ -31,6 +31,7 @@ import { Route as authenticatedTeamsTeamSlugRouteImport } from './routes/(authen
 import { Route as authenticatedAdminUsersRouteImport } from './routes/(authenticated)/admin.users'
 import { Route as authenticatedAdminTeamsRouteImport } from './routes/(authenticated)/admin.teams'
 import { Route as authenticatedTeamsTeamSlugIndexRouteImport } from './routes/(authenticated)/teams.$teamSlug.index'
+import { Route as authenticatedTeamsTeamSlugMembersRouteImport } from './routes/(authenticated)/teams.$teamSlug.members'
 
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
@@ -145,6 +146,12 @@ const authenticatedTeamsTeamSlugIndexRoute =
     path: '/',
     getParentRoute: () => authenticatedTeamsTeamSlugRoute,
   } as any)
+const authenticatedTeamsTeamSlugMembersRoute =
+  authenticatedTeamsTeamSlugMembersRouteImport.update({
+    id: '/members',
+    path: '/members',
+    getParentRoute: () => authenticatedTeamsTeamSlugRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
@@ -167,6 +174,7 @@ export interface FileRoutesByFullPath {
   '/temp/resources/$resourceId': typeof TempResourcesResourceIdRoute
   '/admin/': typeof authenticatedAdminIndexRoute
   '/temp/resources': typeof TempResourcesIndexRoute
+  '/teams/$teamSlug/members': typeof authenticatedTeamsTeamSlugMembersRoute
   '/teams/$teamSlug/': typeof authenticatedTeamsTeamSlugIndexRoute
 }
 export interface FileRoutesByTo {
@@ -188,6 +196,7 @@ export interface FileRoutesByTo {
   '/temp/resources/$resourceId': typeof TempResourcesResourceIdRoute
   '/admin': typeof authenticatedAdminIndexRoute
   '/temp/resources': typeof TempResourcesIndexRoute
+  '/teams/$teamSlug/members': typeof authenticatedTeamsTeamSlugMembersRoute
   '/teams/$teamSlug': typeof authenticatedTeamsTeamSlugIndexRoute
 }
 export interface FileRoutesById {
@@ -213,6 +222,7 @@ export interface FileRoutesById {
   '/temp/resources/$resourceId': typeof TempResourcesResourceIdRoute
   '/(authenticated)/admin/': typeof authenticatedAdminIndexRoute
   '/temp/resources/': typeof TempResourcesIndexRoute
+  '/(authenticated)/teams/$teamSlug/members': typeof authenticatedTeamsTeamSlugMembersRoute
   '/(authenticated)/teams/$teamSlug/': typeof authenticatedTeamsTeamSlugIndexRoute
 }
 export interface FileRouteTypes {
@@ -238,6 +248,7 @@ export interface FileRouteTypes {
     | '/temp/resources/$resourceId'
     | '/admin/'
     | '/temp/resources'
+    | '/teams/$teamSlug/members'
     | '/teams/$teamSlug/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -259,6 +270,7 @@ export interface FileRouteTypes {
     | '/temp/resources/$resourceId'
     | '/admin'
     | '/temp/resources'
+    | '/teams/$teamSlug/members'
     | '/teams/$teamSlug'
   id:
     | '__root__'
@@ -283,6 +295,7 @@ export interface FileRouteTypes {
     | '/temp/resources/$resourceId'
     | '/(authenticated)/admin/'
     | '/temp/resources/'
+    | '/(authenticated)/teams/$teamSlug/members'
     | '/(authenticated)/teams/$teamSlug/'
   fileRoutesById: FileRoutesById
 }
@@ -454,6 +467,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authenticatedTeamsTeamSlugIndexRouteImport
       parentRoute: typeof authenticatedTeamsTeamSlugRoute
     }
+    '/(authenticated)/teams/$teamSlug/members': {
+      id: '/(authenticated)/teams/$teamSlug/members'
+      path: '/members'
+      fullPath: '/teams/$teamSlug/members'
+      preLoaderRoute: typeof authenticatedTeamsTeamSlugMembersRouteImport
+      parentRoute: typeof authenticatedTeamsTeamSlugRoute
+    }
   }
 }
 
@@ -473,11 +493,14 @@ const authenticatedAdminRouteWithChildren =
   authenticatedAdminRoute._addFileChildren(authenticatedAdminRouteChildren)
 
 interface authenticatedTeamsTeamSlugRouteChildren {
+  authenticatedTeamsTeamSlugMembersRoute: typeof authenticatedTeamsTeamSlugMembersRoute
   authenticatedTeamsTeamSlugIndexRoute: typeof authenticatedTeamsTeamSlugIndexRoute
 }
 
 const authenticatedTeamsTeamSlugRouteChildren: authenticatedTeamsTeamSlugRouteChildren =
   {
+    authenticatedTeamsTeamSlugMembersRoute:
+      authenticatedTeamsTeamSlugMembersRoute,
     authenticatedTeamsTeamSlugIndexRoute: authenticatedTeamsTeamSlugIndexRoute,
   }
 

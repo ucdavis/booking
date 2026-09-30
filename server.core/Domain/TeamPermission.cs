@@ -13,7 +13,7 @@ public class TeamPermission
 
     [Required]
     [MaxLength(20)]
-    public required string Role { get; set; }
+    public required TeamRole Role { get; set; }
 
     public User User { get; set; } = null!;
 
@@ -22,6 +22,10 @@ public class TeamPermission
     protected internal static void OnModelCreating(ModelBuilder modelBuilder)
     {
         var builder = modelBuilder.Entity<TeamPermission>();
+
+        builder.Property(permission => permission.Role).HasConversion(
+            role => role.ToString().ToLowerInvariant(),
+            value => Enum.Parse<TeamRole>(value, true));
 
         builder.ToTable(table => table.HasCheckConstraint(
             "CK_TeamPermissions_Role", "[Role] IN ('admin', 'editor', 'viewer')"));

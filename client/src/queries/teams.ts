@@ -1,5 +1,8 @@
-import { queryOptions } from '@tanstack/react-query';
+import { queryOptions, type QueryClient } from '@tanstack/react-query';
 import type { TeamAccess } from '@/features/teams/models/TeamAccess.ts';
+import type { TeamMember } from '@/features/teams/models/TeamMember.ts';
+import type { TeamPerson } from '@/features/teams/models/TeamPerson.ts';
+import type { TeamRole } from '@/features/teams/models/TeamRole.ts';
 import type { TeamSummary } from '@/features/teams/models/TeamSummary.ts';
 import { fetchJson, HttpError } from '@/lib/api.ts';
 
@@ -31,3 +34,91 @@ export const teamAccessQueryOptions = (teamSlug: string) =>
     retry: false,
     staleTime: 0,
   });
+
+const teamMembersUrl = (teamSlug: string) =>
+  `/api/teams/${encodeURIComponent(teamSlug)}/members`;
+
+export const teamMembersQueryKey = (teamSlug: string) =>
+  ['teams', 'members', teamSlug] as const;
+
+export const teamMembersQueryOptions = (teamSlug: string, userId: string) =>
+  queryOptions({
+    queryFn: ({ signal }) =>
+      fetchJson<TeamMember[]>(
+        teamMembersUrl(teamSlug),
+        { cache: 'no-store', skipRedirectOn401: true },
+        signal
+      ),
+    queryKey: [...teamMembersQueryKey(teamSlug), userId] as const,
+    retry: false,
+    staleTime: 0,
+  });
+
+export const teamPeopleQueryOptions = (
+  teamSlug: string,
+  userId: string,
+  query: string | null
+) =>
+  queryOptions({
+    enabled: !!query,
+    gcTime: 0,
+    queryFn: ({ signal }) =>
+      fetchJson<TeamPerson[]>(
+        `${teamMembersUrl(teamSlug)}/people?query=${encodeURIComponent(query ?? '')}`,
+        { cache: 'no-store' },
+        signal
+      ),
+    queryKey: ['teams', 'people', teamSlug, userId, query] as const,
+    retry: false,
+  });
+
+async function teamMemberRequest<T>(
+  teamSlug: string,
+  suffix: string,
+  init: RequestInit
+): Promise<T> {
+  const { token } = await fetchJson<{ token: string }>(
+    `${teamMembersUrl(teamSlug)}/antiforgery`,
+    { cache: 'no-store' }
+  );
+
+  return fetchJson<T>(`${teamMembersUrl(teamSlug)}${suffix}`, {
+    ...init,
+    headers: { RequestVerificationToken: token },
+  });
+}
+
+export const addTeamMember = (
+  teamSlug: string,
+  iamId: string,
+  role: TeamRole
+) =>
+  teamMemberRequest<TeamMember>(teamSlug, '', {
+    body: JSON.stringify({ iamId, role }),
+    method: 'POST',
+  });
+
+export const changeTeamMemberRole = (
+  teamSlug: string,
+  userId: number,
+  role: TeamRole
+) =>
+  teamMemberRequest<TeamMember>(teamSlug, `/${userId}/role`, {
+    body: JSON.stringify({ role }),
+    method: 'PUT',
+  });
+
+export const removeTeamMember = (teamSlug: string, userId: number) =>
+  teamMemberRequest<void>(teamSlug, `/${userId}`, { method: 'DELETE' });
+
+export async function invalidateTeamMemberQueries(
+  queryClient: QueryClient,
+  teamSlug: string
+) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: teamMembersQueryKey(teamSlug) }),
+    queryClient.invalidateQueries({ queryKey: ['teams', 'people', teamSlug] }),
+    queryClient.invalidateQueries({ queryKey: ['teams', 'access', teamSlug] }),
+    queryClient.invalidateQueries({ queryKey: ['teams', 'memberships'] }),
+  ]);
+}

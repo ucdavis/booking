@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Data;
+using Server.Core.Domain;
 using Server.Models.Teams;
 
 namespace Server.Services;
@@ -20,7 +21,22 @@ public sealed class TeamAccessService(AppDbContext dbContext)
         return await dbContext.Users.AnyAsync(user => user.IamId == iamId && user.IsActive &&
             (user.IsAdmin || dbContext.TeamPermissions.Any(permission =>
                 permission.UserId == user.Id && permission.Team.Slug == teamSlug &&
-                (permission.Role == "admin" || permission.Role == "editor" || permission.Role == "viewer"))),
+                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor || permission.Role == TeamRole.Viewer))),
+            cancellationToken);
+    }
+
+    public async Task<bool> CanAdministerTeam(
+        ClaimsPrincipal principal, string? teamSlug, CancellationToken cancellationToken = default)
+    {
+        var iamId = GetIamId(principal);
+        if (iamId == null || string.IsNullOrWhiteSpace(teamSlug))
+        {
+            return false;
+        }
+
+        return await dbContext.Users.AnyAsync(user => user.IamId == iamId && user.IsActive &&
+            (user.IsAdmin || dbContext.TeamPermissions.Any(permission =>
+                permission.UserId == user.Id && permission.Team.Slug == teamSlug && permission.Role == TeamRole.Admin)),
             cancellationToken);
     }
 
@@ -36,7 +52,7 @@ public sealed class TeamAccessService(AppDbContext dbContext)
         // Site administrators use the all-teams list; this menu contains explicit memberships only.
         return await dbContext.TeamPermissions.AsNoTracking()
             .Where(permission => permission.User.IamId == iamId && permission.User.IsActive &&
-                (permission.Role == "admin" || permission.Role == "editor" || permission.Role == "viewer"))
+                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor || permission.Role == TeamRole.Viewer))
             .OrderBy(permission => permission.Team.Name)
             .ThenBy(permission => permission.Team.Slug)
             .Select(permission => new TeamSummaryResponse
@@ -77,8 +93,8 @@ public sealed class TeamAccessService(AppDbContext dbContext)
 
         var role = await dbContext.TeamPermissions.AsNoTracking()
             .Where(permission => permission.TeamId == team.Id && permission.UserId == user.Id &&
-                (permission.Role == "admin" || permission.Role == "editor" || permission.Role == "viewer"))
-            .Select(permission => permission.Role)
+                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor || permission.Role == TeamRole.Viewer))
+            .Select(permission => (TeamRole?)permission.Role)
             .SingleOrDefaultAsync(cancellationToken);
         if (!user.IsAdmin && role == null)
         {

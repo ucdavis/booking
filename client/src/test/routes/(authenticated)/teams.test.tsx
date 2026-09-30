@@ -8,6 +8,7 @@ import {
 } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { TeamRole } from '@/features/teams/models/TeamRole.ts';
 import {
   myTeamsQueryOptions,
   teamAccessQueryOptions,
@@ -215,7 +216,7 @@ describe('team administration navigation and access', () => {
     });
     queryClient.setQueryData(teamAccessQueryOptions(firstTeam.slug).queryKey, {
       isSiteAdmin: false,
-      role: 'admin',
+      role: TeamRole.Admin,
       team: firstTeam,
     });
     ({ cleanup } = renderRoute({

@@ -1,9 +1,12 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Server.Core.Data;
+using Server.Core.Domain;
 using Server.Core.Notification;
 using Server.Examples.Notifications;
 using Server.Helpers;
@@ -36,7 +39,9 @@ try
     // Use Entra by default; the Docker sandbox explicitly enables local cookies.
     builder.Services.AddAuthenticationServices(builder.Configuration, builder.Environment);
 
-    builder.Services.AddControllersWithViews();
+    builder.Services.AddControllersWithViews().AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters.Add(
+            new JsonStringEnumConverter<TeamRole>(JsonNamingPolicy.CamelCase, allowIntegerValues: false)));
     builder.Services.AddNotificationServices(builder.Configuration);
     builder.Services.AddNotificationExamples(builder.Configuration);
 
