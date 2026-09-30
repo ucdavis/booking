@@ -1,23 +1,37 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Server.Core.Domain;
 
+[Table("Spaces")]
 public class Space
 {
+    [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
 
+    [Required]
+    [MaxLength(120)]
     public required string Slug { get; set; }
 
+    [Required]
+    [MaxLength(200)]
     public required string Name { get; set; }
 
+    [Column(TypeName = "nvarchar(max)")]
     public string? Description { get; set; }
 
+    [MaxLength(500)]
     public string? Address { get; set; }
 
     public bool IsOfficialFacility { get; set; }
 
+    [MaxLength(100)]
     public string? ReferenceNumber { get; set; }
 
+    [Required]
+    [MaxLength(100)]
     public required string TimeZoneId { get; set; }
 
     public bool IsActive { get; set; } = true;
@@ -30,17 +44,9 @@ public class Space
     {
         var builder = modelBuilder.Entity<Space>();
 
-        builder.ToTable("Spaces", table => table.HasCheckConstraint(
+        builder.ToTable(table => table.HasCheckConstraint(
             "CK_Spaces_OfficialReference", "[IsOfficialFacility] = 0 OR [ReferenceNumber] IS NOT NULL"));
-        builder.HasKey(space => space.Id);
-        builder.Property(space => space.Id).ValueGeneratedOnAdd();
-        builder.Property(space => space.Slug).HasMaxLength(120).IsRequired();
-        builder.Property(space => space.Name).HasMaxLength(200).IsRequired();
-        builder.Property(space => space.Description).HasColumnType("nvarchar(max)");
-        builder.Property(space => space.Address).HasMaxLength(500);
         builder.Property(space => space.IsOfficialFacility).HasDefaultValue(false);
-        builder.Property(space => space.ReferenceNumber).HasMaxLength(100);
-        builder.Property(space => space.TimeZoneId).HasMaxLength(100).IsRequired();
         builder.Property(space => space.IsActive).HasDefaultValue(true);
 
         builder.HasIndex(space => space.Slug).IsUnique();

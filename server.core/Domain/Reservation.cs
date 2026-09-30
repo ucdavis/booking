@@ -1,9 +1,13 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Server.Core.Domain;
 
+[Table("Reservations")]
 public class Reservation
 {
+    [Key]
     public int Id { get; set; }
 
     public int ReservationSeriesId { get; set; }
@@ -16,6 +20,8 @@ public class Reservation
 
     public DateTimeOffset EndsAt { get; set; }
 
+    [Required]
+    [MaxLength(20)]
     public string Status { get; set; } = "pending";
 
     public int? DecidedByUserId { get; set; }
@@ -24,16 +30,20 @@ public class Reservation
 
     public DateTimeOffset? DecidedAt { get; set; }
 
+    [MaxLength(1000)]
     public string? DecisionNote { get; set; }
 
     public Guid? ShareToken { get; set; }
 
     public DateTimeOffset BillingDueAt { get; set; }
 
+    [Required]
+    [MaxLength(24)]
     public string BillingStatus { get; set; } = "waiting";
 
     public DateTimeOffset? BillingPreparedAt { get; set; }
 
+    [Precision(12, 2)]
     public decimal? Amount { get; set; }
 
     public string? BillingSnapshotJson { get; set; }
@@ -42,16 +52,20 @@ public class Reservation
 
     public int? PaymentsInvoiceId { get; set; }
 
+    [MaxLength(128)]
     public string? PaymentsLinkId { get; set; }
 
+    [MaxLength(50)]
     public string? PaymentsStatus { get; set; }
 
     public DateTimeOffset? PaymentsSyncedAt { get; set; }
 
     public bool BillingAttentionRequired { get; set; }
 
+    [MaxLength(2000)]
     public string? BillingAttentionNote { get; set; }
 
+    [ConcurrencyCheck]
     public int Revision { get; set; } = 1;
 
     public DateTimeOffset CreatedAt { get; set; }
@@ -62,7 +76,7 @@ public class Reservation
     {
         var builder = modelBuilder.Entity<Reservation>();
 
-        builder.ToTable("Reservations", table =>
+        builder.ToTable(table =>
         {
             table.HasCheckConstraint("CK_Reservations_Interval", "[OccurrenceNumber] > 0 AND [Revision] > 0 AND [EndsAt] > [StartsAt]");
             table.HasCheckConstraint("CK_Reservations_Status", "[Status] IN ('pending', 'approved', 'rejected', 'canceled')");
@@ -78,18 +92,12 @@ public class Reservation
             table.HasCheckConstraint("CK_Reservations_Attention", "[BillingStatus] <> 'needs_attention' OR ([BillingAttentionRequired] = 1 AND [BillingAttentionNote] IS NOT NULL)");
         });
 
-        builder.HasKey(reservation => reservation.Id);
         builder.HasAlternateKey(reservation => new { reservation.Id, reservation.ReservationSeriesId });
         builder.Property(reservation => reservation.Id).UseIdentityColumn();
-        builder.Property(reservation => reservation.Status).HasMaxLength(20).IsRequired().HasDefaultValue("pending");
-        builder.Property(reservation => reservation.DecisionNote).HasMaxLength(1000);
-        builder.Property(reservation => reservation.BillingStatus).HasMaxLength(24).IsRequired().HasDefaultValue("waiting");
-        builder.Property(reservation => reservation.Amount).HasPrecision(12, 2);
-        builder.Property(reservation => reservation.PaymentsLinkId).HasMaxLength(128);
-        builder.Property(reservation => reservation.PaymentsStatus).HasMaxLength(50);
+        builder.Property(reservation => reservation.Status).HasDefaultValue("pending");
+        builder.Property(reservation => reservation.BillingStatus).HasDefaultValue("waiting");
         builder.Property(reservation => reservation.BillingAttentionRequired).HasDefaultValue(false);
-        builder.Property(reservation => reservation.BillingAttentionNote).HasMaxLength(2000);
-        builder.Property(reservation => reservation.Revision).HasDefaultValue(1).IsConcurrencyToken();
+        builder.Property(reservation => reservation.Revision).HasDefaultValue(1);
 
         builder.HasIndex(reservation => new { reservation.ReservationSeriesId, reservation.OccurrenceNumber }).IsUnique();
         builder.HasIndex(reservation => new { reservation.Status, reservation.StartsAt });

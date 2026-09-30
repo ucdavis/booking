@@ -1,7 +1,9 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Server.Core.Domain;
 
+[Table("TeamSpaces")]
 public class TeamSpace
 {
     public int TeamId { get; set; }
@@ -16,7 +18,6 @@ public class TeamSpace
     {
         var builder = modelBuilder.Entity<TeamSpace>();
 
-        builder.ToTable("TeamSpaces");
         builder.HasKey(teamSpace => new { teamSpace.TeamId, teamSpace.SpaceId });
 
         builder.HasOne(teamSpace => teamSpace.Team)

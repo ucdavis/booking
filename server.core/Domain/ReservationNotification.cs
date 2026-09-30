@@ -1,9 +1,13 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
 namespace Server.Core.Domain;
 
+[Table("Notifications")]
 public class ReservationNotification
 {
+    [Key]
     public int Id { get; set; }
 
     public int ReservationSeriesId { get; set; }
@@ -18,10 +22,15 @@ public class ReservationNotification
 
     public User RecipientUser { get; set; } = null!;
 
+    [Required]
+    [MaxLength(50)]
     public required string Kind { get; set; }
 
+    [Required]
+    [MaxLength(200)]
     public required string DeduplicationKey { get; set; }
 
+    [Required]
     public required string PayloadJson { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
@@ -32,24 +41,20 @@ public class ReservationNotification
 
     public DateTimeOffset? NextAttemptAt { get; set; }
 
+    [MaxLength(2000)]
     public string? LastError { get; set; }
 
     protected internal static void OnModelCreating(ModelBuilder modelBuilder)
     {
         var builder = modelBuilder.Entity<ReservationNotification>();
 
-        builder.ToTable("Notifications", table =>
+        builder.ToTable(table =>
         {
             table.HasCheckConstraint("CK_Notifications_Payload", "[AttemptCount] >= 0 AND ISJSON([PayloadJson]) = 1");
         });
 
-        builder.HasKey(notification => notification.Id);
         builder.Property(notification => notification.Id).UseIdentityColumn();
-        builder.Property(notification => notification.Kind).HasMaxLength(50).IsRequired();
-        builder.Property(notification => notification.DeduplicationKey).HasMaxLength(200).IsRequired();
-        builder.Property(notification => notification.PayloadJson).IsRequired();
         builder.Property(notification => notification.AttemptCount).HasDefaultValue(0);
-        builder.Property(notification => notification.LastError).HasMaxLength(2000);
 
         builder.HasIndex(notification => notification.DeduplicationKey).IsUnique();
         builder.HasIndex(notification => new { notification.SentAt, notification.NextAttemptAt });
