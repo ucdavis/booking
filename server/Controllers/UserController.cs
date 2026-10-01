@@ -29,6 +29,7 @@ public class UserController(IUserService userService) : ApiControllerBase
             Email = userEmail,
             IamId = iamId,
             IsSiteAdmin = await userService.IsSiteAdmin(User, cancellationToken),
+            IsEmulating = EmulationService.IsEmulating(HttpContext),
             Roles = userRoles,
         };
 

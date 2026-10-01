@@ -18,6 +18,7 @@ public static class AuthenticationHelper
     public static IServiceCollection AddAuthenticationServices(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
         services.AddScoped<TeamAccessService>();
+        services.AddScoped<EmulationService>();
         services.AddAuthorization(options =>
         {
             options.AddPolicy(SiteAdminPolicy, policy => policy.RequireAuthenticatedUser().RequireAssertion(async context =>
@@ -73,6 +74,7 @@ public static class AuthenticationHelper
                     options.Cookie.Name = cookieName;
                     options.LoginPath = "/login";
                     options.Events.OnSigningIn = OnSigningIn;
+                    options.Events.OnSigningOut = OnSigningOut;
                     options.Events.OnRedirectToLogin = ctx =>
                     {
                         if (ctx.Request.Path.StartsWithSegments("/api"))
@@ -128,6 +130,7 @@ public static class AuthenticationHelper
             options.Events = new CookieAuthenticationEvents
             {
                 OnSigningIn = OnSigningIn,
+                OnSigningOut = OnSigningOut,
                 OnValidatePrincipal = OnValidatePrincipal,
                 OnRedirectToAccessDenied = ctx =>
                 {
@@ -170,6 +173,16 @@ public static class AuthenticationHelper
     {
         var userService = ctx.HttpContext.RequestServices.GetRequiredService<IUserService>();
         await userService.UpdateUserOnLogin(ctx.Principal!, ctx.HttpContext.RequestAborted);
+        ctx.Properties.Items[EmulationService.SessionPropertyKey] = Guid.NewGuid().ToString("N");
+        ctx.HttpContext.RequestServices.GetRequiredService<EmulationService>().Clear(ctx.HttpContext, force: true);
+    }
+
+    private static Task OnSigningOut(CookieSigningOutContext ctx)
+    {
+        // OIDC sign-out must use the real login, even while the request is emulated.
+        ctx.HttpContext.User = EmulationService.GetActor(ctx.HttpContext);
+        ctx.HttpContext.RequestServices.GetRequiredService<EmulationService>().Clear(ctx.HttpContext, force: true);
+        return Task.CompletedTask;
     }
 
     /// <summary>

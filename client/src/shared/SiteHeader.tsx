@@ -1,9 +1,15 @@
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import { useMutation } from '@tanstack/react-query';
-import { Link, useLocation } from '@tanstack/react-router';
+import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
+import { EmulateUserDialog } from '@/features/admin/EmulateUserDialog.tsx';
 import { TeamAdminMenu } from '@/features/teams/TeamAdminMenu.tsx';
 import { fetchJson } from '@/lib/api.ts';
+import {
+  emulationErrorMessage,
+  stopEmulation,
+  subscribeToEmulationChanges,
+} from '@/queries/emulation.ts';
 import { useMeQuery } from '@/queries/user.ts';
 
 const navigationItems = [
@@ -14,6 +20,7 @@ const navigationItems = [
 
 export function SiteHeader() {
   const userQuery = useMeQuery();
+  const router = useRouter();
   const pathname = useLocation({ select: (location) => location.pathname });
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const adminMenuRef = useRef<HTMLDivElement>(null);
@@ -21,7 +28,15 @@ export function SiteHeader() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const userButtonRef = useRef<HTMLButtonElement>(null);
+  const [emulationDialogOpen, setEmulationDialogOpen] = useState(false);
   const isAdminPage = pathname === '/admin' || pathname.startsWith('/admin/');
+  const stopEmulationMutation = useMutation({
+    mutationFn: stopEmulation,
+    onSuccess: () => router.navigate({ href: '/temp', reloadDocument: true }),
+    retry: false,
+  });
+  const isStoppingEmulation =
+    stopEmulationMutation.isPending || stopEmulationMutation.isSuccess;
   const logoutMutation = useMutation({
     mutationFn: async () => {
       const { formFieldName, requestToken } = await fetchJson<{
@@ -50,6 +65,14 @@ export function SiteHeader() {
       }
     },
   });
+
+  useEffect(
+    () =>
+      subscribeToEmulationChanges(() => {
+        void router.navigate({ href: '/temp', reloadDocument: true });
+      }),
+    [router]
+  );
 
   useEffect(() => {
     if (!adminMenuOpen) {
@@ -199,6 +222,11 @@ export function SiteHeader() {
               <button
                 aria-controls="user-account-navigation"
                 aria-expanded={userMenuOpen}
+                aria-label={
+                  userQuery.data.isEmulating
+                    ? `${userQuery.data.name} (Emulating)`
+                    : undefined
+                }
                 className={`flex items-center gap-1.5 transition-colors hover:text-primary ${pathname === '/me' ? 'font-semibold text-primary' : 'text-base-content/70'}`}
                 onClick={() => setUserMenuOpen((open) => !open)}
                 ref={userButtonRef}
@@ -210,6 +238,11 @@ export function SiteHeader() {
                 >
                   {userQuery.data.name}
                 </span>
+                {userQuery.data.isEmulating && (
+                  <span className="shrink-0 font-semibold text-primary">
+                    (Emulating)
+                  </span>
+                )}
                 <ChevronDownIcon
                   aria-hidden="true"
                   className="h-4 w-4 shrink-0"
@@ -229,10 +262,46 @@ export function SiteHeader() {
                       Profile
                     </Link>
                   </li>
+                  {userQuery.data.isSiteAdmin &&
+                    !userQuery.data.isEmulating && (
+                      <li>
+                        <button
+                          disabled={
+                            logoutMutation.isPending || logoutMutation.isSuccess
+                          }
+                          onClick={() => {
+                            setUserMenuOpen(false);
+                            setEmulationDialogOpen(true);
+                          }}
+                          type="button"
+                        >
+                          Emulate user
+                        </button>
+                      </li>
+                    )}
+                  {userQuery.data.isEmulating && (
+                    <li>
+                      <button
+                        disabled={
+                          isStoppingEmulation ||
+                          logoutMutation.isPending ||
+                          logoutMutation.isSuccess
+                        }
+                        onClick={() => stopEmulationMutation.mutate()}
+                        type="button"
+                      >
+                        {isStoppingEmulation
+                          ? 'Stopping emulation…'
+                          : 'Stop emulating'}
+                      </button>
+                    </li>
+                  )}
                   <li>
                     <button
                       disabled={
-                        logoutMutation.isPending || logoutMutation.isSuccess
+                        logoutMutation.isPending ||
+                        logoutMutation.isSuccess ||
+                        isStoppingEmulation
                       }
                       onClick={() => logoutMutation.mutate()}
                       type="button"
@@ -249,12 +318,31 @@ export function SiteHeader() {
                       </p>
                     </li>
                   )}
+                  {stopEmulationMutation.isError && (
+                    <li>
+                      <p className="text-error" role="alert">
+                        {emulationErrorMessage(
+                          stopEmulationMutation.error,
+                          'Unable to stop emulating. Please try again.'
+                        )}
+                      </p>
+                    </li>
+                  )}
                 </ul>
               )}
             </div>
           )}
         </nav>
       </div>
+      {emulationDialogOpen &&
+        userQuery.isSuccess &&
+        userQuery.data.isSiteAdmin &&
+        !userQuery.data.isEmulating && (
+          <EmulateUserDialog
+            onClose={() => setEmulationDialogOpen(false)}
+            returnFocusRef={userButtonRef}
+          />
+        )}
     </header>
   );
 }
