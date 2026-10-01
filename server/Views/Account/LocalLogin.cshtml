@@ -39,6 +39,15 @@
             <span>basic@example.test · User only</span>
         </button>
     </form>
+    <form action="/login/local/person" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="returnUrl" value="@Model" />
+        <input type="hidden" name="query" value="FAKE000055" />
+        <button type="submit">
+            <strong>Sign in as Fake055 User055</strong>
+            <span>FAKE000055 · Seeded site administrator</span>
+        </button>
+    </form>
     <section class="person-sign-in" aria-labelledby="person-sign-in-heading">
         <h2 id="person-sign-in-heading">Sign in as a person</h2>
         <p>Use a person from the People table to try their existing site and team access.</p>
