@@ -68,7 +68,7 @@ export function FormPreview({ definition }: { definition: FormDefinition }) {
           event.preventDefault();
           event.stopPropagation();
           setValidatedAnswers(null);
-          void form.handleSubmit();
+          void form.validateAllFields('submit').then(() => form.handleSubmit());
         }}
       >
         {!definition.fields.length && (

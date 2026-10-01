@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -15,6 +16,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Primitives;
 using Server.Controllers;
 using Server.Core.Data;
 using Server.Core.Domain;
@@ -168,7 +170,6 @@ public class EmulationMiddlewareTests
     [InlineData("/api/emulation/stop")]
     [InlineData("/logout/antiforgery")]
     [InlineData("/logout")]
-    [InlineData("/logout/local")]
     public async Task Invalid_selection_allows_explicit_recovery_with_an_unprivileged_emulation_identity(string path)
     {
         using var fixture = new Fixture();
@@ -260,6 +261,47 @@ public class EmulationMiddlewareTests
         result.Context.Response.Headers.SetCookie.Should().Contain(value => value!.StartsWith(fixture.CookieName + "=;"));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Local_sign_out_accepts_the_login_page_antiforgery_token_while_emulating(bool expiredSelection)
+    {
+        using var fixture = new Fixture();
+        await fixture.SeedAsync();
+        var login = await fixture.SignInAsync();
+        var selection = fixture.Select(login.SessionId);
+        if (expiredSelection)
+        {
+            selection = fixture.ExpireSelection(selection);
+        }
+
+        AntiforgeryTokenSet? tokens = null;
+        var loginPage = await fixture.RequestAsync(login.Cookie, selection, context =>
+        {
+            tokens = context.RequestServices.GetRequiredService<IAntiforgery>().GetAndStoreTokens(context);
+            return Task.CompletedTask;
+        }, path: "/login", allowAnonymous: true);
+        loginPage.ReachedEndpoint.Should().BeTrue();
+        var antiforgeryCookie = loginPage.Context.Response.Headers.SetCookie.Single()!.Split(';')[0];
+
+        var result = await fixture.RequestAsync($"{login.Cookie}; {antiforgeryCookie}", selection, async context =>
+        {
+            context.Request.ContentType = "application/x-www-form-urlencoded";
+            context.Request.Form = new FormCollection(new Dictionary<string, StringValues>
+            {
+                [tokens!.FormFieldName] = tokens.RequestToken,
+            });
+            await context.RequestServices.GetRequiredService<IAntiforgery>().ValidateRequestAsync(context);
+            context.User.FindFirst("ucdPersonIAMID")!.Value.Should().Be(Fixture.ActorIamId);
+            EmulationService.IsEmulating(context).Should().BeFalse();
+            await context.SignOutAsync(fixture.Scheme);
+        }, path: "/logout/local", allowAnonymous: true, method: "POST");
+
+        result.ReachedEndpoint.Should().BeTrue();
+        AssertSelectionCleared(result.Context);
+        result.Context.Response.Headers.SetCookie.Should().Contain(value => value!.StartsWith(fixture.CookieName + "=;"));
+    }
+
     [Fact]
     public async Task Login_recovery_operates_on_the_real_identity_even_with_an_invalid_selection()
     {
@@ -336,6 +378,7 @@ public class EmulationMiddlewareTests
             var services = new ServiceCollection();
             services.AddLogging();
             services.AddRouting();
+            services.AddAntiforgery();
             services.AddSingleton<IDataProtectionProvider>(new EphemeralDataProtectionProvider());
             services.AddSingleton<IConfiguration>(configuration);
             services.AddSingleton<IHostEnvironment>(environment);

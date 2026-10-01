@@ -33,8 +33,10 @@ public sealed class EmulationMiddleware(RequestDelegate next, ILogger<EmulationM
             context.Items[EmulationService.SessionItemKey] = sessionId;
         }
 
-        // Sign-in endpoints always operate on the real login. Successful sign-in clears emulation.
-        if (!emulation.HasSelection(context) || context.Request.Path.StartsWithSegments("/login"))
+        // The local sign-out form uses the real identity's antiforgery token from the login page.
+        // Successful sign-in or sign-out clears emulation.
+        if (!emulation.HasSelection(context) || context.Request.Path.StartsWithSegments("/login")
+            || context.Request.Path.Equals("/logout/local", StringComparison.OrdinalIgnoreCase))
         {
             await next(context);
             return;
@@ -90,6 +92,5 @@ public sealed class EmulationMiddleware(RequestDelegate next, ILogger<EmulationM
             || path.Equals("/api/emulation/antiforgery", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/api/emulation/stop", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/logout/antiforgery", StringComparison.OrdinalIgnoreCase)
-            || path.Equals("/logout", StringComparison.OrdinalIgnoreCase)
-            || path.Equals("/logout/local", StringComparison.OrdinalIgnoreCase);
+            || path.Equals("/logout", StringComparison.OrdinalIgnoreCase);
 }

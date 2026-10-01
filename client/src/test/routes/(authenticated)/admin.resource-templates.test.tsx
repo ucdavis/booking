@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { createBrowserHistory } from '@tanstack/react-router';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -733,8 +734,16 @@ describe('site admin resource templates', () => {
   it('protects unsaved edits when navigating away and allows explicitly discarding them', async () => {
     mockAdminAccess();
     mockTemplateStore();
-    const rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
-    cleanup = rendered.cleanup;
+    const previousUrl = window.location.href;
+    const previousState = window.history.state;
+    window.history.replaceState(null, '', '/admin/resource-templates/1');
+    const history = createBrowserHistory();
+    const rendered = renderRoute({ history });
+    cleanup = () => {
+      rendered.cleanup();
+      history.destroy();
+      window.history.replaceState(previousState, '', previousUrl);
+    };
     fireEvent.change(
       await screen.findByRole('textbox', { name: 'Template name' }),
       { target: { value: 'Unfinished draft' } }
