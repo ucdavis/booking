@@ -56,6 +56,7 @@ function makeTemplate(
 ): ResourceTemplate {
   return {
     createdAt: '2026-10-01T12:00:00Z',
+    description: null,
     formJson: JSON.stringify(definition),
     formSchemaVersion: 1,
     id: 1,
@@ -117,6 +118,7 @@ function mockTemplateStore(initial: ResourceTemplate[] = [makeTemplate()]) {
       const previous = templates.get(Number(params.id))!;
       const id = Math.max(...templates.keys()) + 1;
       const copy = makeTemplate({
+        description: previous.description,
         formJson: previous.formJson,
         id,
         name: `${previous.name} (copy)`,

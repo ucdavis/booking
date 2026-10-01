@@ -42,6 +42,7 @@ export function ResourceTemplateEditor({
   const form = useForm({
     defaultValues: {
       definition: baseline.definition,
+      description: currentTemplate?.description ?? '',
       isActive: currentTemplate?.isActive ?? true,
       name: currentTemplate?.name ?? '',
     },
@@ -52,6 +53,7 @@ export function ResourceTemplateEditor({
       setSaved(false);
       try {
         const result = await saveMutation.mutateAsync({
+          description: value.description.trim() || null,
           formJson: JSON.stringify(value.definition),
           formSchemaVersion: currentTemplate?.formSchemaVersion ?? 1,
           isActive: value.isActive,
@@ -59,7 +61,12 @@ export function ResourceTemplateEditor({
           updatedAt: currentTemplate?.updatedAt,
         });
         setBaseline({ definition: value.definition, template: result });
-        form.reset({ ...value, isActive: result.isActive, name: result.name });
+        form.reset({
+          ...value,
+          description: result.description ?? '',
+          isActive: result.isActive,
+          name: result.name,
+        });
         queryClient.setQueryData(resourceTemplateQueryOptions(result.id).queryKey, result);
         await queryClient.invalidateQueries({ queryKey: resourceTemplatesQueryKey });
         setSaved(true);
@@ -75,6 +82,9 @@ export function ResourceTemplateEditor({
       onSubmit: ({ value }) => {
         if (!value.name.trim() || value.name.trim().length > 200) {
           return 'Enter a template name of 200 characters or fewer.';
+        }
+        if (value.description.trim().length > 2000) {
+          return 'Enter a description of 2,000 characters or fewer.';
         }
         const errors = validateFormDefinition(value.definition);
         return errors.length ? errors.join(' ') : undefined;
@@ -113,7 +123,7 @@ export function ResourceTemplateEditor({
             </div>
           ) : (
             <p className="max-w-2xl text-sm text-base-content/65">
-              Saving form changes creates a new active version and archives this one. Previous forms keep their original ID and contents. Renaming or archiving keeps the same version.
+              Saving form changes creates a new active version and archives this one. Previous forms keep their original ID and contents. Changing the name or description, or archiving, keeps the same version.
             </p>
           )}
         </div>
@@ -144,28 +154,48 @@ export function ResourceTemplateEditor({
         <form.Subscribe selector={(state) => state.isSubmitting}>
           {(isSubmitting) => (
             <fieldset className="space-y-6" disabled={isSaving || isSubmitting}>
-              <fieldset className="flex flex-col gap-5 rounded-xl border border-base-300 bg-base-100 p-5 sm:flex-row sm:items-end" disabled={isReadOnly}>
-                <form.Field name="name">
+              <fieldset className="space-y-5 rounded-xl border border-base-300 bg-base-100 p-5" disabled={isReadOnly}>
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
+                  <form.Field name="name">
+                    {(field) => (
+                      <div className="grow">
+                        <label className="mb-2 block text-sm font-semibold" htmlFor="template-name">Template name</label>
+                        <input className="input input-bordered w-full" id="template-name" maxLength={200} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} required value={field.state.value} />
+                      </div>
+                    )}
+                  </form.Field>
+                  <form.Field name="isActive">
+                    {(field) => (
+                      <label className="flex items-center gap-3 py-3">
+                        <input checked={field.state.value} className="checkbox checkbox-primary" onChange={(event) => field.handleChange(event.target.checked)} type="checkbox" />
+                        Active template
+                      </label>
+                    )}
+                  </form.Field>
+                  {!isReadOnly && (
+                    <button className="btn btn-primary" type="submit">
+                      {isSaving || isSubmitting ? 'Saving…' : currentTemplate ? 'Save template' : 'Create template'}
+                    </button>
+                  )}
+                </div>
+                <form.Field name="description">
                   {(field) => (
-                    <div className="grow">
-                      <label className="mb-2 block text-sm font-semibold" htmlFor="template-name">Template name</label>
-                      <input className="input input-bordered w-full" id="template-name" maxLength={200} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} required value={field.state.value} />
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold" htmlFor="template-description">Description</label>
+                      <textarea
+                        aria-describedby="template-description-help"
+                        className="textarea textarea-bordered w-full"
+                        id="template-description"
+                        maxLength={2000}
+                        onBlur={field.handleBlur}
+                        onChange={(event) => field.handleChange(event.target.value)}
+                        rows={3}
+                        value={field.state.value}
+                      />
+                      <p className="mt-2 text-sm text-base-content/65" id="template-description-help">Optional. Describe what this template is for in 2,000 characters or fewer.</p>
                     </div>
                   )}
                 </form.Field>
-                <form.Field name="isActive">
-                  {(field) => (
-                    <label className="flex items-center gap-3 py-3">
-                      <input checked={field.state.value} className="checkbox checkbox-primary" onChange={(event) => field.handleChange(event.target.checked)} type="checkbox" />
-                      Active template
-                    </label>
-                  )}
-                </form.Field>
-                {!isReadOnly && (
-                  <button className="btn btn-primary" type="submit">
-                    {isSaving || isSubmitting ? 'Saving…' : currentTemplate ? 'Save template' : 'Create template'}
-                  </button>
-                )}
               </fieldset>
               {!isReadOnly && (
                 <>

@@ -26,6 +26,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             {
                 Id = template.Id,
                 Name = template.Name,
+                Description = template.Description,
                 FormSchemaVersion = template.FormSchemaVersion,
                 FormJson = template.FormJson,
                 IsActive = template.IsActive,
@@ -75,6 +76,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
         {
             TeamId = null,
             Name = request.Name.Trim(),
+            Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
             FormSchemaVersion = 1,
             FormJson = request.FormJson,
             IsActive = request.IsActive,
@@ -143,6 +145,8 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             now = template.UpdatedAt.AddTicks(1);
         }
         var name = formChanged ? template.Name : request.Name.Trim();
+        var requestedDescription = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+        var description = formChanged ? template.Description : requestedDescription;
         var isActive = !formChanged && request.IsActive;
         var isRelational = dbContext.Database.IsRelational();
         await using var transaction = isRelational
@@ -157,6 +161,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
         {
             var updated = await original.ExecuteUpdateAsync(setters => setters
                 .SetProperty(current => current.Name, name)
+                .SetProperty(current => current.Description, description)
                 .SetProperty(current => current.IsActive, isActive)
                 .SetProperty(current => current.UpdatedAt, now)
                 .SetProperty(current => current.UpdatedByUserId, userId.Value), cancellationToken);
@@ -173,6 +178,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
                 return Conflict("This template has changed since you opened it. Reload it before saving again.");
             }
             tracked.Name = name;
+            tracked.Description = description;
             tracked.IsActive = isActive;
             tracked.UpdatedAt = now;
             tracked.UpdatedByUserId = userId.Value;
@@ -185,6 +191,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             {
                 TeamId = null,
                 Name = request.Name.Trim(),
+                Description = requestedDescription,
                 FormSchemaVersion = template.FormSchemaVersion + 1,
                 FormJson = request.FormJson,
                 ResourceDefaultsJson = template.ResourceDefaultsJson,
@@ -199,6 +206,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
         {
             // Preserve the exact original JSON when only presentation or metadata changed.
             template.Name = name;
+            template.Description = description;
             template.IsActive = isActive;
             template.UpdatedAt = now;
             template.UpdatedByUserId = userId.Value;
@@ -246,6 +254,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
         {
             TeamId = null,
             Name = name + suffix,
+            Description = source.Description,
             FormSchemaVersion = 1,
             FormJson = source.FormJson,
             ResourceDefaultsJson = source.ResourceDefaultsJson,
@@ -281,6 +290,10 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
         {
             return "Enter a template name of no more than 200 characters.";
         }
+        if (request.Description?.Length > 2000)
+        {
+            return "Enter a template description of no more than 2,000 characters.";
+        }
 
         return FormDefinitionValidator.TryParse(request.FormSchemaVersion, request.FormJson, out definition, out var error)
             ? null : error;
@@ -290,6 +303,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
     {
         Id = template.Id,
         Name = template.Name,
+        Description = template.Description,
         FormSchemaVersion = template.FormSchemaVersion,
         FormJson = template.FormJson,
         IsActive = template.IsActive,
