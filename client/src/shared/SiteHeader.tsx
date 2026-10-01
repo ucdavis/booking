@@ -199,6 +199,15 @@ export function SiteHeader() {
                       Teams
                     </Link>
                   </li>
+                  <li>
+                    <Link
+                      activeProps={{ className: 'font-semibold text-primary' }}
+                      onClick={() => setAdminMenuOpen(false)}
+                      to="/admin/resource-templates"
+                    >
+                      Resource templates
+                    </Link>
+                  </li>
                 </ul>
               )}
             </div>

@@ -31,7 +31,10 @@ import { Route as authenticatedTeamsTeamSlugRouteImport } from './routes/(authen
 import { Route as authenticatedAdminUsersRouteImport } from './routes/(authenticated)/admin.users'
 import { Route as authenticatedAdminTeamsRouteImport } from './routes/(authenticated)/admin.teams'
 import { Route as authenticatedTeamsTeamSlugIndexRouteImport } from './routes/(authenticated)/teams.$teamSlug.index'
+import { Route as authenticatedAdminResourceTemplatesIndexRouteImport } from './routes/(authenticated)/admin.resource-templates.index'
 import { Route as authenticatedTeamsTeamSlugMembersRouteImport } from './routes/(authenticated)/teams.$teamSlug.members'
+import { Route as authenticatedAdminResourceTemplatesNewRouteImport } from './routes/(authenticated)/admin.resource-templates.new'
+import { Route as authenticatedAdminResourceTemplatesTemplateIdRouteImport } from './routes/(authenticated)/admin.resource-templates.$templateId'
 
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
@@ -146,11 +149,29 @@ const authenticatedTeamsTeamSlugIndexRoute =
     path: '/',
     getParentRoute: () => authenticatedTeamsTeamSlugRoute,
   } as any)
+const authenticatedAdminResourceTemplatesIndexRoute =
+  authenticatedAdminResourceTemplatesIndexRouteImport.update({
+    id: '/resource-templates/',
+    path: '/resource-templates/',
+    getParentRoute: () => authenticatedAdminRoute,
+  } as any)
 const authenticatedTeamsTeamSlugMembersRoute =
   authenticatedTeamsTeamSlugMembersRouteImport.update({
     id: '/members',
     path: '/members',
     getParentRoute: () => authenticatedTeamsTeamSlugRoute,
+  } as any)
+const authenticatedAdminResourceTemplatesNewRoute =
+  authenticatedAdminResourceTemplatesNewRouteImport.update({
+    id: '/resource-templates/new',
+    path: '/resource-templates/new',
+    getParentRoute: () => authenticatedAdminRoute,
+  } as any)
+const authenticatedAdminResourceTemplatesTemplateIdRoute =
+  authenticatedAdminResourceTemplatesTemplateIdRouteImport.update({
+    id: '/resource-templates/$templateId',
+    path: '/resource-templates/$templateId',
+    getParentRoute: () => authenticatedAdminRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -174,7 +195,10 @@ export interface FileRoutesByFullPath {
   '/temp/resources/$resourceId': typeof TempResourcesResourceIdRoute
   '/admin/': typeof authenticatedAdminIndexRoute
   '/temp/resources': typeof TempResourcesIndexRoute
+  '/admin/resource-templates/$templateId': typeof authenticatedAdminResourceTemplatesTemplateIdRoute
+  '/admin/resource-templates/new': typeof authenticatedAdminResourceTemplatesNewRoute
   '/teams/$teamSlug/members': typeof authenticatedTeamsTeamSlugMembersRoute
+  '/admin/resource-templates': typeof authenticatedAdminResourceTemplatesIndexRoute
   '/teams/$teamSlug/': typeof authenticatedTeamsTeamSlugIndexRoute
 }
 export interface FileRoutesByTo {
@@ -196,7 +220,10 @@ export interface FileRoutesByTo {
   '/temp/resources/$resourceId': typeof TempResourcesResourceIdRoute
   '/admin': typeof authenticatedAdminIndexRoute
   '/temp/resources': typeof TempResourcesIndexRoute
+  '/admin/resource-templates/$templateId': typeof authenticatedAdminResourceTemplatesTemplateIdRoute
+  '/admin/resource-templates/new': typeof authenticatedAdminResourceTemplatesNewRoute
   '/teams/$teamSlug/members': typeof authenticatedTeamsTeamSlugMembersRoute
+  '/admin/resource-templates': typeof authenticatedAdminResourceTemplatesIndexRoute
   '/teams/$teamSlug': typeof authenticatedTeamsTeamSlugIndexRoute
 }
 export interface FileRoutesById {
@@ -222,7 +249,10 @@ export interface FileRoutesById {
   '/temp/resources/$resourceId': typeof TempResourcesResourceIdRoute
   '/(authenticated)/admin/': typeof authenticatedAdminIndexRoute
   '/temp/resources/': typeof TempResourcesIndexRoute
+  '/(authenticated)/admin/resource-templates/$templateId': typeof authenticatedAdminResourceTemplatesTemplateIdRoute
+  '/(authenticated)/admin/resource-templates/new': typeof authenticatedAdminResourceTemplatesNewRoute
   '/(authenticated)/teams/$teamSlug/members': typeof authenticatedTeamsTeamSlugMembersRoute
+  '/(authenticated)/admin/resource-templates/': typeof authenticatedAdminResourceTemplatesIndexRoute
   '/(authenticated)/teams/$teamSlug/': typeof authenticatedTeamsTeamSlugIndexRoute
 }
 export interface FileRouteTypes {
@@ -248,7 +278,10 @@ export interface FileRouteTypes {
     | '/temp/resources/$resourceId'
     | '/admin/'
     | '/temp/resources'
+    | '/admin/resource-templates/$templateId'
+    | '/admin/resource-templates/new'
     | '/teams/$teamSlug/members'
+    | '/admin/resource-templates'
     | '/teams/$teamSlug/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -270,7 +303,10 @@ export interface FileRouteTypes {
     | '/temp/resources/$resourceId'
     | '/admin'
     | '/temp/resources'
+    | '/admin/resource-templates/$templateId'
+    | '/admin/resource-templates/new'
     | '/teams/$teamSlug/members'
+    | '/admin/resource-templates'
     | '/teams/$teamSlug'
   id:
     | '__root__'
@@ -295,7 +331,10 @@ export interface FileRouteTypes {
     | '/temp/resources/$resourceId'
     | '/(authenticated)/admin/'
     | '/temp/resources/'
+    | '/(authenticated)/admin/resource-templates/$templateId'
+    | '/(authenticated)/admin/resource-templates/new'
     | '/(authenticated)/teams/$teamSlug/members'
+    | '/(authenticated)/admin/resource-templates/'
     | '/(authenticated)/teams/$teamSlug/'
   fileRoutesById: FileRoutesById
 }
@@ -467,12 +506,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authenticatedTeamsTeamSlugIndexRouteImport
       parentRoute: typeof authenticatedTeamsTeamSlugRoute
     }
+    '/(authenticated)/admin/resource-templates/': {
+      id: '/(authenticated)/admin/resource-templates/'
+      path: '/resource-templates'
+      fullPath: '/admin/resource-templates'
+      preLoaderRoute: typeof authenticatedAdminResourceTemplatesIndexRouteImport
+      parentRoute: typeof authenticatedAdminRoute
+    }
     '/(authenticated)/teams/$teamSlug/members': {
       id: '/(authenticated)/teams/$teamSlug/members'
       path: '/members'
       fullPath: '/teams/$teamSlug/members'
       preLoaderRoute: typeof authenticatedTeamsTeamSlugMembersRouteImport
       parentRoute: typeof authenticatedTeamsTeamSlugRoute
+    }
+    '/(authenticated)/admin/resource-templates/new': {
+      id: '/(authenticated)/admin/resource-templates/new'
+      path: '/resource-templates/new'
+      fullPath: '/admin/resource-templates/new'
+      preLoaderRoute: typeof authenticatedAdminResourceTemplatesNewRouteImport
+      parentRoute: typeof authenticatedAdminRoute
+    }
+    '/(authenticated)/admin/resource-templates/$templateId': {
+      id: '/(authenticated)/admin/resource-templates/$templateId'
+      path: '/resource-templates/$templateId'
+      fullPath: '/admin/resource-templates/$templateId'
+      preLoaderRoute: typeof authenticatedAdminResourceTemplatesTemplateIdRouteImport
+      parentRoute: typeof authenticatedAdminRoute
     }
   }
 }
@@ -481,12 +541,21 @@ interface authenticatedAdminRouteChildren {
   authenticatedAdminTeamsRoute: typeof authenticatedAdminTeamsRoute
   authenticatedAdminUsersRoute: typeof authenticatedAdminUsersRoute
   authenticatedAdminIndexRoute: typeof authenticatedAdminIndexRoute
+  authenticatedAdminResourceTemplatesTemplateIdRoute: typeof authenticatedAdminResourceTemplatesTemplateIdRoute
+  authenticatedAdminResourceTemplatesNewRoute: typeof authenticatedAdminResourceTemplatesNewRoute
+  authenticatedAdminResourceTemplatesIndexRoute: typeof authenticatedAdminResourceTemplatesIndexRoute
 }
 
 const authenticatedAdminRouteChildren: authenticatedAdminRouteChildren = {
   authenticatedAdminTeamsRoute: authenticatedAdminTeamsRoute,
   authenticatedAdminUsersRoute: authenticatedAdminUsersRoute,
   authenticatedAdminIndexRoute: authenticatedAdminIndexRoute,
+  authenticatedAdminResourceTemplatesTemplateIdRoute:
+    authenticatedAdminResourceTemplatesTemplateIdRoute,
+  authenticatedAdminResourceTemplatesNewRoute:
+    authenticatedAdminResourceTemplatesNewRoute,
+  authenticatedAdminResourceTemplatesIndexRoute:
+    authenticatedAdminResourceTemplatesIndexRoute,
 }
 
 const authenticatedAdminRouteWithChildren =
