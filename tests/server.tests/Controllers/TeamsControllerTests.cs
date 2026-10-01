@@ -28,6 +28,7 @@ public class TeamsControllerTests
         db.TeamPermissions.AddRange(
             new TeamPermission { User = user, Team = new Team { Name = "Zoology", Slug = "zoology" }, Role = TeamRole.Viewer },
             new TeamPermission { User = user, Team = new Team { Name = "Biology", Slug = "biology" }, Role = TeamRole.Editor },
+            new TeamPermission { User = user, Team = new Team { Name = "Physics", Slug = "physics" }, Role = TeamRole.Admin },
             new TeamPermission { User = new User { IamId = "other-iam", Name = "Other" },
                 Team = new Team { Name = "Chemistry", Slug = "chemistry" }, Role = TeamRole.Admin });
         db.Teams.Add(new Team { Name = "Unassigned", Slug = "unassigned" });
@@ -38,7 +39,11 @@ public class TeamsControllerTests
 
         var teams = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
             .Should().BeOfType<List<TeamSummaryResponse>>().Subject;
-        teams.Select(team => team.Slug).Should().Equal("biology", "zoology");
+        teams.Select(team => team.Slug).Should().Equal("biology", "physics", "zoology");
+        teams.Select(team => team.Role).Should().Equal(TeamRole.Editor, TeamRole.Admin, TeamRole.Viewer);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(teams, TeamJsonOptions()));
+        json.RootElement.EnumerateArray().Select(team => team.GetProperty("role").GetString())
+            .Should().Equal("editor", "admin", "viewer");
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
 
@@ -63,6 +68,9 @@ public class TeamsControllerTests
             .Should().BeOfType<TeamAccessResponse>().Subject;
         access.Team.Slug.Should().Be("biology");
         access.Team.Name.Should().Be("Biology");
+        access.Team.Role.Should().BeNull();
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(access, TeamJsonOptions()));
+        json.RootElement.GetProperty("team").TryGetProperty("role", out _).Should().BeFalse();
         access.Role.Should().Be(role);
         access.IsSiteAdmin.Should().BeFalse();
     }

@@ -7,6 +7,7 @@ export type User = {
   id: string;
   isEmulating?: boolean;
   isSiteAdmin: boolean;
+  kerberos?: string | null;
   name: string;
   roles: string[];
 };

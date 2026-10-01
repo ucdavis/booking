@@ -60,6 +60,7 @@ public sealed class TeamAccessService(AppDbContext dbContext)
                 Id = permission.Team.Id,
                 Name = permission.Team.Name,
                 Slug = permission.Team.Slug,
+                Role = permission.Role,
             })
             .ToListAsync(cancellationToken);
     }
