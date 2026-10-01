@@ -1,14 +1,22 @@
+using System.Reflection;
 using System.Security.Claims;
+using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Server.Controllers;
+using Server.Helpers;
 
 namespace Server.Tests.Controllers;
 
@@ -38,6 +46,69 @@ public class AccountControllerTests
         var result = controller.Login(returnUrl);
 
         result.Should().BeOfType<LocalRedirectResult>().Which.Url.Should().Be(expectedUrl);
+    }
+
+    [Fact]
+    public void Local_logout_clears_the_local_cookie_and_returns_to_sign_in()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Auth:UseLocal"] = "true" })
+            .Build();
+        var controller = new AccountController(configuration, new TestEnvironment());
+
+        var result = controller.Logout().Should().BeOfType<SignOutResult>().Subject;
+
+        result.AuthenticationSchemes.Should().Equal(LocalAuthentication.Scheme);
+        result.Properties!.RedirectUri.Should().Be("/login");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("false")]
+    public void Entra_logout_clears_the_cookie_and_signs_out_of_the_identity_provider(string? local)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Auth:UseLocal"] = local })
+            .Build();
+        var controller = new AccountController(configuration, new TestEnvironment());
+
+        var result = controller.Logout().Should().BeOfType<SignOutResult>().Subject;
+
+        result.AuthenticationSchemes.Should().Equal(
+            CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme);
+        result.Properties!.RedirectUri.Should().Be("/about");
+    }
+
+    [Fact]
+    public void Logout_requires_an_antiforgery_protected_post()
+    {
+        var action = typeof(AccountController).GetMethod(nameof(AccountController.Logout))!;
+
+        action.GetCustomAttribute<HttpPostAttribute>()!.Template.Should().Be("logout");
+        action.GetCustomAttribute<ValidateAntiForgeryTokenAttribute>().Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Logout_antiforgery_returns_the_configured_form_field_and_stores_a_cookie()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddDataProtection().UseEphemeralDataProtectionProvider();
+        services.AddAntiforgery(options => options.FormFieldName = "LogoutRequestToken");
+        using var provider = services.BuildServiceProvider();
+        var httpContext = new DefaultHttpContext { RequestServices = provider };
+        var controller = new AccountController(new ConfigurationBuilder().Build(), new TestEnvironment())
+        {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+        };
+
+        var result = controller.LogoutAntiforgery(provider.GetRequiredService<IAntiforgery>())
+            .Should().BeOfType<OkObjectResult>().Subject;
+        var response = JsonSerializer.SerializeToElement(result.Value);
+
+        response.GetProperty("FormFieldName").GetString().Should().Be("LogoutRequestToken");
+        response.GetProperty("RequestToken").GetString().Should().NotBeNullOrWhiteSpace();
+        httpContext.Response.Headers.SetCookie.Should().NotBeEmpty();
     }
 
     private sealed class TestEnvironment : IHostEnvironment

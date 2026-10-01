@@ -1,10 +1,12 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Server.Core.Data;
 using Server.Services;
 
 namespace Server.Controllers;
 
-public class UserController(IUserService userService) : ApiControllerBase
+public class UserController(IUserService userService, AppDbContext dbContext) : ApiControllerBase
 {
     [HttpGet("me")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
@@ -22,13 +24,22 @@ public class UserController(IUserService userService) : ApiControllerBase
             return Unauthorized();
         }
 
+        var kerberos = string.IsNullOrWhiteSpace(iamId)
+            ? null
+            : await dbContext.People.AsNoTracking()
+                .Where(person => person.IamId == iamId)
+                .Select(person => person.UserId)
+                .SingleOrDefaultAsync(cancellationToken);
+
         var userInfo = new
         {
             Id = userId,
             Name = userName,
             Email = userEmail,
             IamId = iamId,
+            Kerberos = string.IsNullOrWhiteSpace(kerberos) ? null : kerberos.Trim(),
             IsSiteAdmin = await userService.IsSiteAdmin(User, cancellationToken),
+            IsEmulating = EmulationService.IsEmulating(HttpContext),
             Roles = userRoles,
         };
 

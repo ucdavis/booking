@@ -10,6 +10,7 @@ using Server.Core.Domain;
 using Server.Core.Notification;
 using Server.Examples.Notifications;
 using Server.Helpers;
+using Server.Middleware;
 using Server.Services;
 
 WebApplication? app = null;
@@ -158,6 +159,7 @@ try
 
 
     app.UseAuthentication();
+    app.UseMiddleware<EmulationMiddleware>();
     app.UseAuthorization();
 
     // enrich every log with request context
@@ -177,7 +179,7 @@ try
         NoStore = false,
     });
 
-    app.MapFallbackToFile("/index.html", staticFileOptions);
+    app.MapFallbackToFile("/index.html", staticFileOptions).AllowAnonymous();
 
     app.Logger.LogInformation("Startup complete. Listening on {Urls}", string.Join(", ", app.Urls));
     app.Run();

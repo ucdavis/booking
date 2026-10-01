@@ -736,7 +736,9 @@ public class AuthenticationHelperTests : IDisposable
         var context = await SignIn(scope.ServiceProvider, principal, local: true);
         var options = scope.ServiceProvider.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
             .Get(LocalAuthentication.Scheme);
-        var cookieValue = context.Response.Headers.SetCookie.Single()!.Split(';')[0].Split('=', 2)[1];
+        var cookieValue = context.Response.Headers.SetCookie
+            .Single(cookie => cookie!.StartsWith(options.Cookie.Name + "=", StringComparison.Ordinal))!
+            .Split(';')[0].Split('=', 2)[1];
         var ticket = options.TicketDataFormat.Unprotect(Uri.UnescapeDataString(cookieValue));
 
         ticket.Should().NotBeNull();
@@ -810,7 +812,9 @@ public class AuthenticationHelperTests : IDisposable
         }
 
         var options = services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>().Get(LocalAuthentication.Scheme);
-        var cookieValue = controller.Response.Headers.SetCookie.Single()!.Split(';')[0].Split('=', 2)[1];
+        var cookieValue = controller.Response.Headers.SetCookie
+            .Single(cookie => cookie!.StartsWith(options.Cookie.Name + "=", StringComparison.Ordinal))!
+            .Split(';')[0].Split('=', 2)[1];
         var ticket = options.TicketDataFormat.Unprotect(Uri.UnescapeDataString(cookieValue));
         ticket.Should().NotBeNull();
         ticket!.Principal.FindFirst(ClaimTypes.NameIdentifier)!.Value.Should().Be("local-person:10010001");

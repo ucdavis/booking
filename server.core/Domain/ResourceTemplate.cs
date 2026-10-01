@@ -14,6 +14,8 @@ public class ResourceTemplate
     [Required]
     [MaxLength(200)]
     public required string Name { get; set; }
+    [MaxLength(2000)]
+    public string? Description { get; set; }
     public int FormSchemaVersion { get; set; }
     [Required]
     [Column(TypeName = "nvarchar(max)")]
