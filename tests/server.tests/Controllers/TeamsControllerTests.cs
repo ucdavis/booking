@@ -523,10 +523,18 @@ public class TeamsControllerTests
             .Should().Equal("api/teams/{teamSlug}/members");
         controller.GetCustomAttributes<AllowAnonymousAttribute>(inherit: true).Should().BeEmpty();
         controller.GetCustomAttribute<ResponseCacheAttribute>()!.NoStore.Should().BeTrue();
+        controller.GetCustomAttribute<AutoValidateAntiforgeryTokenAttribute>(inherit: true).Should().NotBeNull();
+        controller.GetCustomAttributes<IgnoreAntiforgeryTokenAttribute>(inherit: true).Should().BeEmpty();
         foreach (var name in new[] { nameof(TeamMembersController.AddMember), nameof(TeamMembersController.UpdateRole), nameof(TeamMembersController.RemoveMember) })
         {
-            controller.GetMethod(name)!.GetCustomAttribute<ValidateAntiForgeryTokenAttribute>().Should().NotBeNull();
+            controller.GetMethod(name)!.GetCustomAttributes<IgnoreAntiforgeryTokenAttribute>(inherit: true).Should().BeEmpty();
         }
+        controller.GetMethod(nameof(TeamMembersController.AddMember))!
+            .GetCustomAttribute<HttpPostAttribute>().Should().NotBeNull();
+        controller.GetMethod(nameof(TeamMembersController.UpdateRole))!
+            .GetCustomAttribute<HttpPutAttribute>()!.Template.Should().Be("{userId:int}/role");
+        controller.GetMethod(nameof(TeamMembersController.RemoveMember))!
+            .GetCustomAttribute<HttpDeleteAttribute>()!.Template.Should().Be("{userId:int}");
     }
 
     private static T ReadValue<T>(ActionResult<T> result)

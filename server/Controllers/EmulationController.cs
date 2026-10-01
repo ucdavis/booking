@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Server.Helpers;
@@ -33,13 +32,8 @@ public sealed class EmulationController(EmulationService emulationService, IUser
         return Ok(await emulationService.SearchAsync(search, cancellationToken));
     }
 
-    [HttpGet("antiforgery")]
-    public IActionResult Antiforgery([FromServices] IAntiforgery antiforgery)
-        => Ok(new { Token = antiforgery.GetAndStoreTokens(HttpContext).RequestToken });
-
     [HttpPost("start")]
     [Authorize(Policy = AuthenticationHelper.SiteAdminPolicy)]
-    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Start(
         [FromBody] StartEmulationRequest request, CancellationToken cancellationToken = default)
     {
@@ -76,7 +70,6 @@ public sealed class EmulationController(EmulationService emulationService, IUser
     }
 
     [HttpPost("stop")]
-    [ValidateAntiForgeryToken]
     public IActionResult Stop()
     {
         emulationService.Clear(HttpContext, force: true);

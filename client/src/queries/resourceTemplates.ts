@@ -26,24 +26,14 @@ export const resourceTemplateQueryOptions = (id: number) =>
     retry,
   });
 
-async function templateRequest(url: string, init: RequestInit) {
-  const { token } = await fetchJson<{ token: string }>('/api/admin/antiforgery', {
-    cache: 'no-store',
-  });
-  return fetchJson<ResourceTemplate>(url, {
-    ...init,
-    headers: { RequestVerificationToken: token },
-  });
-}
-
 export const createResourceTemplate = (request: SaveResourceTemplateRequest) =>
-  templateRequest(templatesUrl, { body: JSON.stringify(request), method: 'POST' });
+  fetchJson<ResourceTemplate>(templatesUrl, { body: JSON.stringify(request), method: 'POST' });
 
 export const updateResourceTemplate = (id: number, request: SaveResourceTemplateRequest) =>
-  templateRequest(`${templatesUrl}/${id}`, { body: JSON.stringify(request), method: 'PUT' });
+  fetchJson<ResourceTemplate>(`${templatesUrl}/${id}`, { body: JSON.stringify(request), method: 'PUT' });
 
 export const duplicateResourceTemplate = (id: number) =>
-  templateRequest(`${templatesUrl}/${id}/duplicate`, { method: 'POST' });
+  fetchJson<ResourceTemplate>(`${templatesUrl}/${id}/duplicate`, { method: 'POST' });
 
 export function resourceTemplateErrorMessage(error: unknown) {
   if (error instanceof HttpError) {

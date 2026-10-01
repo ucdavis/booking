@@ -130,8 +130,11 @@ function mockAccess({
     http.get('/api/teams/plant-sciences/members', () =>
       HttpResponse.json([currentMember, otherMember])
     ),
-    http.get('/api/teams/plant-sciences/members/antiforgery', () =>
-      HttpResponse.json({ token: 'team-antiforgery-token' })
+    http.get('/api/antiforgery', () =>
+      HttpResponse.json({
+        formFieldName: '__RequestVerificationToken',
+        requestToken: 'team-antiforgery-token',
+      })
     )
   );
 }

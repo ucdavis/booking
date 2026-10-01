@@ -166,7 +166,7 @@ public class EmulationMiddlewareTests
 
     [Theory]
     [InlineData("/api/user/me")]
-    [InlineData("/api/emulation/antiforgery")]
+    [InlineData("/api/antiforgery")]
     [InlineData("/api/emulation/stop")]
     [InlineData("/logout/antiforgery")]
     [InlineData("/logout")]
@@ -220,6 +220,57 @@ public class EmulationMiddlewareTests
         result.Context.User.FindFirst("ucdPersonIAMID").Should().BeNull();
         result.Context.User.FindAll(ClaimTypes.Role).Should().BeEmpty();
         EmulationService.GetActor(result.Context).FindFirst("ucdPersonIAMID")!.Value.Should().Be(Fixture.ActorIamId);
+    }
+
+    [Theory]
+    [InlineData("/api/emulation/stop")]
+    [InlineData("/logout")]
+    public async Task Shared_antiforgery_endpoint_refreshes_tokens_for_recovery_after_the_target_becomes_unavailable(string recoveryPath)
+    {
+        using var fixture = new Fixture();
+        await fixture.SeedAsync();
+        var login = await fixture.SignInAsync();
+        var selection = fixture.Select(login.SessionId);
+        AntiforgeryTokenSet? originalTokens = null;
+        var originalResponse = await fixture.RequestAsync(login.Cookie, selection, context =>
+        {
+            originalTokens = context.RequestServices.GetRequiredService<IAntiforgery>().GetAndStoreTokens(context);
+            return Task.CompletedTask;
+        }, path: "/api/antiforgery", allowAnonymous: true);
+        originalResponse.ReachedEndpoint.Should().BeTrue();
+        var antiforgeryCookie = originalResponse.Context.Response.Headers.SetCookie.Single()!.Split(';')[0];
+        var cookies = $"{login.Cookie}; {antiforgeryCookie}";
+        await fixture.ChangeUsersAsync(async db =>
+        {
+            var target = await db.Users.SingleAsync(user => user.IamId == Fixture.TargetIamId);
+            target.IsActive = false;
+        });
+
+        var staleRequest = await fixture.RequestAsync(cookies, selection, async context =>
+        {
+            context.Request.Headers[originalTokens!.HeaderName!] = originalTokens.RequestToken;
+            var validate = () => context.RequestServices.GetRequiredService<IAntiforgery>().ValidateRequestAsync(context);
+            await validate.Should().ThrowAsync<AntiforgeryValidationException>();
+        }, path: recoveryPath, method: "POST");
+        staleRequest.ReachedEndpoint.Should().BeTrue();
+
+        AntiforgeryTokenSet? refreshedTokens = null;
+        var refreshedResponse = await fixture.RequestAsync(cookies, selection, context =>
+        {
+            refreshedTokens = context.RequestServices.GetRequiredService<IAntiforgery>().GetAndStoreTokens(context);
+            return Task.CompletedTask;
+        }, path: "/api/antiforgery", allowAnonymous: true);
+        refreshedResponse.ReachedEndpoint.Should().BeTrue();
+        refreshedResponse.Context.User.FindFirst(ClaimTypes.NameIdentifier)!.Value.Should().Be("emulation-unavailable");
+
+        var recovery = await fixture.RequestAsync(cookies, selection, async context =>
+        {
+            context.Request.Headers[refreshedTokens!.HeaderName!] = refreshedTokens.RequestToken;
+            await context.RequestServices.GetRequiredService<IAntiforgery>().ValidateRequestAsync(context);
+        }, path: recoveryPath, method: "POST");
+
+        recovery.ReachedEndpoint.Should().BeTrue();
+        recovery.Context.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
     }
 
     [Theory]

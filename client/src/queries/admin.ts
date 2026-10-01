@@ -46,31 +46,17 @@ export const adminPeopleQueryOptions = (query: string | null) =>
     retry: false,
   });
 
-async function adminRequest<T>(url: string, init: RequestInit): Promise<T> {
-  const { token } = await fetchJson<{ token: string }>(
-    '/api/admin/antiforgery',
-    {
-      cache: 'no-store',
-    }
-  );
-
-  return fetchJson<T>(url, {
-    ...init,
-    headers: { RequestVerificationToken: token },
-  });
-}
-
 export const addAdminUser = (iamId: string) =>
-  adminRequest<AdminUser>('/api/admin/users', {
+  fetchJson<AdminUser>('/api/admin/users', {
     body: JSON.stringify({ iamId }),
     method: 'POST',
   });
 
 export const removeAdminUser = (id: number) =>
-  adminRequest<void>(`/api/admin/users/${id}`, { method: 'DELETE' });
+  fetchJson<void>(`/api/admin/users/${id}`, { method: 'DELETE' });
 
 export const createTeam = (request: CreateTeamRequest) =>
-  adminRequest<TeamSummary>('/api/admin/teams', {
+  fetchJson<TeamSummary>('/api/admin/teams', {
     body: JSON.stringify(request),
     method: 'POST',
   });

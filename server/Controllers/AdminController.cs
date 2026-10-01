@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -18,10 +17,6 @@ public class AdminController(AppDbContext dbContext) : ApiControllerBase
     [HttpGet("access")]
     public IActionResult Access() => NoContent();
 
-    [HttpGet("antiforgery")]
-    public IActionResult AntiforgeryToken([FromServices] IAntiforgery antiforgery)
-        => Ok(new { Token = antiforgery.GetAndStoreTokens(HttpContext).RequestToken });
-
     [HttpGet("teams")]
     public async Task<ActionResult<List<TeamSummaryResponse>>> GetTeams(CancellationToken cancellationToken = default)
     {
@@ -35,7 +30,6 @@ public class AdminController(AppDbContext dbContext) : ApiControllerBase
     }
 
     [HttpPost("teams")]
-    [ValidateAntiForgeryToken]
     public async Task<ActionResult<TeamSummaryResponse>> CreateTeam(
         [FromBody] CreateTeamRequest request, CancellationToken cancellationToken = default)
     {
@@ -135,7 +129,6 @@ public class AdminController(AppDbContext dbContext) : ApiControllerBase
     }
 
     [HttpPost("users")]
-    [ValidateAntiForgeryToken]
     public async Task<ActionResult<AdminUserResponse>> AddUser(
         [FromBody] AddAdminUserRequest request, CancellationToken cancellationToken = default)
     {
@@ -212,7 +205,6 @@ public class AdminController(AppDbContext dbContext) : ApiControllerBase
     }
 
     [HttpDelete("users/{id:int}")]
-    [ValidateAntiForgeryToken]
     public async Task<IActionResult> RemoveUser(int id, CancellationToken cancellationToken = default)
     {
         var currentIamId = User.FindFirst("ucdPersonIAMID")?.Value;

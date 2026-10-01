@@ -72,28 +72,12 @@ export const teamPeopleQueryOptions = (
     retry: false,
   });
 
-async function teamMemberRequest<T>(
-  teamSlug: string,
-  suffix: string,
-  init: RequestInit
-): Promise<T> {
-  const { token } = await fetchJson<{ token: string }>(
-    `${teamMembersUrl(teamSlug)}/antiforgery`,
-    { cache: 'no-store' }
-  );
-
-  return fetchJson<T>(`${teamMembersUrl(teamSlug)}${suffix}`, {
-    ...init,
-    headers: { RequestVerificationToken: token },
-  });
-}
-
 export const addTeamMember = (
   teamSlug: string,
   iamId: string,
   role: TeamRole
 ) =>
-  teamMemberRequest<TeamMember>(teamSlug, '', {
+  fetchJson<TeamMember>(teamMembersUrl(teamSlug), {
     body: JSON.stringify({ iamId, role }),
     method: 'POST',
   });
@@ -103,13 +87,13 @@ export const changeTeamMemberRole = (
   userId: number,
   role: TeamRole
 ) =>
-  teamMemberRequest<TeamMember>(teamSlug, `/${userId}/role`, {
+  fetchJson<TeamMember>(`${teamMembersUrl(teamSlug)}/${userId}/role`, {
     body: JSON.stringify({ role }),
     method: 'PUT',
   });
 
 export const removeTeamMember = (teamSlug: string, userId: number) =>
-  teamMemberRequest<void>(teamSlug, `/${userId}`, { method: 'DELETE' });
+  fetchJson<void>(`${teamMembersUrl(teamSlug)}/${userId}`, { method: 'DELETE' });
 
 export async function invalidateTeamMemberQueries(
   queryClient: QueryClient,

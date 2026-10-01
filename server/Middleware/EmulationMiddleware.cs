@@ -89,7 +89,7 @@ public sealed class EmulationMiddleware(RequestDelegate next, ILogger<EmulationM
 
     private static bool IsRecoveryRequest(PathString path)
         => path.Equals("/api/user/me", StringComparison.OrdinalIgnoreCase)
-            || path.Equals("/api/emulation/antiforgery", StringComparison.OrdinalIgnoreCase)
+            || path.Equals("/api/antiforgery", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/api/emulation/stop", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/logout/antiforgery", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/logout", StringComparison.OrdinalIgnoreCase);

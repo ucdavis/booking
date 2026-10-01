@@ -88,8 +88,11 @@ function mockAdminAccess() {
       () => new HttpResponse(null, { status: 204 })
     ),
     http.get('/api/admin/teams', () => HttpResponse.json([existingTeam])),
-    http.get('/api/admin/antiforgery', () =>
-      HttpResponse.json({ token: 'test-antiforgery-token' })
+    http.get('/api/antiforgery', () =>
+      HttpResponse.json({
+        formFieldName: '__RequestVerificationToken',
+        requestToken: 'test-antiforgery-token',
+      })
     )
   );
 }

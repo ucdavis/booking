@@ -151,6 +151,10 @@ See [Development Architecture](docs/ARCHITECTURE.md#development-request-flow) fo
 - The authenticated route tree fetches `/api/user/me` before rendering child routes
 - `fetchJson` redirects `401` responses to `/login?returnUrl=...` unless explicitly disabled
 - Avoid hardcoding backend origins; use relative URLs so the same code works in development and production
+- Use `fetchJson` for same-origin JSON mutations. It fetches and caches the antiforgery token and adds the verification header automatically; do not duplicate this logic in feature-specific request helpers.
+- Antiforgery tokens belong to the effective user identity. Use `refreshCsrfToken: true` for emulation and identity-recovery requests, and call `clearCsrfToken()` after successful identity changes and when receiving cross-tab identity-change notifications. Preserve logout's fresh-token fetch and document form submission.
+- API controllers inheriting from `ApiControllerBase` receive `[AutoValidateAntiforgeryToken]` protection automatically; do not repeat antiforgery attributes on their actions. Cookie-authenticated controllers outside that hierarchy must apply `[AutoValidateAntiforgeryToken]` at the controller level so safe HTTP methods remain accessible. Applying `[ValidateAntiForgeryToken]` to an entire controller also requires tokens for GET requests.
+- Use the shared `/api/antiforgery` endpoint for JSON request tokens instead of adding feature-specific token endpoints. The `/logout/antiforgery` alias supports logout's document form submission.
 
 ### Form Handling
 
