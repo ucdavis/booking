@@ -14,6 +14,7 @@ const siteAdmin: User = {
   iamId: '123456789',
   id: 'user-1',
   isSiteAdmin: true,
+  kerberos: 'taylor',
   name: 'Taylor',
   roles: [],
 };
@@ -57,7 +58,20 @@ describe('account navigation', () => {
     expect(screen.getByRole('button', { name: 'Log out' })).toBeEnabled();
     fireEvent.click(profileLink);
 
-    expect(await screen.findByText('Hello Taylor!')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'My profile' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: siteAdmin.name })
+    ).toBeInTheDocument();
+    expect(screen.getByText(siteAdmin.email)).toBeInTheDocument();
+    expect(screen.getByText(siteAdmin.iamId!)).toBeInTheDocument();
+    expect(screen.getByText(siteAdmin.kerberos!)).toBeInTheDocument();
+    expect(screen.queryByText('Sign-in ID')).not.toBeInTheDocument();
+    expect(screen.getByText('Standard user')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Open site administration' })
+    ).not.toBeInTheDocument();
     expect(rendered.router.state.location.pathname).toBe('/me');
     expect(screen.getByRole('button', { name: 'Taylor' })).toHaveAttribute(
       'aria-expanded',

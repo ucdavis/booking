@@ -8,7 +8,7 @@ import {
 } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TeamRole } from '@/features/teams/models/TeamRole.ts';
+import { TeamRole, teamRoleLabels } from '@/features/teams/models/TeamRole.ts';
 import {
   myTeamsQueryOptions,
   teamAccessQueryOptions,
@@ -58,6 +58,131 @@ function silenceRouteErrors() {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 }
+
+describe('profile team memberships', () => {
+  it.each([1, 5, 6, 8])(
+    'shows names and roles for at most five of %s memberships',
+    async (count) => {
+      mockUser();
+      const roles = [TeamRole.Admin, TeamRole.Editor, TeamRole.Viewer];
+      const teams = Array.from({ length: count }, (_, index) => ({
+        id: index + 1,
+        name: `Team ${index + 1}`,
+        role: roles[index % roles.length],
+        slug: `team-${index + 1}`,
+      }));
+      server.use(http.get('/api/teams', () => HttpResponse.json(teams)));
+      const rendered = renderRoute({ initialPath: '/me' });
+      cleanup = rendered.cleanup;
+
+      const list = await screen.findByRole('list', {
+        name: 'Team memberships',
+      });
+      const rows = within(list).getAllByRole('listitem');
+      expect(rows).toHaveLength(Math.min(count, 5));
+      for (const [index, row] of rows.entries()) {
+        const team = teams[index];
+        expect(
+          within(row).getByRole('link', { name: team.name })
+        ).toHaveAttribute('href', `/teams/${team.slug}`);
+        expect(
+          within(row).getByText(teamRoleLabels[team.role])
+        ).toBeInTheDocument();
+      }
+      expect(screen.queryByText('Sign-in roles')).not.toBeInTheDocument();
+
+      if (count > 5) {
+        expect(
+          screen.getByText(
+            `And ${count - 5} more ${count === 6 ? 'team' : 'teams'}. Use the team menu to see all your teams.`
+          )
+        ).toBeInTheDocument();
+        expect(within(list).queryByText('Team 6')).not.toBeInTheDocument();
+        // The display cap must not truncate the shared navigation data.
+        expect(
+          rendered.queryClient.getQueryData(
+            myTeamsQueryOptions(user.id).queryKey
+          )
+        ).toHaveLength(count);
+        fireEvent.click(screen.getByRole('button', { name: 'Choose team' }));
+        expect(
+          screen.getByRole('link', { name: 'Team 6' })
+        ).toBeInTheDocument();
+      } else {
+        expect(screen.queryByText(/more teams?\./)).not.toBeInTheDocument();
+      }
+    }
+  );
+
+  it.each([false, true])(
+    'hides empty memberships while preserving site admin access (%s)',
+    async (isSiteAdmin) => {
+      mockUser(isSiteAdmin);
+      const rendered = renderRoute({ initialPath: '/me' });
+      cleanup = rendered.cleanup;
+
+      await waitFor(() => {
+        expect(
+          rendered.queryClient.getQueryState(
+            myTeamsQueryOptions(user.id).queryKey
+          )?.status
+        ).toBe('success');
+        expect(screen.queryByText('Team memberships')).not.toBeInTheDocument();
+      });
+      expect(
+        screen.queryByText('You do not have any team memberships.')
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('list', { name: 'Team memberships' })
+      ).not.toBeInTheDocument();
+      const adminAccessNote = screen.queryByText(
+        'As a site administrator, you also have access to all teams.'
+      );
+      if (isSiteAdmin) {
+        expect(adminAccessNote).toBeInTheDocument();
+      } else {
+        expect(adminAccessNote).not.toBeInTheDocument();
+      }
+    }
+  );
+
+  it('keeps profile details visible while teams load and allows retrying a failure', async () => {
+    mockUser();
+    const { promise, resolve } = Promise.withResolvers<void>();
+    server.use(
+      http.get('/api/teams', async () => {
+        await promise;
+        return new HttpResponse(null, { status: 403 });
+      })
+    );
+    ({ cleanup } = renderRoute({ initialPath: '/me' }));
+
+    expect(await screen.findByText('Loading your teams…')).toBeInTheDocument();
+    expect(screen.getByText(user.email)).toBeInTheDocument();
+    resolve();
+    expect(
+      await screen.findByText('We could not load your teams.')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('You do not have any team memberships.')
+    ).not.toBeInTheDocument();
+    server.use(
+      http.get('/api/teams', () =>
+        HttpResponse.json([{ ...firstTeam, role: TeamRole.Editor }])
+      )
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    const list = await screen.findByRole('list', { name: 'Team memberships' });
+    expect(
+      within(list).getByRole('link', { name: firstTeam.name })
+    ).toBeInTheDocument();
+    expect(within(list).getByText('Editor')).toBeInTheDocument();
+    expect(
+      screen.queryByText('We could not load your teams.')
+    ).not.toBeInTheDocument();
+  });
+});
 
 describe('team administration navigation and access', () => {
   it('hides team navigation when the user has no memberships', async () => {

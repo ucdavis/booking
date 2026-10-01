@@ -5,7 +5,9 @@ export type User = {
   email: string;
   iamId: string | null;
   id: string;
+  isEmulating?: boolean;
   isSiteAdmin: boolean;
+  kerberos?: string | null;
   name: string;
   roles: string[];
 };
