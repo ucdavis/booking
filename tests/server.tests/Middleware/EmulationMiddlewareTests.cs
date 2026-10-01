@@ -178,7 +178,9 @@ public class EmulationMiddlewareTests
         var result = await fixture.RequestAsync(login.Cookie, Fixture.SelectionCookieName + "=invalid-ticket",
             async context =>
             {
-                var controller = new UserController(context.RequestServices.GetRequiredService<IUserService>())
+                var controller = new UserController(
+                    context.RequestServices.GetRequiredService<IUserService>(),
+                    context.RequestServices.GetRequiredService<AppDbContext>())
                 {
                     ControllerContext = new ControllerContext { HttpContext = context },
                 };
@@ -187,6 +189,7 @@ public class EmulationMiddlewareTests
                 profile.GetProperty("IsEmulating").GetBoolean().Should().BeTrue();
                 profile.GetProperty("IsSiteAdmin").GetBoolean().Should().BeFalse();
                 profile.GetProperty("Name").GetString().Should().Be("Emulation unavailable");
+                profile.GetProperty("Kerberos").ValueKind.Should().Be(JsonValueKind.Null);
             }, path: path);
 
         result.ReachedEndpoint.Should().BeTrue();

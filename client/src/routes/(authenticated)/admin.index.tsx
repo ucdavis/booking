@@ -1,5 +1,6 @@
 import {
   ArrowRightIcon,
+  DocumentTextIcon,
   ShieldCheckIcon,
   UserGroupIcon,
   UsersIcon,
@@ -80,6 +81,20 @@ function SiteAdminPage() {
               aria-hidden="true"
               className="h-4 w-4 transition-transform group-hover:translate-x-1"
             />
+          </span>
+        </Link>
+        <Link
+          className="group flex flex-col rounded-2xl border border-base-300 bg-base-100 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
+          to="/admin/resource-templates"
+        >
+          <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <DocumentTextIcon aria-hidden="true" className="h-7 w-7" />
+          </span>
+          <h2 className="mt-6 text-xl font-semibold text-primary">Resource templates</h2>
+          <p className="mt-3 grow text-base-content/70">Build and preview reusable request forms, manage templates, and duplicate existing forms.</p>
+          <span className="mt-6 flex items-center gap-2 font-semibold text-primary">
+            Manage resource templates
+            <ArrowRightIcon aria-hidden="true" className="h-4 w-4 transition-transform group-hover:translate-x-1" />
           </span>
         </Link>
       </section>
