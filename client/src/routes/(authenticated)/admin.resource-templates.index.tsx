@@ -40,7 +40,7 @@ function ResourceTemplatesPage() {
     },
     {
       accessorKey: 'formSchemaVersion',
-      cell: ({ row }) => <span>Version {row.original.formSchemaVersion}</span>,
+      cell: ({ row }) => <span>{row.original.formSchemaVersion}</span>,
       header: 'Version',
     },
     {
@@ -55,7 +55,7 @@ function ResourceTemplatesPage() {
     },
     {
       cell: ({ row }) => <div className="flex flex-wrap gap-2">
-        <Link aria-label={`Edit ${row.original.name}`} className="btn btn-ghost btn-sm" params={{ templateId: String(row.original.id) }} to="/admin/resource-templates/$templateId">Edit</Link>
+        <Link aria-label={`${row.original.isActive ? 'Edit' : 'View'} ${row.original.name}`} className="btn btn-ghost btn-sm w-16" params={{ templateId: String(row.original.id) }} to="/admin/resource-templates/$templateId">{row.original.isActive ? 'Edit' : 'View'}</Link>
         <button aria-label={`Duplicate ${row.original.name}`} className="btn btn-outline btn-sm" disabled={duplicateMutation.isPending} onClick={() => duplicateMutation.mutate(row.original.id)} type="button">
           <DocumentDuplicateIcon aria-hidden="true" className="h-4 w-4" />
           {duplicateMutation.isPending && duplicateMutation.variables === row.original.id ? 'Duplicating…' : 'Duplicate'}

@@ -28,6 +28,7 @@ export function ResourceTemplateEditor({
   const queryClient = useQueryClient();
   const [baseline, setBaseline] = useState({ definition, template });
   const currentTemplate = baseline.template;
+  const isReadOnly = currentTemplate?.isActive === false;
   const [showPreview, setShowPreview] = useState(false);
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -45,7 +46,7 @@ export function ResourceTemplateEditor({
       name: currentTemplate?.name ?? '',
     },
     onSubmit: async ({ value }) => {
-      if (saveFlowRef.current) return;
+      if (isReadOnly || saveFlowRef.current) return;
       saveFlowRef.current = true;
       setIsSaving(true);
       setSaved(false);
@@ -92,20 +93,29 @@ export function ResourceTemplateEditor({
         <Link className="hover:text-primary hover:underline" to="/admin">Site admin</Link>
         {' / '}
         <Link className="hover:text-primary hover:underline" to="/admin/resource-templates">Resource templates</Link>
-        {' / '}<span aria-current="page">{currentTemplate ? 'Edit template' : 'Create template'}</span>
+        {' / '}<span aria-current="page">{isReadOnly ? 'View template' : currentTemplate ? 'Edit template' : 'Create template'}</span>
       </nav>
       <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
-        {currentTemplate ? 'Edit resource template' : 'Create resource template'}
+        {isReadOnly ? 'View resource template' : currentTemplate ? 'Edit resource template' : 'Create resource template'}
       </h1>
       <p className="mt-3 max-w-2xl text-base-content/70">
-        Build the form people will fill out when requesting a resource. This template is available at the site level.
+        {isReadOnly
+          ? 'Review this archived form and its saved version.'
+          : 'Build the form people will fill out when requesting a resource. This template is available at the site level.'}
       </p>
       {currentTemplate && (
         <div className="mt-4 space-y-2">
           <span className="badge badge-outline">Version {currentTemplate.formSchemaVersion}</span>
-          <p className="max-w-2xl text-sm text-base-content/65">
-            Saving form changes creates a new version and archives this one. Previous forms keep their original ID and contents. Renaming or changing active status keeps the same version.
-          </p>
+          {isReadOnly ? (
+            <div className="space-y-3 rounded-lg border border-base-300 bg-base-200 p-4">
+              <p>Archived templates are read-only. Duplicate this template to make changes.</p>
+              <Link className="link link-primary" to="/admin/resource-templates">Back to resource templates</Link>
+            </div>
+          ) : (
+            <p className="max-w-2xl text-sm text-base-content/65">
+              Saving form changes creates a new active version and archives this one. Previous forms keep their original ID and contents. Renaming or archiving keeps the same version.
+            </p>
+          )}
         </div>
       )}
 
@@ -128,13 +138,13 @@ export function ResourceTemplateEditor({
         onChange={() => { setSaved(false); saveMutation.reset(); }}
         onSubmit={(event) => {
           event.preventDefault();
-          if (!saveFlowRef.current && !form.state.isSubmitting) void form.handleSubmit();
+          if (!isReadOnly && !saveFlowRef.current && !form.state.isSubmitting) void form.handleSubmit();
         }}
       >
         <form.Subscribe selector={(state) => state.isSubmitting}>
           {(isSubmitting) => (
             <fieldset className="space-y-6" disabled={isSaving || isSubmitting}>
-              <div className="flex flex-col gap-5 rounded-xl border border-base-300 bg-base-100 p-5 sm:flex-row sm:items-end">
+              <fieldset className="flex flex-col gap-5 rounded-xl border border-base-300 bg-base-100 p-5 sm:flex-row sm:items-end" disabled={isReadOnly}>
                 <form.Field name="name">
                   {(field) => (
                     <div className="grow">
@@ -151,19 +161,25 @@ export function ResourceTemplateEditor({
                     </label>
                   )}
                 </form.Field>
-                <button className="btn btn-primary" type="submit">
-                  {isSaving || isSubmitting ? 'Saving…' : currentTemplate ? 'Save template' : 'Create template'}
-                </button>
-              </div>
-              <p className="text-sm text-base-content/65">Clear Active template and save to archive it. Archived templates can be restored here.</p>
-              <div aria-label="Editor view" className="flex gap-2">
-                <button aria-pressed={!showPreview} className={`btn btn-sm ${!showPreview ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setShowPreview(false)} type="button">Build form</button>
-                <button aria-pressed={showPreview} className={`btn btn-sm ${showPreview ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setShowPreview(true)} type="button">Preview form</button>
-              </div>
-              {!showPreview && (
-                <form.Field name="definition">
-                  {(field) => <FormBuilder disabled={isSaving || isSubmitting} onChange={(value) => { field.handleChange(value); setSaved(false); saveMutation.reset(); }} value={field.state.value} />}
-                </form.Field>
+                {!isReadOnly && (
+                  <button className="btn btn-primary" type="submit">
+                    {isSaving || isSubmitting ? 'Saving…' : currentTemplate ? 'Save template' : 'Create template'}
+                  </button>
+                )}
+              </fieldset>
+              {!isReadOnly && (
+                <>
+                  <p className="text-sm text-base-content/65">Clear Active template and save to archive it. Form changes always create an active version; save that version before archiving.</p>
+                  <div aria-label="Editor view" className="flex gap-2">
+                    <button aria-pressed={!showPreview} className={`btn btn-sm ${!showPreview ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setShowPreview(false)} type="button">Build form</button>
+                    <button aria-pressed={showPreview} className={`btn btn-sm ${showPreview ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setShowPreview(true)} type="button">Preview form</button>
+                  </div>
+                  {!showPreview && (
+                    <form.Field name="definition">
+                      {(field) => <FormBuilder disabled={isSaving || isSubmitting} onChange={(value) => { field.handleChange(value); setSaved(false); saveMutation.reset(); }} value={field.state.value} />}
+                    </form.Field>
+                  )}
+                </>
               )}
             </fieldset>
           )}
@@ -179,7 +195,7 @@ export function ResourceTemplateEditor({
           )}
         </form.Subscribe>
       </form>
-      {showPreview && (
+      {(showPreview || isReadOnly) && (
         <form.Subscribe selector={(state) => state.values.definition}>
           {(currentDefinition) => <div className="mt-6"><FormPreview definition={currentDefinition} /></div>}
         </form.Subscribe>

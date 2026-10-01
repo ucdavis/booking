@@ -37,6 +37,7 @@ public class AdminResourceTemplatesControllerTests
 
         templates.Select(template => template.Name).Should().Equal("Archived", "Zoology");
         templates[0].IsActive.Should().BeFalse();
+        ReadOk(await controller.GetTemplate(templates[0].Id)).IsActive.Should().BeFalse();
         ReadOk(await controller.GetTemplate(templates[1].Id)).FormJson.Should().Be(FormJson);
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
@@ -71,7 +72,7 @@ public class AdminResourceTemplatesControllerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Form_changes_create_a_new_revision_and_preserve_the_archived_original_and_related_config(bool isActive)
+    public async Task Form_changes_create_an_active_revision_and_preserve_the_archived_original_and_related_config(bool isActive)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var admin = await AddAdmin(db);
@@ -104,7 +105,7 @@ public class AdminResourceTemplatesControllerTests
         db.ChangeTracker.Clear();
         var saved = await db.ResourceTemplates.SingleAsync(current => current.Id == response.Id);
         saved.FormJson.Should().Be(reordered);
-        saved.IsActive.Should().Be(isActive);
+        saved.IsActive.Should().BeTrue();
         saved.ResourceDefaultsJson.Should().Be("{\"capacity\":12}");
         saved.CreatedAt.Should().BeAfter(originalCreated);
         saved.UpdatedAt.Should().Be(saved.CreatedAt);
@@ -129,7 +130,7 @@ public class AdminResourceTemplatesControllerTests
     {
         using var db = TestDbContextFactory.CreateInMemory();
         await AddAdmin(db);
-        var template = CreateTemplate("Original", isActive: false);
+        var template = CreateTemplate("Original");
         template.FormSchemaVersion = 5;
         template.FormJson = "{\"fields\":[{\"id\":\"a\",\"type\":\"input\",\"label\":\"Name\"}]}";
         template.ResourceDefaultsJson = "{\"capacity\":12}";
@@ -189,6 +190,55 @@ public class AdminResourceTemplatesControllerTests
 
         result.Result.Should().BeOfType<BadRequestObjectResult>();
         (await db.ResourceTemplates.AnyAsync()).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("rename", false)]
+    [InlineData("content", false)]
+    [InlineData("reactivate", false)]
+    [InlineData("rename", true)]
+    [InlineData("content", true)]
+    [InlineData("reactivate", true)]
+    public async Task Archived_templates_reject_all_edits_with_current_or_pre_archive_timestamps(
+        string change, bool staleTimestamp)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        await AddAdmin(db);
+        var template = CreateTemplate("Original");
+        template.ResourceDefaultsJson = "{\"capacity\":12}";
+        db.ResourceTemplates.Add(template);
+        await db.SaveChangesAsync();
+        var openedAt = template.UpdatedAt;
+        var createdAt = template.CreatedAt;
+        var archived = ReadOk(await CreateController(db).UpdateTemplate(template.Id, new SaveResourceTemplateRequest
+        {
+            Name = template.Name, FormSchemaVersion = 1, FormJson = FormJson, IsActive = false, UpdatedAt = openedAt,
+        }));
+        var archivedBy = template.UpdatedByUserId;
+        db.ChangeTracker.Clear();
+
+        var result = await CreateController(db).UpdateTemplate(template.Id, new SaveResourceTemplateRequest
+        {
+            Name = change == "rename" ? "Changed name" : "Original",
+            FormSchemaVersion = 1,
+            FormJson = change == "content" ? "{\"fields\":[]}" : FormJson,
+            IsActive = change == "reactivate",
+            UpdatedAt = staleTimestamp ? openedAt : archived.UpdatedAt,
+        });
+
+        result.Result.Should().BeOfType<ConflictObjectResult>().Which.Value.Should()
+            .Be("Archived templates cannot be edited. Duplicate this template to create an active copy.");
+        db.ChangeTracker.HasChanges().Should().BeFalse();
+        var saved = await db.ResourceTemplates.SingleAsync();
+        saved.Id.Should().Be(template.Id);
+        saved.Name.Should().Be("Original");
+        saved.IsActive.Should().BeFalse();
+        saved.FormSchemaVersion.Should().Be(1);
+        saved.FormJson.Should().Be(FormJson);
+        saved.ResourceDefaultsJson.Should().Be("{\"capacity\":12}");
+        saved.CreatedAt.Should().Be(createdAt);
+        saved.UpdatedAt.Should().Be(archived.UpdatedAt);
+        saved.UpdatedByUserId.Should().Be(archivedBy);
     }
 
     [Theory]
@@ -390,7 +440,7 @@ public class AdminResourceTemplatesControllerTests
     {
         using var db = TestDbContextFactory.CreateInMemory();
         await AddAdmin(db);
-        var source = CreateTemplate("Future form", isActive: false);
+        var source = CreateTemplate("Future form");
         source.FormSchemaVersion = 2;
         source.FormJson = "{\"fields\":[],\"futureFeature\":true}";
         db.ResourceTemplates.Add(source);
@@ -411,7 +461,7 @@ public class AdminResourceTemplatesControllerTests
         saved.Name.Should().Be("Future form");
         saved.FormSchemaVersion.Should().Be(2);
         saved.FormJson.Should().Be("{\"fields\":[],\"futureFeature\":true}");
-        saved.IsActive.Should().BeFalse();
+        saved.IsActive.Should().BeTrue();
         saved.UpdatedAt.Should().Be(originalUpdated);
         saved.UpdatedByUserId.Should().Be(originalUpdatedBy);
     }

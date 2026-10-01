@@ -49,7 +49,7 @@ export function resourceTemplateErrorMessage(error: unknown) {
   if (error instanceof HttpError) {
     if (error.status === 403) return 'You no longer have permission to manage resource templates.';
     if (error.status === 404) return 'This resource template could not be found.';
-    if (error.status === 409) return 'This template changed since you opened it. Your edits are still here; reopen the current template from the resource template list before saving again.';
+    if (error.status === 409) return 'This template changed since you opened it or was archived. Your edits are still here; reopen the current template from the resource template list before saving again.';
     if (error.status === 400) return 'Check the template name, fields, and validation rules, then try again.';
   }
   return 'We could not save your changes. Please try again.';

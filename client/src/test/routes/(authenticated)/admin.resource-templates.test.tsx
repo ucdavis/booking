@@ -113,11 +113,23 @@ function mockTemplateStore(initial: ResourceTemplate[] = [makeTemplate()]) {
       templates.set(id, template);
       return HttpResponse.json(template, { status: 201 });
     }),
+    http.post('/api/admin/resource-templates/:id/duplicate', ({ params }) => {
+      const previous = templates.get(Number(params.id))!;
+      const id = Math.max(...templates.keys()) + 1;
+      const copy = makeTemplate({
+        formJson: previous.formJson,
+        id,
+        name: `${previous.name} (copy)`,
+      });
+      templates.set(id, copy);
+      return HttpResponse.json(copy, { status: 201 });
+    }),
     http.put('/api/admin/resource-templates/:id', async ({ params, request }) => {
       const id = Number(params.id);
       const body = (await request.json()) as SaveResourceTemplateRequest;
       const previous = templates.get(id)!;
       if (
+        !previous.isActive ||
         body.formSchemaVersion !== previous.formSchemaVersion ||
         body.updatedAt !== previous.updatedAt
       ) {
@@ -140,6 +152,7 @@ function mockTemplateStore(initial: ResourceTemplate[] = [makeTemplate()]) {
         formJson: formChanged ? body.formJson : previous.formJson,
         formSchemaVersion: previous.formSchemaVersion + (formChanged ? 1 : 0),
         id: savedId,
+        isActive: formChanged || body.isActive,
         updatedAt,
       });
       saves.push({
@@ -336,7 +349,7 @@ describe('site admin resource templates', () => {
     expect(templates.get(3)!.formSchemaVersion).toBe(2);
   });
 
-  it('archives and restores a template only when the changes are saved', async () => {
+  it('makes a template read-only immediately after archiving it', async () => {
     mockAdminAccess();
     const { saves, templates } = mockTemplateStore();
     ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
@@ -346,22 +359,100 @@ describe('site admin resource templates', () => {
     expect(templates.get(1)!.isActive).toBe(true);
     expect(saves).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
-    expect(await screen.findByText(/Template saved/)).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'View resource template' })
+    ).toBeInTheDocument();
     expect(templates.get(1)!.isActive).toBe(false);
-    const archivedTimestamp = templates.get(1)!.updatedAt;
-
-    fireEvent.click(active);
-    expect(templates.get(1)!.isActive).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
-    await waitFor(() => expect(saves).toHaveLength(2));
-    expect(templates.get(1)!.isActive).toBe(true);
+    const archivedActive = screen.getByRole('checkbox', { name: 'Active template' });
+    expect(archivedActive).toBeDisabled();
+    expect(archivedActive).not.toBeChecked();
+    expect(screen.getByRole('textbox', { name: 'Template name' })).toBeDisabled();
+    expect(
+      screen.queryByRole('button', { name: 'Add Input' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Save template' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Archived templates are read-only. Duplicate this template to make changes.'
+      )
+    ).toBeInTheDocument();
     expect(JSON.parse(templates.get(1)!.formJson)).toEqual(definition);
     expect(templates.size).toBe(1);
     expect(templates.get(1)!.formSchemaVersion).toBe(1);
-    expect(saves.map((save) => save.id)).toEqual([1, 1]);
+    expect(saves).toHaveLength(1);
     expect(saves[0].body.updatedAt).toBe('2026-10-01T12:00:00Z');
-    expect(saves[1].body.updatedAt).toBe(archivedTimestamp);
-    expect(templates.get(1)!.updatedAt).not.toBe(archivedTimestamp);
+  });
+
+  it('opens archived forms read-only while allowing an interactive unsaved preview', async () => {
+    mockAdminAccess();
+    const original = makeTemplate({ formSchemaVersion: 3, isActive: false });
+    const { saves, templates } = mockTemplateStore([original]);
+    ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'View resource template' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Template name' })).toBeDisabled();
+    expect(
+      screen.getByRole('checkbox', { name: 'Active template' })
+    ).toBeDisabled();
+    expect(
+      screen.queryByRole('textbox', { name: 'Label' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Add Input' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Save template' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Back to resource templates' })
+    ).toHaveAttribute('href', '/admin/resource-templates');
+    expect(
+      screen.queryByRole('button', { name: 'Build form' })
+    ).not.toBeInTheDocument();
+    const answer = screen.getByRole('textbox', { name: /Visitor name/ });
+    expect(answer).toBeEnabled();
+    fireEvent.change(answer, { target: { value: 'Taylor' } });
+    expect(answer).toHaveValue('Taylor');
+    expect(screen.getByRole('button', { name: 'Try validation' })).toBeEnabled();
+    expect(saves).toHaveLength(0);
+    expect(templates.get(1)).toEqual(original);
+  });
+
+  it('offers View and Duplicate for archived templates and opens the duplicate as active version one', async () => {
+    mockAdminAccess();
+    const archived = makeTemplate({ formSchemaVersion: 3, isActive: false });
+    const { templates } = mockTemplateStore([archived]);
+    const rendered = renderRoute({ initialPath: '/admin/resource-templates' });
+    cleanup = rendered.cleanup;
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: 'Include archived templates' })
+    );
+    const row = within(
+      await screen.findByRole('row', { name: /Equipment booking/ })
+    );
+    expect(
+      row.getByRole('link', { name: 'View Equipment booking' })
+    ).toHaveAttribute('href', '/admin/resource-templates/1');
+    expect(row.queryByRole('link', { name: /Edit/ })).not.toBeInTheDocument();
+    fireEvent.click(
+      row.getByRole('button', { name: 'Duplicate Equipment booking' })
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: 'Edit resource template' })
+    ).toBeInTheDocument();
+    expect(rendered.router.state.location.pathname).toBe(
+      '/admin/resource-templates/2'
+    );
+    expect(screen.getByText('Version 1')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Active template' })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Save template' })).toBeEnabled();
+    expect(templates.get(1)).toEqual(archived);
+    expect(templates.get(2)).toMatchObject({ formSchemaVersion: 1, isActive: true });
   });
 
   it('renames a later version without creating a row or rewriting equivalent form JSON', async () => {
@@ -392,6 +483,20 @@ describe('site admin resource templates', () => {
       updatedAt: expect.any(String),
     });
     expect(templates.get(1)!.updatedAt).not.toBe(original.updatedAt);
+    const firstSaveTimestamp = templates.get(1)!.updatedAt;
+    fireEvent.change(screen.getByRole('textbox', { name: 'Template name' }), {
+      target: { value: 'Final equipment booking' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+    expect(await screen.findByText(/Template saved/)).toBeInTheDocument();
+    expect(saves).toHaveLength(2);
+    expect(saves[1].body.updatedAt).toBe(firstSaveTimestamp);
+    expect(templates.get(1)).toMatchObject({
+      formJson: original.formJson,
+      formSchemaVersion: 3,
+      name: 'Final equipment booking',
+    });
+    expect(templates.size).toBe(1);
   });
 
   it('keeps saving controls disabled until the refreshed template has finished loading', async () => {
@@ -439,38 +544,48 @@ describe('site admin resource templates', () => {
     expect(saves).toHaveLength(1);
   });
 
-  it('retains the draft when another administrator has already changed the saved template', async () => {
-    mockAdminAccess();
-    const original = makeTemplate();
-    const { saves, templates } = mockTemplateStore([original]);
-    ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
-    fireEvent.change(
-      await screen.findByRole('textbox', { name: 'Template name' }),
-      { target: { value: 'My unfinished version' } }
-    );
-    fireEvent.change(screen.getByRole('textbox', { name: 'Label' }), {
-      target: { value: 'Contact name' },
-    });
-    const externalUpdate = {
-      ...original,
-      name: 'Another administrator changed this',
-      updatedAt: '2026-10-01T12:01:00Z',
-    };
-    templates.set(1, externalUpdate);
-    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+  it.each(['changed', 'archived'])(
+    'retains the draft when another administrator has already %s the saved template',
+    async (action) => {
+      mockAdminAccess();
+      const original = makeTemplate();
+      const { saves, templates } = mockTemplateStore([original]);
+      ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
+      fireEvent.change(
+        await screen.findByRole('textbox', { name: 'Template name' }),
+        { target: { value: 'My unfinished version' } }
+      );
+      fireEvent.change(screen.getByRole('textbox', { name: 'Label' }), {
+        target: { value: 'Contact name' },
+      });
+      const externalUpdate = {
+        ...original,
+        isActive: action !== 'archived',
+        name:
+          action === 'changed'
+            ? 'Another administrator changed this'
+            : original.name,
+        updatedAt:
+          action === 'changed' ? '2026-10-01T12:01:00Z' : original.updatedAt,
+      };
+      templates.set(1, externalUpdate);
+      fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/changed|updated/i);
-    expect(screen.getByRole('textbox', { name: 'Template name' })).toHaveValue(
-      'My unfinished version'
-    );
-    expect(screen.getByRole('textbox', { name: 'Label' })).toHaveValue(
-      'Contact name'
-    );
-    expect(screen.getByRole('button', { name: 'Save template' })).toBeEnabled();
-    expect(saves).toHaveLength(0);
-    expect(templates.size).toBe(1);
-    expect(templates.get(1)).toEqual(externalUpdate);
-  });
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        /changed|archived/i
+      );
+      expect(screen.getByRole('textbox', { name: 'Template name' })).toHaveValue(
+        'My unfinished version'
+      );
+      expect(screen.getByRole('textbox', { name: 'Label' })).toHaveValue(
+        'Contact name'
+      );
+      expect(screen.getByRole('button', { name: 'Save template' })).toBeEnabled();
+      expect(saves).toHaveLength(0);
+      expect(templates.size).toBe(1);
+      expect(templates.get(1)).toEqual(externalUpdate);
+    }
+  );
 
   it('retains unsaved edits after a server failure and allows retrying', async () => {
     mockAdminAccess();

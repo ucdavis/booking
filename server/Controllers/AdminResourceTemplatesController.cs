@@ -111,6 +111,10 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             return NotFound("That resource template could not be found.");
         }
 
+        if (!template.IsActive)
+        {
+            return Conflict("Archived templates cannot be edited. Duplicate this template to create an active copy.");
+        }
         if (request.UpdatedAt == null)
         {
             return BadRequest("The saved template timestamp is required when updating a template.");
@@ -147,7 +151,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
 
         // Claim this exact saved state before inserting a revision. The transaction keeps
         // the archive and insert atomic, and the timestamp predicate rejects stale writers.
-        var original = dbContext.ResourceTemplates.Where(current => current.Id == id && current.TeamId == null &&
+        var original = dbContext.ResourceTemplates.Where(current => current.Id == id && current.TeamId == null && current.IsActive &&
             current.FormSchemaVersion == request.FormSchemaVersion && current.UpdatedAt == request.UpdatedAt.Value);
         if (isRelational)
         {
@@ -184,7 +188,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
                 FormSchemaVersion = template.FormSchemaVersion + 1,
                 FormJson = request.FormJson,
                 ResourceDefaultsJson = template.ResourceDefaultsJson,
-                IsActive = request.IsActive,
+                IsActive = true,
                 CreatedAt = now,
                 UpdatedAt = now,
                 UpdatedByUserId = userId.Value,
