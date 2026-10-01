@@ -566,22 +566,25 @@ public class AdminControllerTests
         controller.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
             .Should().Contain(attribute => attribute.Policy == AuthenticationHelper.SiteAdminPolicy);
         controller.GetCustomAttributes<AllowAnonymousAttribute>(inherit: true).Should().BeEmpty();
+        controller.GetCustomAttribute<AutoValidateAntiforgeryTokenAttribute>(inherit: true).Should().NotBeNull();
+        controller.GetCustomAttributes<IgnoreAntiforgeryTokenAttribute>(inherit: true).Should().BeEmpty();
         foreach (var name in new[]
         {
-            nameof(AdminController.Access), nameof(AdminController.AntiforgeryToken),
+            nameof(AdminController.Access),
             nameof(AdminController.GetUsers), nameof(AdminController.SearchPeople),
             nameof(AdminController.AddUser), nameof(AdminController.RemoveUser),
             nameof(AdminController.GetTeams), nameof(AdminController.CreateTeam),
         })
         {
             controller.GetMethod(name)!.GetCustomAttributes<AllowAnonymousAttribute>(inherit: true).Should().BeEmpty();
+            controller.GetMethod(name)!.GetCustomAttributes<IgnoreAntiforgeryTokenAttribute>(inherit: true).Should().BeEmpty();
         }
         controller.GetMethod(nameof(AdminController.AddUser))!
-            .GetCustomAttribute<ValidateAntiForgeryTokenAttribute>().Should().NotBeNull();
+            .GetCustomAttribute<HttpPostAttribute>()!.Template.Should().Be("users");
         controller.GetMethod(nameof(AdminController.RemoveUser))!
-            .GetCustomAttribute<ValidateAntiForgeryTokenAttribute>().Should().NotBeNull();
+            .GetCustomAttribute<HttpDeleteAttribute>()!.Template.Should().Be("users/{id:int}");
         controller.GetMethod(nameof(AdminController.CreateTeam))!
-            .GetCustomAttribute<ValidateAntiForgeryTokenAttribute>().Should().NotBeNull();
+            .GetCustomAttribute<HttpPostAttribute>()!.Template.Should().Be("teams");
     }
 
     private static T ReadValue<T>(ActionResult<T> result)

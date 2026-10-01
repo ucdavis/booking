@@ -10,7 +10,13 @@ import {
   vi,
 } from 'vitest';
 import type { EmulationCandidate } from '@/features/admin/models/EmulationCandidate.ts';
-import { emulationIdentityStorageKey } from '@/queries/emulation.ts';
+import { fetchJson } from '@/lib/api.ts';
+import {
+  emulationIdentityStorageKey,
+  startEmulation,
+  stopEmulation,
+  subscribeToEmulationChanges,
+} from '@/queries/emulation.ts';
 import type { User } from '@/queries/user.ts';
 import { server } from '@/test/mswUtils.ts';
 import { renderRoute } from '@/test/routerUtils.tsx';
@@ -86,8 +92,11 @@ afterEach(() => {
 function renderAccount(user = siteAdmin) {
   server.use(
     http.get('/api/user/me', () => HttpResponse.json(user)),
-    http.get('/api/emulation/antiforgery', () =>
-      HttpResponse.json({ token: 'test-emulation-antiforgery-token' })
+    http.get('/api/antiforgery', () =>
+      HttpResponse.json({
+        formFieldName: '__RequestVerificationToken',
+        requestToken: 'test-emulation-antiforgery-token',
+      })
     )
   );
   const rendered = renderRoute({ initialPath: '/about' });
@@ -115,6 +124,83 @@ async function search(query = 'sam@example.com') {
 }
 
 describe('user emulation', () => {
+  it.each(['start', 'stop'] as const)(
+    'refreshes a cached token for %s and invalidates it after the identity changes',
+    async (action) => {
+      let issuedTokens = 0;
+      const verificationHeaders: (string | null)[] = [];
+      server.use(
+        http.get('/api/antiforgery', () =>
+          HttpResponse.json({
+            formFieldName: '__RequestVerificationToken',
+            requestToken: `identity-token-${++issuedTokens}`,
+          })
+        ),
+        http.post('/api/protected-mutation', ({ request }) => {
+          verificationHeaders.push(
+            request.headers.get('RequestVerificationToken')
+          );
+          return new HttpResponse(null, { status: 204 });
+        }),
+        http.post(`/api/emulation/${action}`, ({ request }) => {
+          verificationHeaders.push(
+            request.headers.get('RequestVerificationToken')
+          );
+          return new HttpResponse(null, { status: 204 });
+        })
+      );
+
+      await fetchJson<void>('/api/protected-mutation', { method: 'POST' });
+      await (action === 'start' ? startEmulation(candidate.iamId) : stopEmulation());
+      await fetchJson<void>('/api/protected-mutation', { method: 'POST' });
+
+      expect(verificationHeaders).toEqual([
+        'identity-token-1',
+        'identity-token-2',
+        'identity-token-3',
+      ]);
+      expect(issuedTokens).toBe(3);
+    }
+  );
+
+  it('invalidates the cached token before notifying a tab of an identity change', async () => {
+    let issuedTokens = 0;
+    const verificationHeaders: (string | null)[] = [];
+    server.use(
+      http.get('/api/antiforgery', () =>
+        HttpResponse.json({
+          formFieldName: '__RequestVerificationToken',
+          requestToken: `identity-token-${++issuedTokens}`,
+        })
+      ),
+      http.post('/api/protected-mutation', ({ request }) => {
+        verificationHeaders.push(
+          request.headers.get('RequestVerificationToken')
+        );
+        return new HttpResponse(null, { status: 204 });
+      })
+    );
+    const onIdentityChange = vi.fn(() =>
+      fetchJson<void>('/api/protected-mutation', { method: 'POST' })
+    );
+    cleanup = subscribeToEmulationChanges(onIdentityChange);
+    await fetchJson<void>('/api/protected-mutation', { method: 'POST' });
+
+    fireEvent(
+      window,
+      new StorageEvent('storage', {
+        key: emulationIdentityStorageKey,
+        newValue: crypto.randomUUID(),
+        storageArea: window.localStorage,
+      })
+    );
+    expect(onIdentityChange).toHaveBeenCalledOnce();
+    await onIdentityChange.mock.results[0].value;
+
+    expect(verificationHeaders).toEqual(['identity-token-1', 'identity-token-2']);
+    expect(issuedTokens).toBe(2);
+  });
+
   it('hides the start action for ordinary users', async () => {
     renderAccount({ ...siteAdmin, isSiteAdmin: false });
     fireEvent.click(

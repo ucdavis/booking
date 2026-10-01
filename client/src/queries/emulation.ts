@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
 import type { EmulationCandidate } from '@/features/admin/models/EmulationCandidate.ts';
-import { fetchJson, HttpError } from '@/lib/api.ts';
+import { clearCsrfToken, fetchJson, HttpError } from '@/lib/api.ts';
 
 export const emulationIdentityStorageKey = 'booking.emulation.identity-changed';
 
@@ -11,6 +11,7 @@ export function subscribeToEmulationChanges(onChange: () => void) {
       event.newValue !== null &&
       event.storageArea === window.localStorage
     ) {
+      clearCsrfToken();
       onChange();
     }
   };
@@ -34,19 +35,15 @@ export const emulationCandidatesQueryOptions = (query: string | null) =>
   });
 
 async function emulationRequest(path: string, body?: string): Promise<void> {
-  const { token } = await fetchJson<{ token: string }>(
-    '/api/emulation/antiforgery',
-    { cache: 'no-store', skipRedirectOn401: true }
-  );
-
   await fetchJson<void>(`/api/emulation/${path}`, {
     body,
     cache: 'no-store',
-    headers: { RequestVerificationToken: token },
     method: 'POST',
+    refreshCsrfToken: true,
     skipRedirectOn401: true,
   });
 
+  clearCsrfToken();
   try {
     // A storage event reaches other tabs without reloading the sending tab twice.
     window.localStorage.setItem(

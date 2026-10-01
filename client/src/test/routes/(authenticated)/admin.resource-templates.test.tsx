@@ -80,8 +80,11 @@ function mockAdminAccess() {
   server.use(
     http.get('/api/user/me', () => HttpResponse.json(siteAdmin)),
     http.get('/api/admin/access', () => new HttpResponse(null, { status: 204 })),
-    http.get('/api/admin/antiforgery', () =>
-      HttpResponse.json({ token: 'resource-template-test-token' })
+    http.get('/api/antiforgery', () =>
+      HttpResponse.json({
+        formFieldName: '__RequestVerificationToken',
+        requestToken: 'resource-template-test-token',
+      })
     )
   );
 }

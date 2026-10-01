@@ -621,20 +621,19 @@ public class AdminResourceTemplatesControllerTests
         controller.GetCustomAttribute<RouteAttribute>()!.Template.Should().Be("api/admin/resource-templates");
         controller.GetCustomAttribute<ResponseCacheAttribute>()!.NoStore.Should().BeTrue();
         controller.GetCustomAttributes<AllowAnonymousAttribute>().Should().BeEmpty();
+        controller.GetCustomAttribute<AutoValidateAntiforgeryTokenAttribute>(inherit: true).Should().NotBeNull();
+        controller.GetCustomAttributes<IgnoreAntiforgeryTokenAttribute>(inherit: true).Should().BeEmpty();
         foreach (var method in controller.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
         {
             method.GetCustomAttributes<AllowAnonymousAttribute>().Should().BeEmpty();
+            method.GetCustomAttributes<IgnoreAntiforgeryTokenAttribute>(inherit: true).Should().BeEmpty();
         }
-        foreach (var methodName in new[]
-        {
-            nameof(AdminResourceTemplatesController.CreateTemplate),
-            nameof(AdminResourceTemplatesController.UpdateTemplate),
-            nameof(AdminResourceTemplatesController.DuplicateTemplate),
-        })
-        {
-            controller.GetMethod(methodName)!.GetCustomAttribute<ValidateAntiForgeryTokenAttribute>()
-                .Should().NotBeNull();
-        }
+        controller.GetMethod(nameof(AdminResourceTemplatesController.CreateTemplate))!
+            .GetCustomAttribute<HttpPostAttribute>().Should().NotBeNull();
+        controller.GetMethod(nameof(AdminResourceTemplatesController.UpdateTemplate))!
+            .GetCustomAttribute<HttpPutAttribute>()!.Template.Should().Be("{id:int}");
+        controller.GetMethod(nameof(AdminResourceTemplatesController.DuplicateTemplate))!
+            .GetCustomAttribute<HttpPostAttribute>()!.Template.Should().Be("{id:int}/duplicate");
     }
 
     [Theory]

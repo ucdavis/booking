@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
@@ -85,7 +86,51 @@ public class AccountControllerTests
         var action = typeof(AccountController).GetMethod(nameof(AccountController.Logout))!;
 
         action.GetCustomAttribute<HttpPostAttribute>()!.Template.Should().Be("logout");
-        action.GetCustomAttribute<ValidateAntiForgeryTokenAttribute>().Should().NotBeNull();
+        typeof(AccountController).GetCustomAttribute<AutoValidateAntiforgeryTokenAttribute>().Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData("GET", false)]
+    [InlineData("HEAD", false)]
+    [InlineData("OPTIONS", false)]
+    [InlineData("TRACE", false)]
+    [InlineData("POST", true)]
+    [InlineData("PUT", true)]
+    [InlineData("PATCH", true)]
+    [InlineData("DELETE", true)]
+    public async Task Account_antiforgery_filter_only_requires_tokens_for_unsafe_methods(string method, bool requiresToken)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddControllersWithViews();
+        services.AddDataProtection().UseEphemeralDataProtectionProvider();
+        using var provider = services.BuildServiceProvider();
+        var attribute = typeof(AccountController).GetCustomAttribute<AutoValidateAntiforgeryTokenAttribute>()!;
+        var filter = attribute.CreateInstance(provider);
+        var httpContext = new DefaultHttpContext { RequestServices = provider };
+        httpContext.Request.Method = method;
+        var actionContext = new ActionContext(httpContext, new RouteData(), new ActionDescriptor());
+        var context = new AuthorizationFilterContext(actionContext, [filter]);
+
+        await ((IAsyncAuthorizationFilter)filter).OnAuthorizationAsync(context);
+
+        if (requiresToken)
+        {
+            context.Result.Should().BeOfType<AntiforgeryValidationFailedResult>();
+        }
+        else
+        {
+            context.Result.Should().BeNull();
+        }
+    }
+
+    [Fact]
+    public void Antiforgery_tokens_are_available_through_the_shared_and_logout_routes()
+    {
+        var action = typeof(AccountController).GetMethod(nameof(AccountController.LogoutAntiforgery))!;
+
+        action.GetCustomAttributes<HttpGetAttribute>().Select(attribute => attribute.Template)
+            .Should().BeEquivalentTo(new[] { "api/antiforgery", "logout/antiforgery" });
     }
 
     [Fact]

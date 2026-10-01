@@ -12,6 +12,7 @@ namespace Server.Controllers;
 
 [AllowAnonymous]
 [ApiExplorerSettings(IgnoreApi = true)]
+[AutoValidateAntiforgeryToken]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public class AccountController(IConfiguration configuration, IHostEnvironment environment) : Controller
 {
@@ -34,7 +35,6 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
     }
 
     [HttpPost("login/local")]
-    [ValidateAntiForgeryToken]
     public async Task<IActionResult> LocalLogin(string? persona, string? returnUrl)
     {
         if (!LocalAuthentication.IsEnabled(configuration, environment))
@@ -53,6 +53,7 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
     }
 
     [HttpGet("logout/antiforgery")]
+    [HttpGet("api/antiforgery")]
     public IActionResult LogoutAntiforgery([FromServices] IAntiforgery antiforgery)
     {
         var tokens = antiforgery.GetAndStoreTokens(HttpContext);
@@ -60,7 +61,6 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
     }
 
     [HttpPost("logout")]
-    [ValidateAntiForgeryToken]
     public IActionResult Logout()
     {
         if (LocalAuthentication.IsEnabled(configuration, environment))
@@ -73,7 +73,6 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
     }
 
     [HttpPost("logout/local")]
-    [ValidateAntiForgeryToken]
     public async Task<IActionResult> LocalLogout()
     {
         if (!LocalAuthentication.IsEnabled(configuration, environment))
@@ -86,7 +85,6 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
     }
 
     [HttpPost("login/local/person")]
-    [ValidateAntiForgeryToken]
     public async Task<IActionResult> LocalPersonLogin(
         [FromForm] string? query, [FromForm] string? returnUrl, [FromServices] AppDbContext dbContext,
         CancellationToken cancellationToken = default)

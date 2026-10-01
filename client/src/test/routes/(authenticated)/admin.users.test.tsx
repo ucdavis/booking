@@ -115,8 +115,11 @@ function mockAdminAccess() {
     http.get('/api/admin/users', () =>
       HttpResponse.json([currentAdmin, otherAdmin])
     ),
-    http.get('/api/admin/antiforgery', () =>
-      HttpResponse.json({ token: 'test-antiforgery-token' })
+    http.get('/api/antiforgery', () =>
+      HttpResponse.json({
+        formFieldName: '__RequestVerificationToken',
+        requestToken: 'test-antiforgery-token',
+      })
     )
   );
 }

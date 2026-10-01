@@ -1,7 +1,14 @@
 using System.Security.Claims;
 using FluentAssertions;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -12,6 +19,98 @@ namespace Server.Tests.Examples.Notifications;
 
 public class NotificationControllerTests
 {
+    [Theory]
+    [InlineData(nameof(NotificationController.SendSample))]
+    [InlineData(nameof(NotificationController.SendTableSample))]
+    public async Task Inherited_antiforgery_filter_does_not_require_a_token_for_get(string actionName)
+    {
+        using var provider = CreateAntiforgeryServices();
+        var httpContext = new DefaultHttpContext { RequestServices = provider };
+        httpContext.Request.Method = HttpMethods.Get;
+
+        var context = await ApplyInheritedAntiforgeryFilter(provider, actionName, httpContext);
+
+        context.Result.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(nameof(NotificationController.SendSample), "missing")]
+    [InlineData(nameof(NotificationController.SendSample), "invalid")]
+    [InlineData(nameof(NotificationController.SendSample), "valid")]
+    [InlineData(nameof(NotificationController.SendTableSample), "missing")]
+    [InlineData(nameof(NotificationController.SendTableSample), "invalid")]
+    [InlineData(nameof(NotificationController.SendTableSample), "valid")]
+    public async Task Notification_posts_require_a_valid_antiforgery_token(string actionName, string tokenState)
+    {
+        using var provider = CreateAntiforgeryServices();
+        var notifications = new FakeNotificationService();
+        var controller = CreateController(Environments.Development, notifications,
+        [
+            new Claim(ClaimTypes.NameIdentifier, "notification-test-user"),
+            new Claim(ClaimTypes.Email, "person@example.com"),
+        ]);
+        var httpContext = controller.HttpContext;
+        httpContext.RequestServices = provider;
+        httpContext.Request.Method = HttpMethods.Post;
+        var tokenContext = new DefaultHttpContext
+        {
+            RequestServices = provider,
+            User = httpContext.User,
+        };
+        var tokens = provider.GetRequiredService<IAntiforgery>().GetAndStoreTokens(tokenContext);
+        httpContext.Request.Headers.Cookie = tokenContext.Response.Headers.SetCookie.Single()!.Split(';')[0];
+        if (tokenState != "missing")
+        {
+            httpContext.Request.Headers[tokens.HeaderName!] = tokenState == "valid"
+                ? tokens.RequestToken
+                : "invalid-antiforgery-token";
+        }
+
+        var context = await ApplyInheritedAntiforgeryFilter(provider, actionName, httpContext);
+
+        if (tokenState != "valid")
+        {
+            context.Result.Should().BeOfType<AntiforgeryValidationFailedResult>();
+            notifications.Invocations.Should().BeEmpty();
+            notifications.TableInvocations.Should().BeEmpty();
+            return;
+        }
+
+        context.Result.Should().BeNull();
+        IActionResult result;
+        if (actionName == nameof(NotificationController.SendSample))
+        {
+            result = await controller.SendSample(new NotificationRequest
+            {
+                Subject = "Subject",
+                Header = "Header",
+                Message = "Message",
+            }, CancellationToken.None);
+            notifications.Invocations.Should().ContainSingle();
+        }
+        else
+        {
+            result = await controller.SendTableSample(new TableNotificationRequest
+            {
+                Subject = "Subject",
+                Header = "Header",
+                Message = "Message",
+                Rows =
+                [
+                    new TableNotificationRowRequest
+                    {
+                        Title = "Item",
+                        Details = "Details",
+                        Amount = 1m,
+                    },
+                ],
+                TotalAmount = 1m,
+            }, CancellationToken.None);
+            notifications.TableInvocations.Should().ContainSingle();
+        }
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
     [Fact]
     public async Task Default_endpoint_returns_not_found_outside_development()
     {
@@ -279,6 +378,37 @@ public class NotificationControllerTests
             .Which.To.Should().Be("person@example.com");
 
         notificationService.TableInvocations.Should().ContainSingle();
+    }
+
+    private static ServiceProvider CreateAntiforgeryServices()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddControllersWithViews().AddApplicationPart(typeof(NotificationController).Assembly);
+        services.AddDataProtection().UseEphemeralDataProtectionProvider();
+        return services.BuildServiceProvider();
+    }
+
+    private static async Task<AuthorizationFilterContext> ApplyInheritedAntiforgeryFilter(
+        IServiceProvider provider, string actionName, HttpContext httpContext)
+    {
+        var action = provider.GetRequiredService<IActionDescriptorCollectionProvider>().ActionDescriptors.Items
+            .OfType<ControllerActionDescriptor>()
+            .Single(descriptor => descriptor.ControllerTypeInfo.AsType() == typeof(NotificationController)
+                && descriptor.MethodInfo.Name == actionName);
+        var attribute = action.FilterDescriptors.Select(descriptor => descriptor.Filter)
+            .OfType<AutoValidateAntiforgeryTokenAttribute>().Should().ContainSingle().Subject;
+        var filter = attribute.CreateInstance(provider);
+        var filters = action.FilterDescriptors.OrderBy(descriptor => descriptor.Order)
+            .ThenBy(descriptor => descriptor.Scope)
+            .Select(descriptor => ReferenceEquals(descriptor.Filter, attribute) ? filter : descriptor.Filter)
+            .ToList();
+        var context = new AuthorizationFilterContext(
+            new ActionContext(httpContext, new RouteData(), action), filters);
+
+        await ((IAsyncAuthorizationFilter)filter).OnAuthorizationAsync(context);
+
+        return context;
     }
 
     private static NotificationController CreateController(

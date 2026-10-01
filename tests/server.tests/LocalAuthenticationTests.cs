@@ -137,7 +137,7 @@ public class LocalAuthenticationTests
         var action = typeof(AccountController).GetMethod(actionName)!;
 
         action.GetCustomAttribute<HttpPostAttribute>()!.Template.Should().Be(route);
-        action.GetCustomAttribute<ValidateAntiForgeryTokenAttribute>().Should().NotBeNull();
+        typeof(AccountController).GetCustomAttribute<AutoValidateAntiforgeryTokenAttribute>().Should().NotBeNull();
     }
 
     [Theory]

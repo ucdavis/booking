@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +11,7 @@ namespace Server.Controllers;
 [ApiController]
 [Route("api/teams/{teamSlug}/members")]
 [Authorize(Policy = AuthenticationHelper.TeamAdminPolicy)]
+[AutoValidateAntiforgeryToken]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public class TeamMembersController(AppDbContext dbContext) : ControllerBase
 {
@@ -86,20 +86,7 @@ public class TeamMembersController(AppDbContext dbContext) : ControllerBase
         return Ok(matches);
     }
 
-    [HttpGet("antiforgery")]
-    public async Task<IActionResult> AntiforgeryToken(
-        string teamSlug, [FromServices] IAntiforgery antiforgery, CancellationToken cancellationToken = default)
-    {
-        if (await FindTeamId(teamSlug, cancellationToken) == null)
-        {
-            return NotFound("That team could not be found.");
-        }
-
-        return Ok(new { Token = antiforgery.GetAndStoreTokens(HttpContext).RequestToken });
-    }
-
     [HttpPost]
-    [ValidateAntiForgeryToken]
     public async Task<ActionResult<TeamMemberResponse>> AddMember(
         string teamSlug, [FromBody] AddTeamMemberRequest request, CancellationToken cancellationToken = default)
     {
@@ -220,7 +207,6 @@ public class TeamMembersController(AppDbContext dbContext) : ControllerBase
     }
 
     [HttpPut("{userId:int}/role")]
-    [ValidateAntiForgeryToken]
     public async Task<ActionResult<TeamMemberResponse>> UpdateRole(
         string teamSlug, int userId, [FromBody] UpdateTeamMemberRoleRequest request,
         CancellationToken cancellationToken = default)
@@ -254,7 +240,6 @@ public class TeamMembersController(AppDbContext dbContext) : ControllerBase
     }
 
     [HttpDelete("{userId:int}")]
-    [ValidateAntiForgeryToken]
     public async Task<IActionResult> RemoveMember(
         string teamSlug, int userId, CancellationToken cancellationToken = default)
     {

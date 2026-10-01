@@ -12,6 +12,7 @@ namespace Server.Controllers;
 [ApiController]
 [Route("api/admin/resource-templates")]
 [Authorize(Policy = AuthenticationHelper.SiteAdminPolicy)]
+[AutoValidateAntiforgeryToken]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public class AdminResourceTemplatesController(AppDbContext dbContext) : ControllerBase
 {
@@ -52,7 +53,6 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
     }
 
     [HttpPost]
-    [ValidateAntiForgeryToken]
     public async Task<ActionResult<ResourceTemplateResponse>> CreateTemplate(
         [FromBody] SaveResourceTemplateRequest request, CancellationToken cancellationToken = default)
     {
@@ -91,7 +91,6 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
     }
 
     [HttpPut("{id:int}")]
-    [ValidateAntiForgeryToken]
     public async Task<ActionResult<ResourceTemplateResponse>> UpdateTemplate(
         int id, [FromBody] SaveResourceTemplateRequest request, CancellationToken cancellationToken = default)
     {
@@ -227,7 +226,6 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
     }
 
     [HttpPost("{id:int}/duplicate")]
-    [ValidateAntiForgeryToken]
     public async Task<ActionResult<ResourceTemplateResponse>> DuplicateTemplate(
         int id, CancellationToken cancellationToken = default)
     {

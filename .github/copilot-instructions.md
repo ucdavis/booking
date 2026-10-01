@@ -139,6 +139,7 @@ See [Development Tools](../AGENTS.md#development-tools) for backend tooling.
 - API endpoints proxy through Vite dev server
 - Backend serves from `/api` routes
 - Authentication modes are documented under [Auth Configuration](../README.md#auth-configuration)
+- Follow the [antiforgery conventions](../AGENTS.md#authentication-conventions) for shared client token handling, identity changes, and controller-wide validation.
 - Use type-safe API client patterns
 
 ### Development Commands

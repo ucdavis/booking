@@ -25,21 +25,21 @@ public class EmulationControllerTests
     public void Endpoints_require_authentication_and_limit_start_and_search_to_site_admins()
     {
         typeof(EmulationController).GetCustomAttributes<AuthorizeAttribute>(inherit: true).Should().NotBeEmpty();
+        typeof(EmulationController).GetCustomAttribute<AutoValidateAntiforgeryTokenAttribute>(inherit: true)
+            .Should().NotBeNull();
+        typeof(EmulationController).GetCustomAttributes<IgnoreAntiforgeryTokenAttribute>(inherit: true).Should().BeEmpty();
         foreach (var actionName in new[] { nameof(EmulationController.Candidates), nameof(EmulationController.Start) })
         {
             typeof(EmulationController).GetMethod(actionName)!.GetCustomAttribute<AuthorizeAttribute>()!
                 .Policy.Should().Be(AuthenticationHelper.SiteAdminPolicy);
         }
-        foreach (var actionName in new[] { nameof(EmulationController.Stop), nameof(EmulationController.Antiforgery) })
-        {
-            typeof(EmulationController).GetMethod(actionName)!.GetCustomAttributes<AuthorizeAttribute>()
-                .Should().NotContain(attribute => attribute.Policy == AuthenticationHelper.SiteAdminPolicy);
-        }
+        typeof(EmulationController).GetMethod(nameof(EmulationController.Stop))!.GetCustomAttributes<AuthorizeAttribute>()
+            .Should().NotContain(attribute => attribute.Policy == AuthenticationHelper.SiteAdminPolicy);
         foreach (var actionName in new[] { nameof(EmulationController.Start), nameof(EmulationController.Stop) })
         {
             var action = typeof(EmulationController).GetMethod(actionName)!;
             action.GetCustomAttribute<HttpPostAttribute>().Should().NotBeNull();
-            action.GetCustomAttribute<ValidateAntiForgeryTokenAttribute>().Should().NotBeNull();
+            action.GetCustomAttributes<IgnoreAntiforgeryTokenAttribute>(inherit: true).Should().BeEmpty();
         }
     }
 
