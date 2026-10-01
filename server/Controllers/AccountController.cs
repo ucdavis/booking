@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -48,6 +50,26 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
 
         await HttpContext.SignInAsync(LocalAuthentication.Scheme, principal);
         return LocalRedirect(Url.IsLocalUrl(returnUrl) ? returnUrl! : "/");
+    }
+
+    [HttpGet("logout/antiforgery")]
+    public IActionResult LogoutAntiforgery([FromServices] IAntiforgery antiforgery)
+    {
+        var tokens = antiforgery.GetAndStoreTokens(HttpContext);
+        return Ok(new { tokens.FormFieldName, tokens.RequestToken });
+    }
+
+    [HttpPost("logout")]
+    [ValidateAntiForgeryToken]
+    public IActionResult Logout()
+    {
+        if (LocalAuthentication.IsEnabled(configuration, environment))
+        {
+            return SignOut(new AuthenticationProperties { RedirectUri = "/login" }, LocalAuthentication.Scheme);
+        }
+
+        return SignOut(new AuthenticationProperties { RedirectUri = "/about" },
+            CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme);
     }
 
     [HttpPost("logout/local")]

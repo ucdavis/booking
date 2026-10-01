@@ -1,7 +1,9 @@
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
+import { useMutation } from '@tanstack/react-query';
 import { Link, useLocation } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { TeamAdminMenu } from '@/features/teams/TeamAdminMenu.tsx';
+import { fetchJson } from '@/lib/api.ts';
 import { useMeQuery } from '@/queries/user.ts';
 
 const navigationItems = [
@@ -16,7 +18,38 @@ export function SiteHeader() {
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const adminMenuRef = useRef<HTMLDivElement>(null);
   const adminButtonRef = useRef<HTMLButtonElement>(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const userButtonRef = useRef<HTMLButtonElement>(null);
   const isAdminPage = pathname === '/admin' || pathname.startsWith('/admin/');
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      const { formFieldName, requestToken } = await fetchJson<{
+        formFieldName: string;
+        requestToken: string;
+      }>('/logout/antiforgery', {
+        cache: 'no-store',
+        skipRedirectOn401: true,
+      });
+      // Submit a document navigation so Microsoft sign-out can redirect the browser.
+      const form = document.createElement('form');
+      form.method = 'post';
+      form.action = '/logout';
+      form.hidden = true;
+      const token = document.createElement('input');
+      token.type = 'hidden';
+      token.name = formFieldName;
+      token.value = requestToken;
+      form.append(token);
+      document.body.append(form);
+      try {
+        form.submit();
+      } catch (error) {
+        form.remove();
+        throw error;
+      }
+    },
+  });
 
   useEffect(() => {
     if (!adminMenuOpen) {
@@ -32,6 +65,21 @@ export function SiteHeader() {
     return () =>
       document.removeEventListener('pointerdown', closeOnOutsideClick);
   }, [adminMenuOpen]);
+
+  useEffect(() => {
+    if (!userMenuOpen) {
+      return;
+    }
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!userMenuRef.current?.contains(event.target as Node | null)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    return () =>
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+  }, [userMenuOpen]);
 
   return (
     <header className="bg-base-100">
@@ -50,7 +98,7 @@ export function SiteHeader() {
 
         <nav
           aria-label="Primary navigation"
-          className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm font-medium"
+          className="flex w-full flex-wrap items-center gap-x-6 gap-y-2 text-sm font-medium sm:w-auto"
         >
           {navigationItems.map(([label, to]) => (
             <Link
@@ -128,6 +176,79 @@ export function SiteHeader() {
                       Teams
                     </Link>
                   </li>
+                </ul>
+              )}
+            </div>
+          )}
+          {userQuery.isSuccess && (
+            <div
+              className="relative ml-auto"
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) {
+                  setUserMenuOpen(false);
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  setUserMenuOpen(false);
+                  userButtonRef.current?.focus();
+                }
+              }}
+              ref={userMenuRef}
+            >
+              <button
+                aria-controls="user-account-navigation"
+                aria-expanded={userMenuOpen}
+                className={`flex items-center gap-1.5 transition-colors hover:text-primary ${pathname === '/me' ? 'font-semibold text-primary' : 'text-base-content/70'}`}
+                onClick={() => setUserMenuOpen((open) => !open)}
+                ref={userButtonRef}
+                type="button"
+              >
+                <span
+                  className="max-w-48 truncate sm:max-w-64"
+                  title={userQuery.data.name}
+                >
+                  {userQuery.data.name}
+                </span>
+                <ChevronDownIcon
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0"
+                />
+              </button>
+              {userMenuOpen && (
+                <ul
+                  className="menu absolute right-0 z-50 mt-3 w-52 max-w-[calc(100vw-2rem)] rounded-xl border border-base-300 bg-base-100 p-2 shadow-lg"
+                  id="user-account-navigation"
+                >
+                  <li>
+                    <Link
+                      activeProps={{ className: 'font-semibold text-primary' }}
+                      onClick={() => setUserMenuOpen(false)}
+                      to="/me"
+                    >
+                      Profile
+                    </Link>
+                  </li>
+                  <li>
+                    <button
+                      disabled={
+                        logoutMutation.isPending || logoutMutation.isSuccess
+                      }
+                      onClick={() => logoutMutation.mutate()}
+                      type="button"
+                    >
+                      {logoutMutation.isPending || logoutMutation.isSuccess
+                        ? 'Logging out…'
+                        : 'Log out'}
+                    </button>
+                  </li>
+                  {logoutMutation.isError && (
+                    <li>
+                      <p className="text-error" role="alert">
+                        Unable to log out. Please try again.
+                      </p>
+                    </li>
+                  )}
                 </ul>
               )}
             </div>
