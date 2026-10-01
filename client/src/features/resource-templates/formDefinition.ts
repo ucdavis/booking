@@ -160,10 +160,9 @@ export function parseFormDefinition(
   json: string,
   version: number
 ): FormDefinition {
-  if (version !== 1) {
-    throw new Error(
-      `Form schema version ${version} is not supported by this editor.`
-    );
+  // FormSchemaVersion identifies the saved revision; the JSON shape is validated below.
+  if (!Number.isInteger(version) || version < 1 || version > 2_147_483_647) {
+    throw new Error('The saved form has an invalid revision number.');
   }
   if (json.length > maxJsonLength) {
     throw new Error('The saved form exceeds the size supported by this editor.');

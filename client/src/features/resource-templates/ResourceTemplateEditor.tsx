@@ -1,7 +1,7 @@
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useBlocker } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { FormBuilder } from './FormBuilder.tsx';
 import { FormPreview } from './FormPreview.tsx';
 import { validateFormDefinition } from './formDefinition.ts';
@@ -26,36 +26,48 @@ export function ResourceTemplateEditor({
   onSaved?: (saved: ResourceTemplate) => void | Promise<void>;
 }) {
   const queryClient = useQueryClient();
+  const [baseline, setBaseline] = useState({ definition, template });
+  const currentTemplate = baseline.template;
   const [showPreview, setShowPreview] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const saveFlowRef = useRef(false);
   const saveMutation = useMutation({
     mutationFn: (request: SaveResourceTemplateRequest) =>
-      template
-        ? updateResourceTemplate(template.id, request)
+      currentTemplate
+        ? updateResourceTemplate(currentTemplate.id, request)
         : createResourceTemplate(request),
   });
   const form = useForm({
     defaultValues: {
-      definition,
-      isActive: template?.isActive ?? true,
-      name: template?.name ?? '',
+      definition: baseline.definition,
+      isActive: currentTemplate?.isActive ?? true,
+      name: currentTemplate?.name ?? '',
     },
     onSubmit: async ({ value }) => {
+      if (saveFlowRef.current) return;
+      saveFlowRef.current = true;
+      setIsSaving(true);
       setSaved(false);
       try {
         const result = await saveMutation.mutateAsync({
           formJson: JSON.stringify(value.definition),
-          formSchemaVersion: 1,
+          formSchemaVersion: currentTemplate?.formSchemaVersion ?? 1,
           isActive: value.isActive,
           name: value.name.trim(),
+          updatedAt: currentTemplate?.updatedAt,
         });
-        form.reset({ ...value, name: result.name });
+        setBaseline({ definition: value.definition, template: result });
+        form.reset({ ...value, isActive: result.isActive, name: result.name });
         queryClient.setQueryData(resourceTemplateQueryOptions(result.id).queryKey, result);
         await queryClient.invalidateQueries({ queryKey: resourceTemplatesQueryKey });
         setSaved(true);
         await onSaved?.(result);
       } catch {
         // Keep the entered values available when saving fails.
+      } finally {
+        saveFlowRef.current = false;
+        setIsSaving(false);
       }
     },
     validators: {
@@ -69,7 +81,7 @@ export function ResourceTemplateEditor({
     },
   });
   const blocker = useBlocker({
-    enableBeforeUnload: () => form.state.isDirty || form.state.isSubmitting,
+    enableBeforeUnload: () => form.state.isDirty || saveFlowRef.current,
     shouldBlockFn: () => form.state.isDirty,
     withResolver: true,
   });
@@ -80,14 +92,22 @@ export function ResourceTemplateEditor({
         <Link className="hover:text-primary hover:underline" to="/admin">Site admin</Link>
         {' / '}
         <Link className="hover:text-primary hover:underline" to="/admin/resource-templates">Resource templates</Link>
-        {' / '}<span aria-current="page">{template ? 'Edit template' : 'Create template'}</span>
+        {' / '}<span aria-current="page">{currentTemplate ? 'Edit template' : 'Create template'}</span>
       </nav>
       <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
-        {template ? 'Edit resource template' : 'Create resource template'}
+        {currentTemplate ? 'Edit resource template' : 'Create resource template'}
       </h1>
       <p className="mt-3 max-w-2xl text-base-content/70">
         Build the form people will fill out when requesting a resource. This template is available at the site level.
       </p>
+      {currentTemplate && (
+        <div className="mt-4 space-y-2">
+          <span className="badge badge-outline">Version {currentTemplate.formSchemaVersion}</span>
+          <p className="max-w-2xl text-sm text-base-content/65">
+            Saving form changes creates a new version and archives this one. Previous forms keep their original ID and contents. Renaming or changing active status keeps the same version.
+          </p>
+        </div>
+      )}
 
       {blocker.status === 'blocked' && (
         <section aria-label="Unsaved changes" className="mt-6 rounded-xl border border-warning bg-warning/10 p-5" role="alert">
@@ -96,7 +116,7 @@ export function ResourceTemplateEditor({
           <div className="mt-3 flex gap-3">
             <button className="btn btn-primary btn-sm" onClick={() => blocker.reset()} type="button">Keep editing</button>
             <form.Subscribe selector={(state) => state.isSubmitting}>
-              {(isSubmitting) => <button className="btn btn-outline btn-sm" disabled={isSubmitting} onClick={() => blocker.proceed()} type="button">Discard changes</button>}
+              {(isSubmitting) => <button className="btn btn-outline btn-sm" disabled={isSaving || isSubmitting} onClick={() => blocker.proceed()} type="button">Discard changes</button>}
             </form.Subscribe>
           </div>
         </section>
@@ -108,12 +128,12 @@ export function ResourceTemplateEditor({
         onChange={() => { setSaved(false); saveMutation.reset(); }}
         onSubmit={(event) => {
           event.preventDefault();
-          if (!form.state.isSubmitting) void form.handleSubmit();
+          if (!saveFlowRef.current && !form.state.isSubmitting) void form.handleSubmit();
         }}
       >
         <form.Subscribe selector={(state) => state.isSubmitting}>
           {(isSubmitting) => (
-            <fieldset className="space-y-6" disabled={isSubmitting}>
+            <fieldset className="space-y-6" disabled={isSaving || isSubmitting}>
               <div className="flex flex-col gap-5 rounded-xl border border-base-300 bg-base-100 p-5 sm:flex-row sm:items-end">
                 <form.Field name="name">
                   {(field) => (
@@ -132,7 +152,7 @@ export function ResourceTemplateEditor({
                   )}
                 </form.Field>
                 <button className="btn btn-primary" type="submit">
-                  {isSubmitting ? 'Saving…' : template ? 'Save template' : 'Create template'}
+                  {isSaving || isSubmitting ? 'Saving…' : currentTemplate ? 'Save template' : 'Create template'}
                 </button>
               </div>
               <p className="text-sm text-base-content/65">Clear Active template and save to archive it. Archived templates can be restored here.</p>
@@ -142,7 +162,7 @@ export function ResourceTemplateEditor({
               </div>
               {!showPreview && (
                 <form.Field name="definition">
-                  {(field) => <FormBuilder disabled={isSubmitting} onChange={(value) => { field.handleChange(value); setSaved(false); saveMutation.reset(); }} value={field.state.value} />}
+                  {(field) => <FormBuilder disabled={isSaving || isSubmitting} onChange={(value) => { field.handleChange(value); setSaved(false); saveMutation.reset(); }} value={field.state.value} />}
                 </form.Field>
               )}
             </fieldset>

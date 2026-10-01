@@ -39,6 +39,11 @@ function ResourceTemplatesPage() {
       header: 'Template name',
     },
     {
+      accessorKey: 'formSchemaVersion',
+      cell: ({ row }) => <span>Version {row.original.formSchemaVersion}</span>,
+      header: 'Version',
+    },
+    {
       accessorKey: 'isActive',
       cell: ({ row }) => <span className={`badge ${row.original.isActive ? 'badge-success badge-outline' : 'badge-ghost'}`}>{row.original.isActive ? 'Active' : 'Archived'}</span>,
       header: 'Status',

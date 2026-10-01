@@ -261,8 +261,18 @@ describe('resource template form builder', () => {
     expect(() =>
       parseFormDefinition('{"fields":[],"conditionalRules":[]}', 1)
     ).toThrow();
-    expect(() => parseFormDefinition('{"fields":[]}', 2)).toThrow(/version 2/);
+    expect(() => parseFormDefinition('{"fields":[]}', 0)).toThrow();
   });
+
+  it.each([1, 2, 3, 2147483647])(
+    'loads the supported form format at template version %i',
+    (version) => {
+      const value: FormDefinition = {
+        fields: [{ id: 'name', label: 'Visitor name', type: 'input' }],
+      };
+      expect(parseFormDefinition(JSON.stringify(value), version)).toEqual(value);
+    }
+  );
 
   it.each([
     '{"fields":[],"fields":[]}',

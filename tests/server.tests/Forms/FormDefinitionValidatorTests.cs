@@ -43,13 +43,95 @@ public class FormDefinitionValidatorTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(2)]
     [InlineData(-1)]
-    public void Rejects_unsupported_schema_versions(int version)
+    public void Rejects_nonpositive_form_versions(int version)
     {
         FormDefinitionValidator.TryParse(version, "{\"fields\":[]}", out var form, out var error).Should().BeFalse();
         form.Should().BeNull();
         error.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(int.MaxValue)]
+    public void Accepts_positive_revision_numbers_for_the_supported_document_shape(int version)
+    {
+        FormDefinitionValidator.TryParse(version, "{\"fields\":[]}", out var form, out var error).Should().BeTrue();
+        form!.Fields.Should().BeEmpty();
+        error.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("{\"fields\":[{\"label\":\"Name\",\"type\":\"input\",\"id\":\"a\"}]}")]
+    [InlineData("{\"fields\":[{\"id\":\"a\",\"type\":\"input\",\"label\":\"Name\",\"helpText\":\"\"}]}")]
+    [InlineData("{\"fields\":[{\"id\":\"a\",\"type\":\"input\",\"label\":\"Name\",\"validation\":{}}]}")]
+    [InlineData("{\"fields\":[{\"id\":\"a\",\"type\":\"input\",\"label\":\"Name\",\"validation\":{\"required\":false}}]}")]
+    public void Equivalent_forms_ignore_json_property_order_and_explicit_empty_defaults(string json)
+    {
+        FormDefinitionValidator.TryParse(1,
+            "{\"fields\":[{\"id\":\"a\",\"type\":\"input\",\"label\":\"Name\"}]}", out var first, out _).Should().BeTrue();
+        FormDefinitionValidator.TryParse(2, json, out var second, out _).Should().BeTrue();
+
+        FormDefinitionValidator.AreEquivalent(first!, second!).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("{\"id\":\"b\",\"type\":\"input\",\"label\":\"Name\"}")]
+    [InlineData("{\"id\":\"a\",\"type\":\"textarea\",\"label\":\"Name\"}")]
+    [InlineData("{\"id\":\"a\",\"type\":\"input\",\"label\":\"Renamed\"}")]
+    [InlineData("{\"id\":\"a\",\"type\":\"input\",\"label\":\"Name\",\"helpText\":\"Help\"}")]
+    [InlineData("{\"id\":\"a\",\"type\":\"input\",\"label\":\"Name\",\"validation\":{\"required\":true}}")]
+    [InlineData("{\"id\":\"a\",\"type\":\"input\",\"label\":\"Name\",\"validation\":{\"minLength\":1}}")]
+    [InlineData("{\"id\":\"a\",\"type\":\"input\",\"label\":\"Name\",\"validation\":{\"maxLength\":20}}")]
+    public void Field_content_changes_are_not_equivalent(string changedField)
+    {
+        FormDefinitionValidator.TryParse(1,
+            "{\"fields\":[{\"id\":\"a\",\"type\":\"input\",\"label\":\"Name\"}]}", out var first, out _).Should().BeTrue();
+        FormDefinitionValidator.TryParse(1, "{\"fields\":[" + changedField + "]}", out var second, out _).Should().BeTrue();
+
+        FormDefinitionValidator.AreEquivalent(first!, second!).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Field_order_and_option_order_are_part_of_form_content()
+    {
+        const string firstField = """
+            {"id":"a","type":"input","label":"Name"}
+            """;
+        const string secondField = """
+            {"id":"b","type":"radio","label":"Choice","options":[{"id":"one","label":"One"},{"id":"two","label":"Two"}]}
+            """;
+        const string reorderedChoices = """
+            {"id":"b","type":"radio","label":"Choice","options":[{"id":"two","label":"Two"},{"id":"one","label":"One"}]}
+            """;
+        FormDefinitionValidator.TryParse(1, "{\"fields\":[" + firstField + "," + secondField + "]}", out var original, out _)
+            .Should().BeTrue();
+        FormDefinitionValidator.TryParse(1, "{\"fields\":[" + secondField + "," + firstField + "]}", out var reordered, out _)
+            .Should().BeTrue();
+        FormDefinitionValidator.TryParse(1, "{\"fields\":[" + firstField + "," + reorderedChoices + "]}", out var choices, out _)
+            .Should().BeTrue();
+
+        FormDefinitionValidator.AreEquivalent(original!, reordered!).Should().BeFalse();
+        FormDefinitionValidator.AreEquivalent(original!, choices!).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("one", "Renamed")]
+    [InlineData("changed-id", "One")]
+    public void Option_labels_and_ids_are_part_of_form_content(string id, string label)
+    {
+        const string originalJson = """
+            {"fields":[{"id":"a","type":"dropdown","label":"Choice","options":[{"id":"one","label":"One"}]}]}
+            """;
+        var changedJson = JsonSerializer.Serialize(new
+        {
+            fields = new[] { new { id = "a", type = "dropdown", label = "Choice", options = new[] { new { id, label } } } },
+        });
+        FormDefinitionValidator.TryParse(1, originalJson, out var original, out _).Should().BeTrue();
+        FormDefinitionValidator.TryParse(1, changedJson, out var changed, out _).Should().BeTrue();
+
+        FormDefinitionValidator.AreEquivalent(original!, changed!).Should().BeFalse();
     }
 
     [Theory]

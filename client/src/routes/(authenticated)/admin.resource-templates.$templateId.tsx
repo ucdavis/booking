@@ -14,6 +14,7 @@ export const Route = createFileRoute('/(authenticated)/admin/resource-templates/
 
 function EditResourceTemplatePage() {
   const { templateId } = Route.useParams();
+  const navigate = Route.useNavigate();
   const id = Number(templateId);
   const validId = /^\d+$/.test(templateId) && Number.isSafeInteger(id) && id > 0 && id <= 2147483647;
   const templateQuery = useQuery({
@@ -59,5 +60,18 @@ function EditResourceTemplatePage() {
       </main>
     );
   }
-  return <ResourceTemplateEditor definition={definition} key={template.id} template={template} />;
+  return <ResourceTemplateEditor
+    definition={definition}
+    key={template.id}
+    onSaved={async (savedTemplate) => {
+      if (savedTemplate.id !== id) {
+        await navigate({
+          params: { templateId: String(savedTemplate.id) },
+          replace: true,
+          to: '/admin/resource-templates/$templateId',
+        });
+      }
+    }}
+    template={template}
+  />;
 }

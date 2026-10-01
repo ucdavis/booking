@@ -6,13 +6,13 @@ namespace Server.Core.Forms;
 
 public static class FormDefinitionValidator
 {
-    public const int CurrentSchemaVersion = 1;
     public const int MaxJsonLength = 1024 * 1024;
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         MaxDepth = 16,
     };
 
@@ -22,9 +22,11 @@ public static class FormDefinitionValidator
     public static bool TryParse(int schemaVersion, string? formJson, out FormDefinition? definition, out string? error)
     {
         definition = null;
-        if (schemaVersion != CurrentSchemaVersion)
+        // FormSchemaVersion identifies a saved revision. The document shape determines
+        // whether this builder can understand it, independently of its revision number.
+        if (schemaVersion < 1)
         {
-            error = "This form schema version is not supported.";
+            error = "The form version must be a positive integer.";
             return false;
         }
         if (string.IsNullOrWhiteSpace(formJson) || formJson.Length > MaxJsonLength)
@@ -69,6 +71,23 @@ public static class FormDefinitionValidator
             return false;
         }
     }
+
+    public static bool AreEquivalent(FormDefinition first, FormDefinition second)
+        => Canonicalize(first) == Canonicalize(second);
+
+    // Preserve field and option order while treating omitted optional defaults identically.
+    private static string Canonicalize(FormDefinition definition)
+        => JsonSerializer.Serialize(definition.Fields.Select(field => new
+        {
+            field.Id,
+            field.Type,
+            field.Label,
+            HelpText = field.HelpText ?? string.Empty,
+            Options = field.Options?.Select(option => new { option.Id, option.Label }),
+            Required = field.Validation?.Required ?? false,
+            MinLength = field.Validation?.MinLength,
+            MaxLength = field.Validation?.MaxLength,
+        }), SerializerOptions);
 
     private static string? ValidateField(FormField? field, HashSet<string> fieldIds)
     {

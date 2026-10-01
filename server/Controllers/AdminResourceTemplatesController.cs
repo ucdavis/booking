@@ -55,10 +55,14 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
     public async Task<ActionResult<ResourceTemplateResponse>> CreateTemplate(
         [FromBody] SaveResourceTemplateRequest request, CancellationToken cancellationToken = default)
     {
-        var error = ValidateRequest(request);
+        var error = ValidateRequest(request, out _);
         if (error != null)
         {
             return BadRequest(error);
+        }
+        if (request.FormSchemaVersion != 1)
+        {
+            return BadRequest("A new template must start at version 1.");
         }
         var userId = await GetCurrentUserId(cancellationToken);
         if (userId == null)
@@ -71,7 +75,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
         {
             TeamId = null,
             Name = request.Name.Trim(),
-            FormSchemaVersion = request.FormSchemaVersion,
+            FormSchemaVersion = 1,
             FormJson = request.FormJson,
             IsActive = request.IsActive,
             CreatedAt = now,
@@ -89,7 +93,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
     public async Task<ActionResult<ResourceTemplateResponse>> UpdateTemplate(
         int id, [FromBody] SaveResourceTemplateRequest request, CancellationToken cancellationToken = default)
     {
-        var error = ValidateRequest(request);
+        var error = ValidateRequest(request, out var requestedForm);
         if (error != null)
         {
             return BadRequest(error);
@@ -100,27 +104,114 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             return Forbid();
         }
 
-        var template = await dbContext.ResourceTemplates
+        var template = await dbContext.ResourceTemplates.AsNoTracking()
             .SingleOrDefaultAsync(template => template.Id == id && template.TeamId == null, cancellationToken);
         if (template == null)
         {
             return NotFound("That resource template could not be found.");
         }
 
-        if (template.FormSchemaVersion != FormDefinitionValidator.CurrentSchemaVersion)
+        if (request.UpdatedAt == null)
         {
-            return BadRequest("This saved form schema version is not supported by this editor.");
+            return BadRequest("The saved template timestamp is required when updating a template.");
+        }
+        if (template.FormSchemaVersion != request.FormSchemaVersion || template.UpdatedAt != request.UpdatedAt.Value)
+        {
+            return Conflict("This template has changed since you opened it. Reload it before saving again.");
+        }
+        if (!FormDefinitionValidator.TryParse(template.FormSchemaVersion, template.FormJson, out var savedForm, out error))
+        {
+            return BadRequest(error);
         }
 
-        template.Name = request.Name.Trim();
-        template.FormSchemaVersion = request.FormSchemaVersion;
-        template.FormJson = request.FormJson;
-        template.IsActive = request.IsActive;
-        template.UpdatedAt = DateTimeOffset.UtcNow;
-        template.UpdatedByUserId = userId.Value;
-        await dbContext.SaveChangesAsync(cancellationToken);
+        var formChanged = !FormDefinitionValidator.AreEquivalent(savedForm!, requestedForm!);
+        if (formChanged && template.FormSchemaVersion == int.MaxValue)
+        {
+            return Conflict("This template has reached the maximum supported version and cannot create another revision.");
+        }
+        var now = DateTimeOffset.UtcNow;
+        if (now <= template.UpdatedAt)
+        {
+            if (template.UpdatedAt.Ticks == DateTimeOffset.MaxValue.Ticks)
+            {
+                return Conflict("This template timestamp cannot advance. The template has not been changed.");
+            }
+            now = template.UpdatedAt.AddTicks(1);
+        }
+        var name = formChanged ? template.Name : request.Name.Trim();
+        var isActive = !formChanged && request.IsActive;
+        var isRelational = dbContext.Database.IsRelational();
+        await using var transaction = isRelational
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
 
-        return Ok(ToResponse(template));
+        // Claim this exact saved state before inserting a revision. The transaction keeps
+        // the archive and insert atomic, and the timestamp predicate rejects stale writers.
+        var original = dbContext.ResourceTemplates.Where(current => current.Id == id && current.TeamId == null &&
+            current.FormSchemaVersion == request.FormSchemaVersion && current.UpdatedAt == request.UpdatedAt.Value);
+        if (isRelational)
+        {
+            var updated = await original.ExecuteUpdateAsync(setters => setters
+                .SetProperty(current => current.Name, name)
+                .SetProperty(current => current.IsActive, isActive)
+                .SetProperty(current => current.UpdatedAt, now)
+                .SetProperty(current => current.UpdatedByUserId, userId.Value), cancellationToken);
+            if (updated == 0)
+            {
+                return Conflict("This template has changed since you opened it. Reload it before saving again.");
+            }
+        }
+        else
+        {
+            var tracked = await original.SingleOrDefaultAsync(cancellationToken);
+            if (tracked == null)
+            {
+                return Conflict("This template has changed since you opened it. Reload it before saving again.");
+            }
+            tracked.Name = name;
+            tracked.IsActive = isActive;
+            tracked.UpdatedAt = now;
+            tracked.UpdatedByUserId = userId.Value;
+        }
+
+        ResourceTemplate result;
+        if (formChanged)
+        {
+            result = new ResourceTemplate
+            {
+                TeamId = null,
+                Name = request.Name.Trim(),
+                FormSchemaVersion = template.FormSchemaVersion + 1,
+                FormJson = request.FormJson,
+                ResourceDefaultsJson = template.ResourceDefaultsJson,
+                IsActive = request.IsActive,
+                CreatedAt = now,
+                UpdatedAt = now,
+                UpdatedByUserId = userId.Value,
+            };
+            dbContext.ResourceTemplates.Add(result);
+        }
+        else
+        {
+            // Preserve the exact original JSON when only presentation or metadata changed.
+            template.Name = name;
+            template.IsActive = isActive;
+            template.UpdatedAt = now;
+            template.UpdatedByUserId = userId.Value;
+            result = template;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction != null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        if (formChanged)
+        {
+            return CreatedAtAction(nameof(GetTemplate), new { id = result.Id }, ToResponse(result));
+        }
+        return Ok(ToResponse(result));
     }
 
     [HttpPost("{id:int}/duplicate")]
@@ -151,7 +242,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
         {
             TeamId = null,
             Name = name + suffix,
-            FormSchemaVersion = source.FormSchemaVersion,
+            FormSchemaVersion = 1,
             FormJson = source.FormJson,
             ResourceDefaultsJson = source.ResourceDefaultsJson,
             IsActive = true,
@@ -179,14 +270,15 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    private static string? ValidateRequest(SaveResourceTemplateRequest? request)
+    private static string? ValidateRequest(SaveResourceTemplateRequest? request, out FormDefinition? definition)
     {
+        definition = null;
         if (request == null || string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 200)
         {
             return "Enter a template name of no more than 200 characters.";
         }
 
-        return FormDefinitionValidator.TryParse(request.FormSchemaVersion, request.FormJson, out _, out var error)
+        return FormDefinitionValidator.TryParse(request.FormSchemaVersion, request.FormJson, out definition, out var error)
             ? null : error;
     }
 

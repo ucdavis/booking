@@ -3,4 +3,5 @@ export interface SaveResourceTemplateRequest {
   formSchemaVersion: number;
   isActive: boolean;
   name: string;
+  updatedAt?: string;
 }

@@ -11,7 +11,7 @@ public sealed class SaveResourceTemplateRequest
     [StringLength(200)]
     public string Name { get; init; } = string.Empty;
 
-    [Range(FormDefinitionValidator.CurrentSchemaVersion, FormDefinitionValidator.CurrentSchemaVersion)]
+    [Range(1, int.MaxValue)]
     public int FormSchemaVersion { get; init; }
 
     [Required]
@@ -20,4 +20,6 @@ public sealed class SaveResourceTemplateRequest
 
     [JsonRequired]
     public bool IsActive { get; init; } = true;
+
+    public DateTimeOffset? UpdatedAt { get; init; }
 }
