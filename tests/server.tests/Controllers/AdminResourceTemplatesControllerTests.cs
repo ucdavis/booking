@@ -20,6 +20,13 @@ public class AdminResourceTemplatesControllerTests
     private const string FormJson = """
         {"fields":[{"id":"name","type":"input","label":"Your name","validation":{"required":true,"maxLength":100}}]}
         """;
+    private const string ChangedFormJson = """
+        {"fields":[{"id":"purpose","type":"input","label":"Purpose"}]}
+        """;
+    private const string EmptyFormJson = "{\"fields\":[]}";
+    private const string TextOnlyFormJson = """
+        {"fields":[{"id":"intro","type":"text","label":"Please read these instructions."}]}
+        """;
 
     [Fact]
     public async Task Reads_only_global_templates_including_inactive_templates_without_tracking()
@@ -221,7 +228,7 @@ public class AdminResourceTemplatesControllerTests
         {
             Name = change == "rename" ? "Changed name" : "Original",
             FormSchemaVersion = 1,
-            FormJson = change == "content" ? "{\"fields\":[]}" : FormJson,
+            FormJson = change == "content" ? ChangedFormJson : FormJson,
             IsActive = change == "reactivate",
             UpdatedAt = staleTimestamp ? openedAt : archived.UpdatedAt,
         });
@@ -255,7 +262,7 @@ public class AdminResourceTemplatesControllerTests
 
         var result = await CreateController(db).UpdateTemplate(template.Id, new SaveResourceTemplateRequest
         {
-            Name = "Changed", FormJson = "{\"fields\":[]}", IsActive = true,
+            Name = "Changed", FormJson = ChangedFormJson, IsActive = true,
             FormSchemaVersion = staleVersion ? 2 : 1,
             UpdatedAt = staleVersion ? originalUpdated : originalUpdated.AddTicks(-1),
         });
@@ -279,7 +286,7 @@ public class AdminResourceTemplatesControllerTests
         await db.SaveChangesAsync();
         var request = new SaveResourceTemplateRequest
         {
-            Name = "Revision 2", FormSchemaVersion = 1, FormJson = "{\"fields\":[]}", IsActive = true,
+            Name = "Revision 2", FormSchemaVersion = 1, FormJson = ChangedFormJson, IsActive = true,
             UpdatedAt = template.UpdatedAt,
         };
 
@@ -311,7 +318,7 @@ public class AdminResourceTemplatesControllerTests
         });
         var overflow = await CreateController(db).UpdateTemplate(template.Id, new SaveResourceTemplateRequest
         {
-            Name = "Changed", FormSchemaVersion = int.MaxValue, FormJson = "{\"fields\":[]}", IsActive = true,
+            Name = "Changed", FormSchemaVersion = int.MaxValue, FormJson = ChangedFormJson, IsActive = true,
             UpdatedAt = template.UpdatedAt,
         });
 
@@ -355,7 +362,7 @@ public class AdminResourceTemplatesControllerTests
         copy.UpdatedAt.Should().Be(copy.CreatedAt);
         var revisedCopy = await CreateController(db).UpdateTemplate(copy.Id, new SaveResourceTemplateRequest
         {
-            Name = "Changed copy", FormSchemaVersion = 1, FormJson = "{\"fields\":[]}", IsActive = true,
+            Name = "Changed copy", FormSchemaVersion = 1, FormJson = ChangedFormJson, IsActive = true,
             UpdatedAt = copy.UpdatedAt,
         });
         revisedCopy.Result.Should().BeOfType<CreatedAtActionResult>();
@@ -418,6 +425,119 @@ public class AdminResourceTemplatesControllerTests
         db.ChangeTracker.HasChanges().Should().BeFalse();
         (await db.ResourceTemplates.CountAsync()).Should().Be(1);
         (await db.ResourceTemplates.SingleAsync()).Name.Should().Be("Original");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Empty_forms_cannot_be_created_or_saved(bool isActive)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        await AddAdmin(db);
+        var template = CreateTemplate("Original");
+        db.ResourceTemplates.Add(template);
+        await db.SaveChangesAsync();
+        var originalUpdated = template.UpdatedAt;
+        db.ChangeTracker.Clear();
+        var controller = CreateController(db);
+        var request = new SaveResourceTemplateRequest
+        {
+            Name = "Empty form", FormSchemaVersion = 1, FormJson = EmptyFormJson,
+            IsActive = isActive, UpdatedAt = originalUpdated,
+        };
+
+        var created = await controller.CreateTemplate(request);
+        var updated = await controller.UpdateTemplate(template.Id, request);
+
+        created.Result.Should().BeOfType<BadRequestObjectResult>().Which.Value.Should()
+            .Be("Add at least one form field before saving the template.");
+        updated.Result.Should().BeOfType<BadRequestObjectResult>().Which.Value.Should()
+            .Be("Add at least one form field before saving the template.");
+        db.ChangeTracker.HasChanges().Should().BeFalse();
+        var saved = await db.ResourceTemplates.SingleAsync();
+        saved.Name.Should().Be("Original");
+        saved.FormJson.Should().Be(FormJson);
+        saved.IsActive.Should().BeTrue();
+        saved.UpdatedAt.Should().Be(originalUpdated);
+    }
+
+    [Fact]
+    public async Task Duplicate_rejects_an_empty_saved_form_without_creating_a_copy()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        await AddAdmin(db);
+        var source = CreateTemplate("Empty form");
+        source.FormJson = EmptyFormJson;
+        db.ResourceTemplates.Add(source);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await CreateController(db).DuplicateTemplate(source.Id);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>().Which.Value.Should()
+            .Be("Add at least one form field before saving the template.");
+        db.ChangeTracker.HasChanges().Should().BeFalse();
+        (await db.ResourceTemplates.SingleAsync()).FormJson.Should().Be(source.FormJson);
+    }
+
+    [Fact]
+    public async Task An_existing_empty_form_can_be_opened_and_repaired()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        await AddAdmin(db);
+        var source = CreateTemplate("Empty form");
+        source.FormJson = EmptyFormJson;
+        db.ResourceTemplates.Add(source);
+        await db.SaveChangesAsync();
+        var controller = CreateController(db);
+
+        ReadOk(await controller.GetTemplate(source.Id)).FormJson.Should().Be(source.FormJson);
+        var result = await controller.UpdateTemplate(source.Id, new SaveResourceTemplateRequest
+        {
+            Name = source.Name, FormSchemaVersion = 1, FormJson = FormJson, IsActive = true,
+            UpdatedAt = source.UpdatedAt,
+        });
+
+        var response = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject.Value
+            .Should().BeOfType<ResourceTemplateResponse>().Subject;
+        response.FormJson.Should().Be(FormJson);
+        response.FormSchemaVersion.Should().Be(2);
+        response.IsActive.Should().BeTrue();
+        (await db.ResourceTemplates.CountAsync()).Should().Be(2);
+        var archived = await db.ResourceTemplates.SingleAsync(template => template.Id == source.Id);
+        archived.FormJson.Should().Be(EmptyFormJson);
+        archived.IsActive.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_single_text_block_can_be_created_saved_and_duplicated()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        await AddAdmin(db);
+        var source = CreateTemplate("Original");
+        db.ResourceTemplates.Add(source);
+        await db.SaveChangesAsync();
+        var controller = CreateController(db);
+        var request = new SaveResourceTemplateRequest
+        {
+            Name = "Instructions", FormSchemaVersion = 1, FormJson = TextOnlyFormJson, IsActive = true,
+            UpdatedAt = source.UpdatedAt,
+        };
+
+        var created = await controller.CreateTemplate(request);
+        var updated = await controller.UpdateTemplate(source.Id, request);
+        var revision = updated.Result.Should().BeOfType<CreatedAtActionResult>().Subject.Value
+            .Should().BeOfType<ResourceTemplateResponse>().Subject;
+        var duplicated = await controller.DuplicateTemplate(revision.Id);
+
+        foreach (var result in new[] { created, updated, duplicated })
+        {
+            var response = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject.Value
+                .Should().BeOfType<ResourceTemplateResponse>().Subject;
+            response.FormJson.Should().Be(TextOnlyFormJson);
+            response.IsActive.Should().BeTrue();
+        }
+        (await db.ResourceTemplates.CountAsync()).Should().Be(4);
     }
 
     [Fact]

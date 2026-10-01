@@ -17,13 +17,13 @@ import {
 } from '@/queries/resourceTemplates.ts';
 
 export function ResourceTemplateEditor({
-  template,
   definition,
   onSaved,
+  template,
 }: {
-  template?: ResourceTemplate;
   definition: FormDefinition;
   onSaved?: (saved: ResourceTemplate) => void | Promise<void>;
+  template?: ResourceTemplate;
 }) {
   const queryClient = useQueryClient();
   const [baseline, setBaseline] = useState({ definition, template });
@@ -47,7 +47,9 @@ export function ResourceTemplateEditor({
       name: currentTemplate?.name ?? '',
     },
     onSubmit: async ({ value }) => {
-      if (isReadOnly || saveFlowRef.current) return;
+      if (isReadOnly || saveFlowRef.current) {
+        return;
+      }
       saveFlowRef.current = true;
       setIsSaving(true);
       setSaved(false);
@@ -85,6 +87,9 @@ export function ResourceTemplateEditor({
         }
         if (value.description.trim().length > 2000) {
           return 'Enter a description of 2,000 characters or fewer.';
+        }
+        if (value.definition.fields.length === 0) {
+          return 'Add at least one form field before saving the template.';
         }
         const errors = validateFormDefinition(value.definition);
         return errors.length ? errors.join(' ') : undefined;
@@ -148,7 +153,9 @@ export function ResourceTemplateEditor({
         onChange={() => { setSaved(false); saveMutation.reset(); }}
         onSubmit={(event) => {
           event.preventDefault();
-          if (!isReadOnly && !saveFlowRef.current && !form.state.isSubmitting) void form.handleSubmit();
+          if (!isReadOnly && !saveFlowRef.current && !form.state.isSubmitting) {
+            void form.handleSubmit();
+          }
         }}
       >
         <form.Subscribe selector={(state) => state.isSubmitting}>

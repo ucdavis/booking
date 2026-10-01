@@ -174,6 +174,83 @@ function mockTemplateStore(initial: ResourceTemplate[] = [makeTemplate()]) {
 }
 
 describe('site admin resource templates', () => {
+  it.each([
+    {
+      action: 'Create template',
+      fieldType: 'Input',
+      initialPath: '/admin/resource-templates/new',
+      type: 'input',
+    },
+    {
+      action: 'Create template',
+      fieldType: 'Text block',
+      initialPath: '/admin/resource-templates/new',
+      type: 'text',
+    },
+    {
+      action: 'Save template',
+      fieldType: 'Input',
+      initialPath: '/admin/resource-templates/1',
+      type: 'input',
+    },
+    {
+      action: 'Save template',
+      fieldType: 'Text block',
+      initialPath: '/admin/resource-templates/1',
+      type: 'text',
+    },
+  ])(
+    'requires a form item before $action and accepts $fieldType',
+    async ({ action, fieldType, initialPath, type }) => {
+      mockAdminAccess();
+      const original = makeTemplate({
+        formJson: JSON.stringify({
+          fields: [{ id: 'name', label: 'Visitor name', type: 'input' }],
+        }),
+      });
+      const { saves, templates } = mockTemplateStore([original]);
+      ({ cleanup } = renderRoute({ initialPath }));
+      fireEvent.change(
+        await screen.findByRole('textbox', { name: 'Template name' }),
+        { target: { value: 'Camera checkout' } }
+      );
+      if (action === 'Save template') {
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Remove Visitor name' })
+        );
+      }
+
+      fireEvent.click(screen.getByRole('button', { name: action }));
+      expect(
+        await screen.findByText(
+          'Add at least one form field before saving the template.'
+        )
+      ).toBeInTheDocument();
+      expect(saves).toHaveLength(0);
+      expect(templates.get(1)).toEqual(original);
+
+      fireEvent.click(screen.getByRole('button', { name: `Add ${fieldType}` }));
+      fireEvent.click(screen.getByRole('button', { name: action }));
+      await waitFor(() => expect(saves).toHaveLength(1));
+      expect(JSON.parse(saves[0].body.formJson).fields).toEqual([
+        expect.objectContaining({ type }),
+      ]);
+    }
+  );
+
+  it('lets an existing empty template be opened and repaired before saving', async () => {
+    mockAdminAccess();
+    const { saves } = mockTemplateStore([
+      makeTemplate({ formJson: '{"fields":[]}' }),
+    ]);
+    ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add Input' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+    await waitFor(() => expect(saves).toHaveLength(1));
+    expect(JSON.parse(saves[0].body.formJson).fields.at(-1).type).toBe('input');
+  });
+
   it('creates a template from the admin list and opens the saved form', async () => {
     mockAdminAccess();
     const { saves, templates } = mockTemplateStore([]);

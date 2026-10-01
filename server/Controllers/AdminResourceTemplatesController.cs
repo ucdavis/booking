@@ -242,7 +242,8 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
         {
             return NotFound("That resource template could not be found.");
         }
-        if (!FormDefinitionValidator.TryParse(source.FormSchemaVersion, source.FormJson, out _, out var error))
+        var error = ValidateFormForSave(source.FormSchemaVersion, source.FormJson, out _);
+        if (error != null)
         {
             return BadRequest(error);
         }
@@ -295,8 +296,19 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             return "Enter a template description of no more than 2,000 characters.";
         }
 
-        return FormDefinitionValidator.TryParse(request.FormSchemaVersion, request.FormJson, out definition, out var error)
-            ? null : error;
+        return ValidateFormForSave(request.FormSchemaVersion, request.FormJson, out definition);
+    }
+
+    private static string? ValidateFormForSave(int schemaVersion, string formJson, out FormDefinition? definition)
+    {
+        if (!FormDefinitionValidator.TryParse(schemaVersion, formJson, out definition, out var error))
+        {
+            return error;
+        }
+
+        return definition!.Fields.Count > 0
+            ? null
+            : "Add at least one form field before saving the template.";
     }
 
     private static ResourceTemplateResponse ToResponse(ResourceTemplate template) => new()
