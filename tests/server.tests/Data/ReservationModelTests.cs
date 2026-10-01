@@ -62,6 +62,24 @@ public class ReservationModelTests
         context.Database.HasPendingModelChanges().Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData(TeamRole.Admin, "admin")]
+    [InlineData(TeamRole.Editor, "editor")]
+    [InlineData(TeamRole.Viewer, "viewer")]
+    public void Team_role_enum_preserves_existing_text_storage(TeamRole role, string storedValue)
+    {
+        using var context = CreateContext();
+        var property = context.Model.FindEntityType(typeof(TeamPermission))!.FindProperty(nameof(TeamPermission.Role))!;
+        var converter = property.GetValueConverter()!;
+
+        property.GetColumnType().Should().Be("nvarchar(20)");
+        property.IsNullable.Should().BeFalse();
+        converter.ConvertToProvider(role).Should().Be(storedValue);
+        converter.ConvertFromProvider(storedValue).Should().Be(role);
+        context.Database.GenerateCreateScript().Should()
+            .Contain("CHECK ([Role] IN ('admin', 'editor', 'viewer'))");
+    }
+
     [Fact]
     public void Composite_foreign_keys_preserve_resource_and_request_ownership()
     {

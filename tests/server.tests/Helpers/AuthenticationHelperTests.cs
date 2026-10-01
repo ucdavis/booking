@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Routing;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
@@ -17,6 +19,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Server.Controllers;
 using Server.Core.Data;
+using Server.Core.Domain;
 using Server.Helpers;
 using Server.Services;
 
@@ -75,18 +78,18 @@ public class AuthenticationHelperTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false, true, "admin", "team-a", true)]
-    [InlineData(false, true, "editor", "team-a", true)]
-    [InlineData(false, true, "viewer", "team-a", true)]
-    [InlineData(false, true, "admin", "team-b", false)]
-    [InlineData(false, true, "unknown", "team-a", false)]
+    [InlineData(false, true, TeamRole.Admin, "team-a", true)]
+    [InlineData(false, true, TeamRole.Editor, "team-a", true)]
+    [InlineData(false, true, TeamRole.Viewer, "team-a", true)]
+    [InlineData(false, true, TeamRole.Admin, "team-b", false)]
+    [InlineData(false, true, (TeamRole)999, "team-a", false)]
     [InlineData(false, true, null, "team-a", false)]
-    [InlineData(false, false, "admin", "team-a", false)]
+    [InlineData(false, false, TeamRole.Admin, "team-a", false)]
     [InlineData(true, true, null, "team-b", true)]
-    [InlineData(true, true, "viewer", "team-b", true)]
-    [InlineData(true, false, "admin", "team-a", false)]
+    [InlineData(true, true, TeamRole.Viewer, "team-b", true)]
+    [InlineData(true, false, TeamRole.Admin, "team-a", false)]
     public async Task Team_policy_uses_active_database_access_for_the_requested_slug(
-        bool isAdmin, bool isActive, string? role, string slug, bool expectedAccess)
+        bool isAdmin, bool isActive, TeamRole? role, string slug, bool expectedAccess)
     {
         var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var user = new Server.Core.Domain.User
@@ -98,7 +101,7 @@ public class AuthenticationHelperTests : IDisposable
         db.Teams.AddRange(team, new Server.Core.Domain.Team { Name = "Team B", Slug = "team-b" });
         if (role != null)
         {
-            db.TeamPermissions.Add(new Server.Core.Domain.TeamPermission { User = user, Team = team, Role = role });
+            db.TeamPermissions.Add(new Server.Core.Domain.TeamPermission { User = user, Team = team, Role = role.Value });
         }
         await db.SaveChangesAsync();
         var principal = CreatePrincipal();
@@ -153,7 +156,7 @@ public class AuthenticationHelperTests : IDisposable
         var user = new Server.Core.Domain.User { IamId = "sandbox-10001", Name = "Member" };
         var permission = new Server.Core.Domain.TeamPermission
         {
-            User = user, Team = new Server.Core.Domain.Team { Name = "Team A", Slug = "team-a" }, Role = "viewer",
+            User = user, Team = new Server.Core.Domain.Team { Name = "Team A", Slug = "team-a" }, Role = TeamRole.Viewer,
         };
         db.TeamPermissions.Add(permission);
         await db.SaveChangesAsync();
@@ -179,6 +182,86 @@ public class AuthenticationHelperTests : IDisposable
         await db.SaveChangesAsync();
 
         (await AuthorizeTeam(_scope.ServiceProvider, CreatePrincipal(), "missing")).Succeeded.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(false, true, TeamRole.Admin, true)]
+    [InlineData(false, true, TeamRole.Editor, false)]
+    [InlineData(false, true, TeamRole.Viewer, false)]
+    [InlineData(false, true, (TeamRole)999, false)]
+    [InlineData(false, true, null, false)]
+    [InlineData(false, false, TeamRole.Admin, false)]
+    [InlineData(true, true, null, true)]
+    [InlineData(true, true, TeamRole.Viewer, true)]
+    [InlineData(true, false, TeamRole.Admin, false)]
+    public async Task Team_admin_policy_requires_an_active_site_admin_or_an_admin_on_the_requested_team(
+        bool isAdmin, bool isActive, TeamRole? role, bool expectedAccess)
+    {
+        var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = new User { IamId = "sandbox-10001", Name = "Member", IsAdmin = isAdmin, IsActive = isActive };
+        var team = new Team { Name = "Team A", Slug = "team-a" };
+        db.Users.Add(user);
+        db.Teams.AddRange(team, new Team { Name = "Team B", Slug = "team-b" });
+        if (role != null)
+        {
+            db.TeamPermissions.Add(new TeamPermission { User = user, Team = team, Role = role.Value });
+        }
+        await db.SaveChangesAsync();
+        var principal = CreatePrincipal();
+        ((ClaimsIdentity)principal.Identity!).AddClaim(new Claim(ClaimTypes.Role, "Admin"));
+
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamAdminPolicy))
+            .Succeeded.Should().Be(expectedAccess);
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-b", AuthenticationHelper.TeamAdminPolicy))
+            .Succeeded.Should().Be(isAdmin && isActive);
+    }
+
+    [Fact]
+    public async Task Team_admin_policy_requires_route_slug_authenticated_identity_and_http_context()
+    {
+        var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Users.Add(new User { IamId = "sandbox-10001", Name = "Admin", IsAdmin = true });
+        await db.SaveChangesAsync();
+        var principal = CreatePrincipal();
+        var services = _scope.ServiceProvider;
+        var missingIam = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, "Admin")], "Test"));
+        var unauthenticated = new ClaimsPrincipal(new ClaimsIdentity(principal.Claims));
+
+        (await AuthorizeTeam(services, principal, null, AuthenticationHelper.TeamAdminPolicy)).Succeeded.Should().BeFalse();
+        (await AuthorizeTeam(services, principal, " ", AuthenticationHelper.TeamAdminPolicy)).Succeeded.Should().BeFalse();
+        (await AuthorizeTeam(services, missingIam, "team-a", AuthenticationHelper.TeamAdminPolicy)).Succeeded.Should().BeFalse();
+        (await AuthorizeTeam(services, unauthenticated, "team-a", AuthenticationHelper.TeamAdminPolicy)).Succeeded.Should().BeFalse();
+        (await services.GetRequiredService<IAuthorizationService>().AuthorizeAsync(principal, null, AuthenticationHelper.TeamAdminPolicy))
+            .Succeeded.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Team_admin_policy_observes_demotion_and_user_deactivation_without_a_new_login()
+    {
+        var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = new User { IamId = "sandbox-10001", Name = "Member" };
+        var permission = new TeamPermission
+        {
+            User = user, Team = new Team { Name = "Team A", Slug = "team-a" }, Role = TeamRole.Admin,
+        };
+        db.TeamPermissions.Add(permission);
+        await db.SaveChangesAsync();
+        var principal = CreatePrincipal();
+
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamAdminPolicy))
+            .Succeeded.Should().BeTrue();
+        permission.Role = TeamRole.Editor;
+        await db.SaveChangesAsync();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamAdminPolicy))
+            .Succeeded.Should().BeFalse();
+        user.IsAdmin = true;
+        await db.SaveChangesAsync();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamAdminPolicy))
+            .Succeeded.Should().BeTrue();
+        user.IsActive = false;
+        await db.SaveChangesAsync();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamAdminPolicy))
+            .Succeeded.Should().BeFalse();
     }
 
     [Fact]
@@ -264,7 +347,7 @@ public class AuthenticationHelperTests : IDisposable
         {
             User = user,
             Team = new Server.Core.Domain.Team { Name = "Test Team", Slug = "test-team" },
-            Role = "admin",
+            Role = TeamRole.Admin,
         });
         await db.SaveChangesAsync();
         var principal = CreatePrincipal();
@@ -653,7 +736,9 @@ public class AuthenticationHelperTests : IDisposable
         var context = await SignIn(scope.ServiceProvider, principal, local: true);
         var options = scope.ServiceProvider.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
             .Get(LocalAuthentication.Scheme);
-        var cookieValue = context.Response.Headers.SetCookie.Single()!.Split(';')[0].Split('=', 2)[1];
+        var cookieValue = context.Response.Headers.SetCookie
+            .Single(cookie => cookie!.StartsWith(options.Cookie.Name + "=", StringComparison.Ordinal))!
+            .Split(';')[0].Split('=', 2)[1];
         var ticket = options.TicketDataFormat.Unprotect(Uri.UnescapeDataString(cookieValue));
 
         ticket.Should().NotBeNull();
@@ -661,6 +746,82 @@ public class AuthenticationHelperTests : IDisposable
         ticket.Principal.IsInRole("SampleRole").Should().Be(hasSampleRole);
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         (await db.Users.CountAsync()).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task People_login_saves_directory_profile_and_preserves_existing_application_permissions(bool existingUser, bool isAdmin)
+    {
+        using var provider = CreateProvider(local: true);
+        using var scope = provider.CreateScope();
+        var services = scope.ServiceProvider;
+        var db = services.GetRequiredService<AppDbContext>();
+        var person = new Person
+        {
+            IamId = "10010001", FullName = "Jordan Demo", Email = "jordan@example.test", UserId = "jdemo", IsActiveInIam = true,
+        };
+        db.People.Add(person);
+        var createdAt = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var previousUser = new User
+        {
+            IamId = person.IamId, Name = "Previous Name", Email = "previous@example.test", IsAdmin = isAdmin,
+            CreatedAt = createdAt, UpdatedAt = createdAt, LastLoginAt = createdAt,
+        };
+        if (existingUser)
+        {
+            db.TeamPermissions.Add(new TeamPermission
+            {
+                User = previousUser, Team = new Team { Name = "Demo", Slug = "demo" }, Role = TeamRole.Admin,
+            });
+        }
+        await db.SaveChangesAsync();
+        var controller = new AccountController(services.GetRequiredService<IConfiguration>(), services.GetRequiredService<IHostEnvironment>())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { RequestServices = services }, RouteData = new RouteData(),
+            },
+        };
+        controller.Url = new UrlHelper(controller.ControllerContext);
+        var startedAt = DateTimeOffset.UtcNow;
+
+        var result = await controller.LocalPersonLogin(person.Email, "/teams/demo", db);
+
+        result.Should().BeOfType<LocalRedirectResult>().Which.Url.Should().Be("/teams/demo");
+        db.ChangeTracker.Clear();
+        var user = await db.Users.SingleAsync();
+        user.IamId.Should().Be(person.IamId);
+        user.Name.Should().Be(person.FullName);
+        user.Email.Should().Be(person.Email);
+        user.IsAdmin.Should().Be(isAdmin);
+        user.IsActive.Should().BeTrue();
+        user.LastLoginAt.Should().Be(user.UpdatedAt);
+        user.UpdatedAt.Should().BeOnOrAfter(startedAt).And.BeOnOrBefore(DateTimeOffset.UtcNow);
+        if (existingUser)
+        {
+            user.Id.Should().Be(previousUser.Id);
+            user.CreatedAt.Should().Be(createdAt);
+            (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Admin);
+        }
+        else
+        {
+            user.CreatedAt.Should().BeOnOrAfter(startedAt);
+            (await db.TeamPermissions.AnyAsync()).Should().BeFalse();
+        }
+
+        var options = services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>().Get(LocalAuthentication.Scheme);
+        var cookieValue = controller.Response.Headers.SetCookie
+            .Single(cookie => cookie!.StartsWith(options.Cookie.Name + "=", StringComparison.Ordinal))!
+            .Split(';')[0].Split('=', 2)[1];
+        var ticket = options.TicketDataFormat.Unprotect(Uri.UnescapeDataString(cookieValue));
+        ticket.Should().NotBeNull();
+        ticket!.Principal.FindFirst(ClaimTypes.NameIdentifier)!.Value.Should().Be("local-person:10010001");
+        ticket.Principal.FindAll(ClaimTypes.Role).Select(claim => claim.Value).Should().Equal("User");
+        (await AuthorizeSiteAdmin(services, ticket.Principal)).Succeeded.Should().Be(isAdmin);
+        (await AuthorizeTeam(services, ticket.Principal, "demo", AuthenticationHelper.TeamAdminPolicy))
+            .Succeeded.Should().Be(existingUser);
     }
 
     [Fact]
@@ -843,7 +1004,8 @@ public class AuthenticationHelperTests : IDisposable
             .AuthorizeAsync(principal, context, AuthenticationHelper.SiteAdminPolicy);
     }
 
-    private static Task<AuthorizationResult> AuthorizeTeam(IServiceProvider services, ClaimsPrincipal principal, string? slug)
+    private static Task<AuthorizationResult> AuthorizeTeam(IServiceProvider services, ClaimsPrincipal principal, string? slug,
+        string policy = AuthenticationHelper.TeamAccessPolicy)
     {
         var context = new DefaultHttpContext { RequestServices = services, User = principal };
         if (slug != null)
@@ -852,7 +1014,7 @@ public class AuthenticationHelperTests : IDisposable
         }
 
         return services.GetRequiredService<IAuthorizationService>()
-            .AuthorizeAsync(principal, context, AuthenticationHelper.TeamAccessPolicy);
+            .AuthorizeAsync(principal, context, policy);
     }
 
     private static async Task<DefaultHttpContext> SignIn(

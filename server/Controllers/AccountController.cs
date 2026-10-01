@@ -1,7 +1,11 @@
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Server.Core.Data;
 using Server.Helpers;
 
 namespace Server.Controllers;
@@ -48,6 +52,26 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
         return LocalRedirect(Url.IsLocalUrl(returnUrl) ? returnUrl! : "/");
     }
 
+    [HttpGet("logout/antiforgery")]
+    public IActionResult LogoutAntiforgery([FromServices] IAntiforgery antiforgery)
+    {
+        var tokens = antiforgery.GetAndStoreTokens(HttpContext);
+        return Ok(new { tokens.FormFieldName, tokens.RequestToken });
+    }
+
+    [HttpPost("logout")]
+    [ValidateAntiForgeryToken]
+    public IActionResult Logout()
+    {
+        if (LocalAuthentication.IsEnabled(configuration, environment))
+        {
+            return SignOut(new AuthenticationProperties { RedirectUri = "/login" }, LocalAuthentication.Scheme);
+        }
+
+        return SignOut(new AuthenticationProperties { RedirectUri = "/about" },
+            CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme);
+    }
+
     [HttpPost("logout/local")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> LocalLogout()
@@ -59,5 +83,62 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
 
         await HttpContext.SignOutAsync(LocalAuthentication.Scheme);
         return LocalRedirect("/login");
+    }
+
+    [HttpPost("login/local/person")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> LocalPersonLogin(
+        [FromForm] string? query, [FromForm] string? returnUrl, [FromServices] AppDbContext dbContext,
+        CancellationToken cancellationToken = default)
+    {
+        if (!LocalAuthentication.IsEnabled(configuration, environment))
+        {
+            return NotFound();
+        }
+
+        var search = query?.Trim();
+        if (string.IsNullOrEmpty(search) || search.Length > 128)
+        {
+            return PersonLoginError(search, returnUrl, "Enter a complete email, IAM ID, or Kerberos ID of no more than 128 characters.");
+        }
+
+        var people = await dbContext.People.AsNoTracking()
+            .Where(person => person.Email == search || person.IamId == search || person.UserId == search)
+            .Take(2)
+            .ToListAsync(cancellationToken);
+        if (people.Count == 0)
+        {
+            return PersonLoginError(search, returnUrl, "No person matched that email or ID. Check the People table and try again.");
+        }
+        if (people.Count > 1)
+        {
+            return PersonLoginError(search, returnUrl, "More than one person matched. Enter their unique IAM ID instead.");
+        }
+
+        var person = people[0];
+        var principal = LocalAuthentication.CreatePersonPrincipal(person);
+        if (principal == null)
+        {
+            return PersonLoginError(search, returnUrl, "This person is inactive in IAM and cannot sign in.");
+        }
+
+        var iamId = person.IamId.Trim();
+        if (await dbContext.Users.AnyAsync(user => user.IamId == iamId && !user.IsActive, cancellationToken))
+        {
+            return PersonLoginError(search, returnUrl, "This user's application account is inactive and cannot sign in.");
+        }
+
+        // The normal local-cookie sign-in event saves the profile and preserves application permissions.
+        await HttpContext.SignInAsync(LocalAuthentication.Scheme, principal);
+        return LocalRedirect(Url.IsLocalUrl(returnUrl) ? returnUrl! : "/");
+    }
+
+    private ViewResult PersonLoginError(string? query, string? returnUrl, string message)
+    {
+        ViewData["PeopleQuery"] = query;
+        ModelState.AddModelError("query", message);
+        var view = View("LocalLogin", Url.IsLocalUrl(returnUrl) ? returnUrl! : "/");
+        view.StatusCode = StatusCodes.Status400BadRequest;
+        return view;
     }
 }

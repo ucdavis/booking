@@ -794,6 +794,10 @@ namespace Server.Core.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
                     b.Property<string>("FormJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
