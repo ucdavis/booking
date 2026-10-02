@@ -243,6 +243,34 @@ describe('team members', () => {
     expect(dialog.getByRole('button', { name: 'Add member' })).toBeEnabled();
   });
 
+  it('allows a local user with unchecked IAM status to be selected for addition', async () => {
+    mockAccess();
+    server.use(
+      http.get('/api/teams/plant-sciences/members/people', () =>
+        HttpResponse.json([{ ...person, isActiveInIam: null }])
+      )
+    );
+    ({ cleanup } = renderRoute({
+      initialPath: '/teams/plant-sciences/members',
+    }));
+    const dialog = await openAddDialog();
+    fireEvent.change(
+      dialog.getByRole('textbox', { name: 'Email, IAM ID, or Kerberos ID' }),
+      { target: { value: person.email } }
+    );
+    fireEvent.click(dialog.getByRole('button', { name: 'Search' }));
+
+    const match = await dialog.findByRole('radio', { name: 'Sam Smith' });
+    expect(match).toBeEnabled();
+    expect(match).toBeChecked();
+    expect(dialog.getByText('Not checked')).toHaveClass('badge-neutral');
+    expect(dialog.queryByText('Inactive')).not.toBeInTheDocument();
+    expect(
+      dialog.queryByText('This person is inactive in IAM and cannot be added.')
+    ).not.toBeInTheDocument();
+    expect(dialog.getByRole('button', { name: 'Add member' })).toBeEnabled();
+  });
+
   it('defaults additions to Editor, offers only Admin and Editor, and posts the selected IAM ID with a team token', async () => {
     mockAccess();
     let added = false;

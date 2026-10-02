@@ -26,9 +26,9 @@ public class UserController(IUserService userService, AppDbContext dbContext) : 
 
         var kerberos = string.IsNullOrWhiteSpace(iamId)
             ? null
-            : await dbContext.People.AsNoTracking()
-                .Where(person => person.IamId == iamId)
-                .Select(person => person.UserId)
+            : await dbContext.Users.AsNoTracking()
+                .Where(user => user.IamId == iamId)
+                .Select(user => user.Kerberos)
                 .SingleOrDefaultAsync(cancellationToken);
 
         var userInfo = new

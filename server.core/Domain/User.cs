@@ -23,6 +23,9 @@ public class User
     [MaxLength(320)]
     public string? Email { get; set; }
 
+    [MaxLength(64)]
+    public string? Kerberos { get; set; }
+
     public bool IsAdmin { get; set; }
 
     public bool IsActive { get; set; } = true;

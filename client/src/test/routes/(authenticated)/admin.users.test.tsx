@@ -217,6 +217,34 @@ describe('site admin users', () => {
     }
   );
 
+  it('allows a local user with unchecked IAM status to be selected for addition', async () => {
+    mockAdminAccess();
+    server.use(
+      http.get('/api/admin/people', () =>
+        HttpResponse.json([{ ...person, isActiveInIam: null }])
+      )
+    );
+    ({ cleanup } = renderRoute({ initialPath: '/admin/users' }));
+    const dialog = await openAddDialog();
+    fireEvent.change(
+      dialog.getByRole('textbox', { name: 'Email, IAM ID, or Kerberos ID' }),
+      { target: { value: person.email } }
+    );
+    fireEvent.click(dialog.getByRole('button', { name: 'Search' }));
+
+    const match = await dialog.findByRole('radio', { name: 'Sam Smith' });
+    expect(match).toBeEnabled();
+    expect(match).toBeChecked();
+    expect(dialog.getByText('Not checked')).toHaveClass('badge-neutral');
+    expect(dialog.queryByText('Inactive')).not.toBeInTheDocument();
+    expect(
+      dialog.queryByText('This person is inactive in IAM and cannot be added.')
+    ).not.toBeInTheDocument();
+    expect(
+      dialog.getByRole('button', { name: 'Add admin user' })
+    ).toBeEnabled();
+  });
+
   it('adds the selected IAM ID with an antiforgery token and refreshes the admins', async () => {
     mockAdminAccess();
     let added = false;

@@ -50,14 +50,14 @@
     </form>
     <section class="person-sign-in" aria-labelledby="person-sign-in-heading">
         <h2 id="person-sign-in-heading">Sign in as a person</h2>
-        <p>Use a person from the People table to try their existing site and team access.</p>
+        <p>Find an existing Booking user or a person in the campus directory to try their site and team access.</p>
         <form action="/login/local/person" method="post">
             @Html.AntiForgeryToken()
             <input type="hidden" name="returnUrl" value="@Model" />
             <label for="people-query">Email, IAM ID, or Kerberos ID</label>
             <input id="people-query" name="query" type="text" value="@ViewData["PeopleQuery"]"
                    maxlength="128" required autocomplete="off" aria-describedby="people-query-hint people-query-error" />
-            <p class="hint" id="people-query-hint">Enter a complete email address or ID. The person must be active in IAM. Existing inactive application accounts cannot sign in.</p>
+            <p class="hint" id="people-query-hint">Enter a complete email address or ID. New users need an IAM ID, Kerberos ID, and email in the campus directory. Existing inactive application accounts cannot sign in.</p>
             <span class="validation-error" id="people-query-error" role="alert">@Html.ValidationMessage("query")</span>
             <button type="submit"><strong>Sign in as this person</strong></button>
         </form>

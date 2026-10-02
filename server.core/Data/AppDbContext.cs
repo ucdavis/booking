@@ -5,8 +5,6 @@ namespace Server.Core.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
-    public DbSet<Person> People => Set<Person>();
-
     public DbSet<WeatherForecast> WeatherForecasts => Set<WeatherForecast>();
 
     public DbSet<User> Users => Set<User>();
@@ -59,10 +57,5 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         ScheduleException.OnModelCreating(modelBuilder);
         CalendarFeed.OnModelCreating(modelBuilder);
 
-        // Booking manages the lookup schema; Fabric supplies the people data.
-        modelBuilder.Entity<Person>()
-            .HasKey(person => person.IamId)
-            .HasName("PK_People")
-            .IsClustered();
     }
 }

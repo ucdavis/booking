@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Data;
 using Server.Core.Domain;
+using Server.Helpers;
 
 namespace Server.Services;
 
@@ -16,12 +17,15 @@ public class UserService : IUserService
 {
     private readonly ILogger<UserService> _logger;
     private readonly AppDbContext _dbContext;
+    private readonly IRosettaService _rosettaService;
     private readonly HashSet<string> _developmentAdminIamIds;
 
-    public UserService(ILogger<UserService> logger, AppDbContext dbContext, IConfiguration configuration, IHostEnvironment environment)
+    public UserService(ILogger<UserService> logger, AppDbContext dbContext, IConfiguration configuration, IHostEnvironment environment,
+        IRosettaService rosettaService)
     {
         _logger = logger;
         _dbContext = dbContext;
+        _rosettaService = rosettaService;
         _developmentAdminIamIds = environment.IsDevelopment()
             ? (configuration["DevelopmentData:AdminIamIds"] ?? string.Empty)
                 .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
@@ -55,14 +59,30 @@ public class UserService : IUserService
             throw new InvalidOperationException("An IAM ID and name are required to save the user at login.");
         }
 
-        var email = principal.FindFirst("preferred_username")?.Value
-            ?? principal.FindFirst(ClaimTypes.Email)?.Value
-            ?? principal.FindFirst("email")?.Value;
+        var isLocalLogin = principal.Identity.AuthenticationType == LocalAuthentication.Scheme;
+        var kerberos = isLocalLogin ? principal.FindFirst(LocalAuthentication.KerberosClaimType)?.Value?.Trim() : null;
+        var email = isLocalLogin
+            ? principal.FindFirst("preferred_username")?.Value
+                ?? principal.FindFirst(ClaimTypes.Email)?.Value
+                ?? principal.FindFirst("email")?.Value
+            : null;
         var user = await _dbContext.Users.SingleOrDefaultAsync(user => user.IamId == iamId, cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var isNewUser = user == null;
         if (user == null)
         {
+            // Local sandbox identities are deliberately independent of external directory services.
+            if (!isLocalLogin)
+            {
+                var person = await _rosettaService.FindByIamIdAsync(iamId, cancellationToken);
+                if (person != null)
+                {
+                    name = person.Name;
+                    email = person.Email;
+                    kerberos = person.Kerberos;
+                }
+            }
+
             user = new User
             {
                 IamId = iamId,
@@ -71,10 +91,15 @@ public class UserService : IUserService
             };
             _dbContext.Users.Add(user);
         }
+        else if (!isLocalLogin)
+        {
+            // Entra's login address may be a health address. Preserve the saved campus email.
+            email = user.Email;
+        }
 
         try
         {
-            await SaveLoginDetails(user, name, email, now, cancellationToken);
+            await SaveLoginDetails(user, name, email, kerberos, now, cancellationToken);
         }
         catch (DbUpdateException) when (isNewUser)
         {
@@ -86,14 +111,20 @@ public class UserService : IUserService
                 throw;
             }
 
-            await SaveLoginDetails(existingUser, name, email, DateTimeOffset.UtcNow, cancellationToken);
+            await SaveLoginDetails(existingUser, name, isLocalLogin ? email : existingUser.Email,
+                kerberos, DateTimeOffset.UtcNow, cancellationToken);
         }
     }
 
-    private async Task SaveLoginDetails(User user, string name, string? email, DateTimeOffset now, CancellationToken cancellationToken)
+    private async Task SaveLoginDetails(User user, string name, string? email, string? kerberos,
+        DateTimeOffset now, CancellationToken cancellationToken)
     {
         user.Name = name;
         user.Email = email;
+        if (string.IsNullOrWhiteSpace(user.Kerberos) && !string.IsNullOrWhiteSpace(kerberos))
+        {
+            user.Kerberos = kerberos;
+        }
         user.UpdatedAt = now;
         user.LastLoginAt = now;
         if (_developmentAdminIamIds.Contains(user.IamId))

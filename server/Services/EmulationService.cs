@@ -23,16 +23,19 @@ public sealed class EmulationService
     private const string TargetClaimType = "booking:target-iam";
     private readonly AppDbContext _dbContext;
     private readonly IUserService _userService;
+    private readonly IRosettaService _rosettaService;
     private readonly ILogger<EmulationService> _logger;
     private readonly TicketDataFormat _ticketFormat;
     private readonly bool _useLocal;
     private readonly string _cookieName;
 
     public EmulationService(AppDbContext dbContext, IUserService userService, IConfiguration configuration,
-        IHostEnvironment environment, IDataProtectionProvider dataProtectionProvider, ILogger<EmulationService> logger)
+        IHostEnvironment environment, IDataProtectionProvider dataProtectionProvider, ILogger<EmulationService> logger,
+        IRosettaService rosettaService)
     {
         _dbContext = dbContext;
         _userService = userService;
+        _rosettaService = rosettaService;
         _logger = logger;
         _useLocal = LocalAuthentication.IsEnabled(configuration, environment);
         _cookieName = ".Booking.Emulation";
@@ -54,50 +57,25 @@ public sealed class EmulationService
 
     public async Task<List<EmulationCandidateResponse>> SearchAsync(string search, CancellationToken cancellationToken)
     {
-        var matches = await (
-            from user in _dbContext.Users.AsNoTracking()
-            join person in _dbContext.People.AsNoTracking() on user.IamId equals person.IamId into people
-            from person in people.DefaultIfEmpty()
-            where user.IamId == search || user.Email == search ||
-                (person != null && (person.UserId == search || person.Email == search))
-            orderby user.Name, user.IamId
-            select new EmulationCandidateResponse
-            {
-                IamId = user.IamId.Trim(),
-                Name = user.Name,
-                Email = user.Email,
-                Kerberos = person == null || person.UserId == null ? null : person.UserId.Trim(),
-                HasUserAccount = true,
-                IsActive = user.IsActive,
-                IsActiveInIam = person == null ? null : (bool?)person.IsActiveInIam,
-            })
-            .Take(10)
-            .ToListAsync(cancellationToken);
-
-        if (matches.Count < 10)
+        var people = (await _rosettaService.SearchPeopleAsync(search, cancellationToken)).Take(10).ToList();
+        var iamIds = people.Select(person => person.IamId).ToList();
+        var users = await _dbContext.Users.AsNoTracking()
+            .Where(user => iamIds.Contains(user.IamId))
+            .ToDictionaryAsync(user => user.IamId, cancellationToken);
+        return people.Select(person =>
         {
-            var people = await _dbContext.People.AsNoTracking()
-                .Where(person => (person.IamId == search || person.Email == search || person.UserId == search) &&
-                    !_dbContext.Users.Any(user => user.IamId == person.IamId))
-                .OrderBy(person => person.FullName).ThenBy(person => person.IamId)
-                .Select(person => new EmulationCandidateResponse
-                {
-                    IamId = person.IamId.Trim(),
-                    Name = (person.FullName ?? "").Trim() != ""
-                        ? person.FullName!.Trim()
-                        : ((person.FirstName ?? "") + " " + (person.LastName ?? "")).Trim(),
-                    Email = person.Email == null ? null : person.Email.Trim(),
-                    Kerberos = person.UserId == null ? null : person.UserId.Trim(),
-                    HasUserAccount = false,
-                    IsActive = true,
-                    IsActiveInIam = person.IsActiveInIam,
-                })
-                .Take(10 - matches.Count)
-                .ToListAsync(cancellationToken);
-            matches.AddRange(people);
-        }
-
-        return matches;
+            users.TryGetValue(person.IamId, out var user);
+            return new EmulationCandidateResponse
+            {
+                IamId = person.IamId,
+                Name = user == null ? person.Name : user.Name,
+                Email = user == null ? person.Email : user.Email,
+                Kerberos = user?.Kerberos ?? person.Kerberos,
+                HasUserAccount = user != null,
+                IsActive = user == null || user.IsActive,
+                IsActiveInIam = person.IsActiveInIam,
+            };
+        }).ToList();
     }
 
     public async Task<(User? User, string? Error)> FindOrCreateTargetAsync(
@@ -105,15 +83,21 @@ public sealed class EmulationService
     {
         iamId = iamId.Trim();
         var user = await _dbContext.Users.SingleOrDefaultAsync(user => user.IamId == iamId, cancellationToken);
-        var person = await _dbContext.People.AsNoTracking()
-            .SingleOrDefaultAsync(person => person.IamId == iamId, cancellationToken);
         if (user != null && !user.IsActive)
         {
             return (null, "This user is inactive and cannot be emulated.");
         }
-        if (person != null && !person.IsActiveInIam)
+        if (user != null && IsLocalPersona(iamId))
         {
-            return (null, "This person is inactive in IAM and cannot be emulated.");
+            return (user, null);
+        }
+
+        var person = await _rosettaService.FindByIamIdAsync(iamId, cancellationToken);
+        if (person != null && person.IsActiveInIam != true)
+        {
+            return (null, person.IsActiveInIam == false
+                ? "This person is inactive in IAM and cannot be emulated."
+                : "This person's IAM activity could not be verified. Search again before emulating.");
         }
         if (user != null)
         {
@@ -124,15 +108,13 @@ public sealed class EmulationService
             return (null, null);
         }
 
-        var name = string.IsNullOrWhiteSpace(person.FullName)
-            ? $"{person.FirstName} {person.LastName}".Trim()
-            : person.FullName.Trim();
         var now = DateTimeOffset.UtcNow;
         user = new User
         {
-            IamId = person.IamId.Trim(),
-            Name = string.IsNullOrWhiteSpace(name) ? person.IamId.Trim() : name,
-            Email = person.Email?.Trim(),
+            IamId = person.IamId,
+            Name = person.Name,
+            Email = person.Email,
+            Kerberos = person.Kerberos,
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -154,6 +136,13 @@ public sealed class EmulationService
             {
                 return (null, "This user is inactive and cannot be emulated.");
             }
+
+            if (string.IsNullOrWhiteSpace(user.Kerberos) && !string.IsNullOrWhiteSpace(person.Kerberos))
+            {
+                user.Kerberos = person.Kerberos;
+                user.UpdatedAt = DateTimeOffset.UtcNow;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
         }
 
         return (user, null);
@@ -163,14 +152,35 @@ public sealed class EmulationService
     {
         var user = await _dbContext.Users.AsNoTracking()
             .SingleOrDefaultAsync(user => user.IamId == iamId && user.IsActive, cancellationToken);
-        if (user == null || await _dbContext.People.AnyAsync(
-                person => person.IamId == iamId && !person.IsActiveInIam, cancellationToken))
+        if (user == null)
         {
+            return null;
+        }
+        if (IsLocalPersona(iamId))
+        {
+            return user;
+        }
+
+        try
+        {
+            var person = await _rosettaService.FindByIamIdAsync(iamId, cancellationToken);
+            if (person != null && person.IsActiveInIam != true)
+            {
+                return null;
+            }
+        }
+        catch (Exception exception) when (exception is HttpRequestException || exception is InvalidOperationException)
+        {
+            // Preserve the selection and let middleware require explicit recovery before another request.
+            _logger.LogWarning("The emulation target could not be verified with Rosetta.");
             return null;
         }
 
         return user;
     }
+
+    private bool IsLocalPersona(string iamId)
+        => _useLocal && (iamId == "sandbox-10001" || iamId == "sandbox-10002");
 
     public async Task<ClaimsPrincipal> CreatePrincipalAsync(User target)
     {
