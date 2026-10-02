@@ -20,9 +20,12 @@ internal sealed class FakeRosettaService(AppDbContext? dbContext = null) : IRose
         if (dbContext != null)
         {
             var users = await dbContext.Users.AsNoTracking()
-                .Where(user => user.IamId == search || user.Email == search)
+                .Where(user => user.IamId == search || user.Email == search || user.Kerberos == search)
                 .OrderBy(user => user.Name).ThenBy(user => user.IamId)
-                .Select(user => new DirectoryPerson { IamId = user.IamId, Name = user.Name, Email = user.Email })
+                .Select(user => new DirectoryPerson
+                {
+                    IamId = user.IamId, Name = user.Name, Email = user.Email, Kerberos = user.Kerberos,
+                })
                 .Take(10).ToListAsync(cancellationToken);
             if (users.Count > 0)
             {

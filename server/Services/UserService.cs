@@ -60,6 +60,7 @@ public class UserService : IUserService
         }
 
         var isLocalLogin = principal.Identity.AuthenticationType == LocalAuthentication.Scheme;
+        var kerberos = isLocalLogin ? principal.FindFirst(LocalAuthentication.KerberosClaimType)?.Value?.Trim() : null;
         var email = isLocalLogin
             ? principal.FindFirst("preferred_username")?.Value
                 ?? principal.FindFirst(ClaimTypes.Email)?.Value
@@ -78,7 +79,7 @@ public class UserService : IUserService
                 {
                     name = person.Name;
                     email = person.Email;
-                    // TODO: Persist person.Kerberos to Users after its column is approved.
+                    kerberos = person.Kerberos;
                 }
             }
 
@@ -98,7 +99,7 @@ public class UserService : IUserService
 
         try
         {
-            await SaveLoginDetails(user, name, email, now, cancellationToken);
+            await SaveLoginDetails(user, name, email, kerberos, now, cancellationToken);
         }
         catch (DbUpdateException) when (isNewUser)
         {
@@ -111,14 +112,19 @@ public class UserService : IUserService
             }
 
             await SaveLoginDetails(existingUser, name, isLocalLogin ? email : existingUser.Email,
-                DateTimeOffset.UtcNow, cancellationToken);
+                kerberos, DateTimeOffset.UtcNow, cancellationToken);
         }
     }
 
-    private async Task SaveLoginDetails(User user, string name, string? email, DateTimeOffset now, CancellationToken cancellationToken)
+    private async Task SaveLoginDetails(User user, string name, string? email, string? kerberos,
+        DateTimeOffset now, CancellationToken cancellationToken)
     {
         user.Name = name;
         user.Email = email;
+        if (string.IsNullOrWhiteSpace(user.Kerberos) && !string.IsNullOrWhiteSpace(kerberos))
+        {
+            user.Kerberos = kerberos;
+        }
         user.UpdatedAt = now;
         user.LastLoginAt = now;
         if (_developmentAdminIamIds.Contains(user.IamId))

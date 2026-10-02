@@ -23,7 +23,8 @@ public class User
     [MaxLength(320)]
     public string? Email { get; set; }
 
-    // TODO: Add a persisted Kerberos login ID only after the column and migration are approved.
+    [MaxLength(64)]
+    public string? Kerberos { get; set; }
 
     public bool IsAdmin { get; set; }
 

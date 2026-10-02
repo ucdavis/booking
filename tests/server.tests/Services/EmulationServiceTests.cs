@@ -25,7 +25,7 @@ public class EmulationServiceTests
     {
         using var db = TestDbContextFactory.CreateInMemory();
         db.Users.AddRange(
-            new User { IamId = "account", Name = "Stored Name", Email = "match@example.test" },
+            new User { IamId = "account", Name = "Stored Name", Email = "match@example.test", Kerberos = "storedkerb" },
             new User { IamId = "no-person", Name = "Standalone Account", Email = "match@example.test" });
         _people.AddRange([
             new DirectoryPerson { IamId = "account", Name = "Directory Name", Email = "match@example.test", IsActiveInIam = true },
@@ -40,8 +40,10 @@ public class EmulationServiceTests
         matches.Select(match => match.IamId).Should().Equal("no-person", "account");
         matches.Single(match => match.IamId == "account").Name.Should().Be("Stored Name");
         matches.Single(match => match.IamId == "account").HasUserAccount.Should().BeTrue();
+        matches.Single(match => match.IamId == "account").Kerberos.Should().Be("storedkerb");
         matches.Single(match => match.IamId == "no-person").IsActiveInIam.Should().BeNull();
-        matches.Should().OnlyContain(match => match.HasUserAccount && match.Kerberos == null);
+        matches.Single(match => match.IamId == "no-person").Kerberos.Should().BeNull();
+        matches.Should().OnlyContain(match => match.HasUserAccount);
         rosetta.LookupCalls.Should().BeEmpty();
         (await db.Users.CountAsync()).Should().Be(2);
         db.ChangeTracker.Entries().Should().BeEmpty();
@@ -53,7 +55,10 @@ public class EmulationServiceTests
     public async Task Search_uses_directory_identifiers_to_find_the_existing_account(string query)
     {
         using var db = TestDbContextFactory.CreateInMemory();
-        db.Users.Add(new User { IamId = "1000000001", Name = "Stored Name", Email = "old@example.test" });
+        db.Users.Add(new User
+        {
+            IamId = "1000000001", Name = "Stored Name", Email = "old@example.test", Kerberos = "storedkerb",
+        });
         _people.Add(Person());
         await db.SaveChangesAsync();
 
@@ -63,7 +68,7 @@ public class EmulationServiceTests
         matches[0].IamId.Should().Be("1000000001");
         matches[0].Name.Should().Be("Stored Name");
         matches[0].Email.Should().Be("old@example.test");
-        matches[0].Kerberos.Should().Be("person1");
+        matches[0].Kerberos.Should().Be("storedkerb");
         matches[0].IsActiveInIam.Should().BeTrue();
     }
 
@@ -120,12 +125,14 @@ public class EmulationServiceTests
         user.Should().NotBeNull();
         user!.Name.Should().Be("Directory Person");
         user.Email.Should().Be("directory@example.test");
+        user.Kerberos.Should().Be("person1");
         user.IsAdmin.Should().BeFalse();
         user.IsActive.Should().BeTrue();
         user.LastLoginAt.Should().BeNull();
         user.UpdatedAt.Should().Be(user.CreatedAt).And.NotBe(default);
         (await db.TeamPermissions.AnyAsync()).Should().BeFalse();
         (await db.Users.CountAsync()).Should().Be(1);
+        (await db.Users.AsNoTracking().SingleAsync()).Kerberos.Should().Be("person1");
     }
 
     [Fact]
@@ -362,14 +369,16 @@ public class EmulationServiceTests
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Concurrent_creation_reuses_the_winner_and_preserves_flags_and_login(bool winnerActive)
+    [InlineData(true, null)]
+    [InlineData(true, "storedkerb")]
+    [InlineData(false, null)]
+    public async Task Concurrent_creation_reuses_the_winner_and_preserves_flags_and_login(
+        bool winnerActive, string? winnerKerberos)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase($"EmulationRace_{Guid.NewGuid():N}").Options;
         _people.Add(Person());
-        using var db = new ConcurrentInsertDbContext(options, winnerActive, insertWinner: true);
+        using var db = new ConcurrentInsertDbContext(options, winnerActive, insertWinner: true, winnerKerberos);
 
         var result = await Service(db).FindOrCreateTargetAsync("1000000001", default);
 
@@ -377,6 +386,7 @@ public class EmulationServiceTests
         (result.Error != null).Should().Be(!winnerActive);
         var user = await db.Users.SingleAsync();
         user.Name.Should().Be("Concurrent Sign-in");
+        user.Kerberos.Should().Be(winnerActive ? winnerKerberos ?? "person1" : winnerKerberos);
         user.IsAdmin.Should().BeTrue();
         user.IsActive.Should().Be(winnerActive);
         user.LastLoginAt.Should().NotBeNull();
@@ -570,18 +580,25 @@ public class EmulationServiceTests
         private readonly DbContextOptions<AppDbContext> _options;
         private readonly bool _winnerActive;
         private readonly bool _insertWinner;
+        private readonly string? _winnerKerberos;
 
-        public ConcurrentInsertDbContext(DbContextOptions<AppDbContext> options, bool winnerActive, bool insertWinner)
+        public ConcurrentInsertDbContext(DbContextOptions<AppDbContext> options, bool winnerActive, bool insertWinner,
+            string? winnerKerberos = null)
             : base(options)
         {
             _options = options;
             _winnerActive = winnerActive;
             _insertWinner = insertWinner;
+            _winnerKerberos = winnerKerberos;
         }
 
         public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
-            var candidate = ChangeTracker.Entries<User>().Single(entry => entry.State == EntityState.Added);
+            var candidate = ChangeTracker.Entries<User>().SingleOrDefault(entry => entry.State == EntityState.Added);
+            if (candidate == null)
+            {
+                return await base.SaveChangesAsync(cancellationToken);
+            }
             if (_insertWinner)
             {
                 using var concurrent = new AppDbContext(_options);
@@ -589,6 +606,7 @@ public class EmulationServiceTests
                 {
                     IamId = candidate.Entity.IamId, Name = "Concurrent Sign-in", IsAdmin = true,
                     IsActive = _winnerActive, LastLoginAt = DateTimeOffset.UtcNow,
+                    Kerberos = _winnerKerberos,
                 });
                 await concurrent.SaveChangesAsync(cancellationToken);
             }

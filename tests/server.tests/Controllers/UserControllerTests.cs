@@ -33,13 +33,13 @@ public class UserControllerTests
     [InlineData("tuser   ", "tuser")]
     [InlineData(null, null)]
     [InlineData("        ", null)]
-    public async Task Me_returns_kerberos_from_the_effective_users_matching_directory_person(
-        string? directoryUserId, string? expectedKerberos)
+    public async Task Me_returns_kerberos_from_the_effective_users_stored_account(
+        string? storedKerberos, string? expectedKerberos)
     {
         using var db = TestDbContextFactory.CreateInMemory();
-        db.People.AddRange(
-            new Server.Core.Domain.Person { IamId = "123456789", UserId = directoryUserId },
-            new Server.Core.Domain.Person { IamId = "actor-iam", UserId = "actor" });
+        db.Users.AddRange(
+            new Server.Core.Domain.User { IamId = "123456789", Name = "Target", Kerberos = storedKerberos },
+            new Server.Core.Domain.User { IamId = "actor-iam", Name = "Actor", Kerberos = "actor" });
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
         var controller = CreateController(db, "123456789");

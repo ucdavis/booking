@@ -9,93 +9,63 @@ namespace Server.Tests.Data;
 
 public class DbInitializerTests
 {
-    private const string AdminIamId = "FAKE000055";
-
     [Fact]
-    public async Task Fresh_development_seed_creates_person_55_as_admin_only_once()
+    public async Task Fresh_development_seed_creates_weather_once_without_creating_users()
     {
         using var db = TestDbContextFactory.CreateInMemory();
 
         await SeedDevelopmentAsync(db);
 
-        (await db.People.AnyAsync(person => person.IamId == AdminIamId)).Should().BeTrue();
-        var seeded = await db.Users.AsNoTracking().SingleAsync();
-        seeded.IamId.Should().Be(AdminIamId);
-        seeded.Name.Should().Be("Fake055 User055");
-        seeded.Email.Should().Be("fake.user055@example.invalid");
-        seeded.IsAdmin.Should().BeTrue();
-        seeded.IsActive.Should().BeTrue();
-        seeded.CreatedAt.Should().NotBe(default);
-        seeded.UpdatedAt.Should().Be(seeded.CreatedAt);
-        seeded.LastLoginAt.Should().BeNull();
+        var seeded = await db.WeatherForecasts.AsNoTracking().OrderBy(forecast => forecast.Date).ToListAsync();
+        seeded.Should().HaveCount(10);
+        seeded.First().Date.Should().Be(new DateOnly(2025, 1, 1));
+        seeded.Last().Date.Should().Be(new DateOnly(2025, 1, 10));
+        (await db.Users.AnyAsync()).Should().BeFalse();
         db.ChangeTracker.Clear();
 
         await SeedDevelopmentAsync(db);
 
-        var repeated = await db.Users.AsNoTracking().SingleAsync();
+        var repeated = await db.WeatherForecasts.AsNoTracking().OrderBy(forecast => forecast.Date).ToListAsync();
         repeated.Should().BeEquivalentTo(seeded);
+        (await db.Users.AnyAsync()).Should().BeFalse();
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Missing_person_does_not_create_or_promote_a_matching_user(bool hasExistingUser)
+    [Fact]
+    public async Task Existing_weather_is_preserved()
     {
         using var db = TestDbContextFactory.CreateInMemory();
-        db.People.Add(new Person { IamId = "OTHER00001", FullName = "Unrelated Person", IsActiveInIam = true });
-        var originalTime = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
-        var existing = new User
+        var existing = new WeatherForecast
         {
-            IamId = AdminIamId,
-            Name = "Existing User",
-            Email = "existing@example.test",
-            IsAdmin = false,
-            IsActive = false,
-            CreatedAt = originalTime,
-            UpdatedAt = originalTime.AddDays(1),
-            LastLoginAt = originalTime.AddHours(1),
+            Date = new DateOnly(2025, 2, 1),
+            TemperatureC = 21,
+            Summary = "Existing forecast",
         };
-        if (hasExistingUser)
-        {
-            db.Users.Add(existing);
-        }
+        db.WeatherForecasts.Add(existing);
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
         await SeedDevelopmentAsync(db);
 
-        (await db.People.AnyAsync(person => person.IamId == AdminIamId)).Should().BeFalse();
-        if (hasExistingUser)
-        {
-            var saved = await db.Users.AsNoTracking().SingleAsync();
-            saved.Should().BeEquivalentTo(existing);
-        }
-        else
-        {
-            (await db.Users.AnyAsync()).Should().BeFalse();
-        }
+        var saved = await db.WeatherForecasts.AsNoTracking().SingleAsync();
+        saved.Should().BeEquivalentTo(existing);
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Existing_user_is_promoted_without_overwriting_profile_or_account_state(bool isActive)
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Development_seed_preserves_existing_user_profile_and_permissions(bool isActive, bool isAdmin)
     {
         using var db = TestDbContextFactory.CreateInMemory();
-        db.People.Add(new Person
-        {
-            IamId = AdminIamId,
-            FullName = "Directory Name",
-            Email = "directory@example.test",
-            IsActiveInIam = true,
-        });
         var originalTime = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var existing = new User
         {
-            IamId = AdminIamId,
+            IamId = "FAKE000055",
             Name = "Existing Name",
             Email = "existing@example.test",
-            IsAdmin = false,
+            Kerberos = "existingkerb",
+            IsAdmin = isAdmin,
             IsActive = isActive,
             CreatedAt = originalTime,
             UpdatedAt = originalTime.AddDays(1),
@@ -107,22 +77,14 @@ public class DbInitializerTests
 
         await SeedDevelopmentAsync(db);
 
-        var promoted = await db.Users.AsNoTracking().SingleAsync();
-        promoted.Id.Should().Be(existing.Id);
-        promoted.IamId.Should().Be(existing.IamId);
-        promoted.IsAdmin.Should().BeTrue();
-        promoted.Name.Should().Be(existing.Name);
-        promoted.Email.Should().Be(existing.Email);
-        promoted.IsActive.Should().Be(existing.IsActive);
-        promoted.CreatedAt.Should().Be(existing.CreatedAt);
-        promoted.LastLoginAt.Should().Be(existing.LastLoginAt);
-        promoted.UpdatedAt.Should().BeAfter(existing.UpdatedAt);
+        var saved = await db.Users.AsNoTracking().SingleAsync();
+        saved.Should().BeEquivalentTo(existing);
         db.ChangeTracker.Clear();
 
         await SeedDevelopmentAsync(db);
 
         var repeated = await db.Users.AsNoTracking().SingleAsync();
-        repeated.Should().BeEquivalentTo(promoted);
+        repeated.Should().BeEquivalentTo(saved);
     }
 
     private static Task SeedDevelopmentAsync(AppDbContext db)

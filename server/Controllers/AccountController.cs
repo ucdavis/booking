@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Data;
 using Server.Helpers;
+using Server.Models.Directory;
+using Server.Services;
 
 namespace Server.Controllers;
 
@@ -87,6 +89,7 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
     [HttpPost("login/local/person")]
     public async Task<IActionResult> LocalPersonLogin(
         [FromForm] string? query, [FromForm] string? returnUrl, [FromServices] AppDbContext dbContext,
+        [FromServices] IRosettaService rosettaService,
         CancellationToken cancellationToken = default)
     {
         if (!LocalAuthentication.IsEnabled(configuration, environment))
@@ -100,13 +103,18 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
             return PersonLoginError(search, returnUrl, "Enter a complete email, IAM ID, or Kerberos ID of no more than 128 characters.");
         }
 
-        var people = await dbContext.People.AsNoTracking()
-            .Where(person => person.Email == search || person.IamId == search || person.UserId == search)
-            .Take(2)
-            .ToListAsync(cancellationToken);
+        IReadOnlyList<DirectoryPerson> people;
+        try
+        {
+            people = await rosettaService.SearchPeopleAsync(search, cancellationToken);
+        }
+        catch (Exception exception) when (exception is HttpRequestException || exception is InvalidOperationException)
+        {
+            return PersonLoginError(search, returnUrl, "The directory could not be reached. Try again later.");
+        }
         if (people.Count == 0)
         {
-            return PersonLoginError(search, returnUrl, "No person matched that email or ID. Check the People table and try again.");
+            return PersonLoginError(search, returnUrl, "No person matched that email or ID. Check the identifier and try again.");
         }
         if (people.Count > 1)
         {
@@ -114,16 +122,18 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
         }
 
         var person = people[0];
-        var principal = LocalAuthentication.CreatePersonPrincipal(person);
-        if (principal == null)
-        {
-            return PersonLoginError(search, returnUrl, "This person is inactive in IAM and cannot sign in.");
-        }
-
         var iamId = person.IamId.Trim();
-        if (await dbContext.Users.AnyAsync(user => user.IamId == iamId && !user.IsActive, cancellationToken))
+        var existingUser = await dbContext.Users.AsNoTracking()
+            .SingleOrDefaultAsync(user => user.IamId == iamId, cancellationToken);
+        if (existingUser != null && !existingUser.IsActive)
         {
             return PersonLoginError(search, returnUrl, "This user's application account is inactive and cannot sign in.");
+        }
+
+        var principal = LocalAuthentication.CreatePersonPrincipal(person, existingUser?.IsActive == true);
+        if (principal == null)
+        {
+            return PersonLoginError(search, returnUrl, "This person does not have the IAM ID, Kerberos ID, and email required to sign in.");
         }
 
         // The normal local-cookie sign-in event saves the profile and preserves application permissions.

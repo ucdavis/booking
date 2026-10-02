@@ -169,15 +169,15 @@ public class AdminController(AppDbContext dbContext, IRosettaService rosettaServ
                 IamId = iamId,
                 Name = person.Name,
                 Email = person.Email,
+                Kerberos = person.Kerberos,
                 CreatedAt = DateTimeOffset.UtcNow,
             };
-            // TODO: Persist person.Kerberos after the Users schema change is approved.
             dbContext.Users.Add(user);
         }
 
         try
         {
-            await GrantAdmin(user, cancellationToken);
+            await GrantAdmin(user, person.Kerberos, cancellationToken);
         }
         catch (DbUpdateException) when (isNewUser)
         {
@@ -194,7 +194,7 @@ public class AdminController(AppDbContext dbContext, IRosettaService rosettaServ
                 return Conflict("This user is inactive and cannot be added as a site admin.");
             }
 
-            await GrantAdmin(user, cancellationToken);
+            await GrantAdmin(user, person.Kerberos, cancellationToken);
         }
 
         return Ok(ToResponse(user));
@@ -230,13 +230,18 @@ public class AdminController(AppDbContext dbContext, IRosettaService rosettaServ
         return NoContent();
     }
 
-    private async Task GrantAdmin(User user, CancellationToken cancellationToken)
+    private async Task GrantAdmin(User user, string? kerberos, CancellationToken cancellationToken)
     {
-        if (user.IsAdmin)
+        var populateKerberos = string.IsNullOrWhiteSpace(user.Kerberos) && !string.IsNullOrWhiteSpace(kerberos);
+        if (user.IsAdmin && !populateKerberos)
         {
             return;
         }
 
+        if (populateKerberos)
+        {
+            user.Kerberos = kerberos;
+        }
         user.IsAdmin = true;
         user.UpdatedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);

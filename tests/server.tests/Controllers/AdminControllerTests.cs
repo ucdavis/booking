@@ -227,13 +227,14 @@ public class AdminControllerTests
     [Theory]
     [InlineData("0000000001")]
     [InlineData("existing@example.test")]
+    [InlineData("existingkerb")]
     public async Task SearchPeople_returns_existing_users_before_calling_the_directory(string query)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         db.Users.Add(new User
         {
             IamId = "0000000001", Name = "Existing Admin", Email = "existing@example.test",
-            IsAdmin = true, IsActive = false,
+            Kerberos = "existingkerb", IsAdmin = true, IsActive = false,
         });
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
@@ -247,7 +248,7 @@ public class AdminControllerTests
         person.IsAdmin.Should().BeTrue();
         person.IsActive.Should().BeFalse();
         person.IsActiveInIam.Should().BeNull();
-        person.Kerberos.Should().BeNull();
+        person.Kerberos.Should().Be("existingkerb");
         rosetta.LookupCalls.Should().BeEmpty();
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
@@ -355,6 +356,7 @@ public class AdminControllerTests
         response.IamId.Should().Be("0000000001");
         user.Name.Should().Be("Directory Person");
         user.Email.Should().Be("directory@example.test");
+        user.Kerberos.Should().Be("person1");
         user.IsAdmin.Should().BeTrue();
         user.IsActive.Should().BeTrue();
         user.CreatedAt.Should().BeOnOrAfter(started);
@@ -362,8 +364,11 @@ public class AdminControllerTests
         user.LastLoginAt.Should().BeNull();
     }
 
-    [Fact]
-    public async Task AddUser_promotes_existing_user_without_replacing_profile_or_login_fields()
+    [Theory]
+    [InlineData(null, "person1")]
+    [InlineData("existingkerb", "existingkerb")]
+    public async Task AddUser_populates_missing_kerberos_without_replacing_existing_profile_or_login_fields(
+        string? existingKerberos, string expectedKerberos)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         _people.Add(CreatePerson());
@@ -371,6 +376,7 @@ public class AdminControllerTests
         db.Users.Add(new User
         {
             IamId = "0000000001", Name = "Existing Name", Email = "existing@example.test",
+            Kerberos = existingKerberos,
             CreatedAt = originalTime, UpdatedAt = originalTime, LastLoginAt = originalTime,
         });
         await db.SaveChangesAsync();
@@ -383,6 +389,7 @@ public class AdminControllerTests
         user.IsAdmin.Should().BeTrue();
         user.Name.Should().Be("Existing Name");
         user.Email.Should().Be("existing@example.test");
+        user.Kerberos.Should().Be(expectedKerberos);
         user.CreatedAt.Should().Be(originalTime);
         user.LastLoginAt.Should().Be(originalTime);
         user.UpdatedAt.Should().BeAfter(originalTime);
@@ -554,13 +561,15 @@ public class AdminControllerTests
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task AddUser_handles_a_concurrent_insert_without_overwriting_or_reactivating_the_user(bool isActive)
+    [InlineData(true, null)]
+    [InlineData(true, "existingkerb")]
+    [InlineData(false, null)]
+    public async Task AddUser_handles_a_concurrent_insert_without_overwriting_or_reactivating_the_user(
+        bool isActive, string? existingKerberos)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase($"AdminRace_{Guid.NewGuid():N}").Options;
-        using var db = new ConcurrentInsertDbContext(options, isActive);
+        using var db = new ConcurrentInsertDbContext(options, isActive, existingKerberos);
         _people.Add(CreatePerson());
         await db.SaveChangesAsync();
 
@@ -570,6 +579,7 @@ public class AdminControllerTests
         var user = await db.Users.SingleAsync();
         user.Name.Should().Be("Concurrent Login");
         user.Email.Should().Be("login@example.test");
+        user.Kerberos.Should().Be(isActive ? existingKerberos ?? "person1" : existingKerberos);
         user.LastLoginAt.Should().NotBeNull();
         user.IsActive.Should().Be(isActive);
         user.IsAdmin.Should().Be(isActive);
@@ -718,7 +728,7 @@ public class AdminControllerTests
         }
     }
 
-    private sealed class ConcurrentInsertDbContext(DbContextOptions<AppDbContext> options, bool isActive)
+    private sealed class ConcurrentInsertDbContext(DbContextOptions<AppDbContext> options, bool isActive, string? kerberos)
         : AppDbContext(options)
     {
         private bool _insertedConcurrentUser;
@@ -733,6 +743,7 @@ public class AdminControllerTests
                 concurrentDb.Users.Add(new User
                 {
                     IamId = candidate.Entity.IamId, Name = "Concurrent Login", Email = "login@example.test",
+                    Kerberos = kerberos,
                     IsActive = isActive, LastLoginAt = DateTimeOffset.UtcNow,
                 });
                 await concurrentDb.SaveChangesAsync(cancellationToken);

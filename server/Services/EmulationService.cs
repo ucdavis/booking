@@ -70,7 +70,7 @@ public sealed class EmulationService
                 IamId = person.IamId,
                 Name = user == null ? person.Name : user.Name,
                 Email = user == null ? person.Email : user.Email,
-                Kerberos = person.Kerberos,
+                Kerberos = user?.Kerberos ?? person.Kerberos,
                 HasUserAccount = user != null,
                 IsActive = user == null || user.IsActive,
                 IsActiveInIam = person.IsActiveInIam,
@@ -114,10 +114,10 @@ public sealed class EmulationService
             IamId = person.IamId,
             Name = person.Name,
             Email = person.Email,
+            Kerberos = person.Kerberos,
             CreatedAt = now,
             UpdatedAt = now,
         };
-        // TODO: Persist person.Kerberos to Users after its column is approved.
         _dbContext.Users.Add(user);
         try
         {
@@ -135,6 +135,13 @@ public sealed class EmulationService
             if (!user.IsActive)
             {
                 return (null, "This user is inactive and cannot be emulated.");
+            }
+
+            if (string.IsNullOrWhiteSpace(user.Kerberos) && !string.IsNullOrWhiteSpace(person.Kerberos))
+            {
+                user.Kerberos = person.Kerberos;
+                user.UpdatedAt = DateTimeOffset.UtcNow;
+                await _dbContext.SaveChangesAsync(cancellationToken);
             }
         }
 

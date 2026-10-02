@@ -31,14 +31,13 @@ public sealed class RosettaService(
             return [];
         }
 
-        // TODO: Include Users.Kerberos in this exact lookup once its column is approved.
         var users = await dbContext.Users.AsNoTracking()
-            .Where(user => user.IamId == search || user.Email == search)
+            .Where(user => user.IamId == search || user.Email == search || user.Kerberos == search)
             .OrderBy(user => user.Name).ThenBy(user => user.IamId)
             .Select(user => new DirectoryPerson
             {
-                IamId = user.IamId, Name = user.Name, Email = user.Email,
-                // Neither Kerberos nor current IAM activity is stored in Users yet.
+                IamId = user.IamId, Name = user.Name, Email = user.Email, Kerberos = user.Kerberos,
+                // Current IAM activity must still be checked in Rosetta before granting access.
             })
             .Take(10).ToListAsync(cancellationToken);
         if (users.Count > 0)
@@ -139,14 +138,13 @@ public sealed class RosettaService(
         }
 
         var livedName = Clean($"{Clean(person.Name?.Lived_first_name)} {Clean(person.Name?.Lived_last_name)}");
-        var legalName = Clean($"{Clean(person.Name?.Legal_first_name)} {Clean(person.Name?.Legal_last_name)}");
         var kerberos = Clean(person.Id?.Login_id);
         var campusEmail = Clean(person.Email?.Campus);
         var healthEmail = Clean(person.Email?.Health);
         return new DirectoryPerson
         {
             IamId = iamId,
-            Name = Clean(person.Displayname) ?? livedName ?? legalName ?? iamId,
+            Name = Clean(person.Displayname) ?? livedName ?? iamId,
             Email = campusEmail,
             Kerberos = kerberos,
             IsActiveInIam = kerberos != null && (campusEmail != null || healthEmail != null),

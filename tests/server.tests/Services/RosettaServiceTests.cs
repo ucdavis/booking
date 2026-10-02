@@ -23,14 +23,13 @@ public class RosettaServiceTests
     [Theory]
     [InlineData("1000000001")]
     [InlineData("stored@example.test")]
-    public async Task Search_uses_existing_users_without_configuration_http_or_people_enrichment(string search)
+    [InlineData(" stored-kerb ")]
+    public async Task Search_uses_existing_users_without_configuration_or_http(string search)
     {
         using var db = TestDbContextFactory.CreateInMemory();
-        db.Users.Add(new User { IamId = "1000000001", Name = "Stored Name", Email = "stored@example.test" });
-        db.People.Add(new Person
+        db.Users.Add(new User
         {
-            IamId = "1000000001", FullName = "Stale Name", Email = "old@example.test",
-            UserId = "stale-login", IsActiveInIam = false,
+            IamId = "1000000001", Name = "Stored Name", Email = "stored@example.test", Kerberos = "stored-kerb",
         });
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
@@ -43,7 +42,7 @@ public class RosettaServiceTests
         match.IamId.Should().Be("1000000001");
         match.Name.Should().Be("Stored Name");
         match.Email.Should().Be("stored@example.test");
-        match.Kerberos.Should().BeNull();
+        match.Kerberos.Should().Be("stored-kerb");
         match.IsActiveInIam.Should().BeNull();
         http.ClientNames.Should().BeEmpty();
         db.ChangeTracker.Entries().Should().BeEmpty();
@@ -73,11 +72,13 @@ public class RosettaServiceTests
     }
 
     [Fact]
-    public async Task Search_does_not_fall_back_to_the_people_table_or_match_partial_user_names()
+    public async Task Search_checks_Rosetta_instead_of_matching_user_names_or_partial_kerberos()
     {
         using var db = TestDbContextFactory.CreateInMemory();
-        db.Users.Add(new User { IamId = "1000000001", Name = "directory", Email = "directory@example.test" });
-        db.People.Add(new Person { IamId = "1000000002", UserId = "directory", FullName = "Legacy Person" });
+        db.Users.Add(new User
+        {
+            IamId = "1000000001", Name = "directory", Email = "directory@example.test", Kerberos = "directory1",
+        });
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
         using var http = new TestHttpFactory();
@@ -258,6 +259,7 @@ public class RosettaServiceTests
         var saved = await db.Users.SingleAsync();
         saved.Name.Should().Be("Directory Person");
         saved.Email.Should().Be(campusEmail).And.NotBe(person.Email.Health);
+        saved.Kerberos.Should().Be("person1");
         saved.LastLoginAt.Should().BeNull();
 
         var activeTarget = await emulation.GetActiveTargetAsync(candidate.IamId, default);
@@ -299,9 +301,10 @@ public class RosettaServiceTests
     [Theory]
     [InlineData(" Display Name ", "Lived", "Legal", "Display Name")]
     [InlineData(null, "Lived", "Legal", "Lived")]
-    [InlineData("*******", "*******", " Legal ", "Legal")]
+    [InlineData("*******", "*******", " Legal ", "1000000001")]
+    [InlineData(null, null, "Legal", "1000000001")]
     [InlineData(null, null, null, "1000000001")]
-    public async Task Lookup_uses_display_lived_legal_then_iam_name_fallback(
+    public async Task Lookup_uses_display_lived_then_iam_name_fallback_and_ignores_legal_names(
         string? displayName, string? livedName, string? legalName, string expectedName)
     {
         using var db = TestDbContextFactory.CreateInMemory();
@@ -426,11 +429,10 @@ public class RosettaServiceTests
     }
 
     [Fact]
-    public async Task Lookup_refreshes_by_exact_iam_even_when_an_account_and_legacy_person_exist()
+    public async Task Lookup_refreshes_by_exact_iam_even_when_an_account_exists()
     {
         using var db = TestDbContextFactory.CreateInMemory();
         db.Users.Add(new User { IamId = "1000000001", Name = "Stored Name" });
-        db.People.Add(new Person { IamId = "1000000001", FullName = "Legacy Person", IsActiveInIam = true });
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
         var match = Person("1000000001", "Current Person");

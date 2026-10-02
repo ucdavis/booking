@@ -145,13 +145,14 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
                 IamId = iamId,
                 Name = person.Name,
                 Email = person.Email,
+                Kerberos = person.Kerberos,
                 CreatedAt = now,
                 UpdatedAt = now,
             };
-            // TODO: Persist person.Kerberos after the Users schema change is approved.
             dbContext.Users.Add(user);
         }
 
+        PopulateKerberosIfMissing(user, person.Kerberos);
         var permission = new TeamPermission { TeamId = teamId.Value, User = user, Role = request.Role!.Value };
         dbContext.TeamPermissions.Add(permission);
         try
@@ -185,6 +186,7 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
                 throw;
             }
 
+            PopulateKerberosIfMissing(user, person.Kerberos);
             permission = new TeamPermission { TeamId = teamId.Value, User = user, Role = request.Role.Value };
             dbContext.TeamPermissions.Add(permission);
             try
@@ -275,6 +277,15 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
             cancellationToken);
 
     private static bool CanAssignRole(TeamRole? role) => role == TeamRole.Admin || role == TeamRole.Editor;
+
+    private static void PopulateKerberosIfMissing(User user, string? kerberos)
+    {
+        if (string.IsNullOrWhiteSpace(user.Kerberos) && !string.IsNullOrWhiteSpace(kerberos))
+        {
+            user.Kerberos = kerberos;
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+    }
 
     private static TeamMemberResponse ToResponse(User user, TeamRole role) => new()
     {
