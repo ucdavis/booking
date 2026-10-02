@@ -50,6 +50,10 @@ export default defineConfig({
         secure: false,
         target,
       },
+      '/signout-callback-oidc': {
+        secure: false,
+        target,
+      },
       '^/api': {
         secure: false,
         target,

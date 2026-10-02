@@ -93,6 +93,40 @@ public class DbInitializer : IDbInitializer
 
             await _db.SaveChangesAsync(ct);
         }
+
+        const string adminIamId = "FAKE000055";
+        var person = await _db.People.AsNoTracking()
+            .SingleOrDefaultAsync(person => person.IamId == adminIamId, ct);
+        if (person == null)
+        {
+            return;
+        }
+
+        var user = await _db.Users.SingleOrDefaultAsync(user => user.IamId == adminIamId, ct);
+        if (user?.IsAdmin == true)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (user == null)
+        {
+            var name = string.IsNullOrWhiteSpace(person.FullName)
+                ? $"{person.FirstName} {person.LastName}".Trim()
+                : person.FullName.Trim();
+            user = new User
+            {
+                IamId = adminIamId,
+                Name = string.IsNullOrWhiteSpace(name) ? adminIamId : name,
+                Email = person.Email?.Trim(),
+                CreatedAt = now,
+            };
+            _db.Users.Add(user);
+        }
+
+        user.IsAdmin = true;
+        user.UpdatedAt = now;
+        await _db.SaveChangesAsync(ct);
     }
 
     // just a placeholder for any production-safe seeding

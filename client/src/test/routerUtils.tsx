@@ -3,11 +3,14 @@ import {
   createMemoryHistory,
   createRouter,
   RouterProvider,
+  type RouterHistory,
 } from '@tanstack/react-router';
 import { routeTree } from '@/routeTree.gen.ts';
 import { render } from '@testing-library/react';
 
 export interface RenderRouteOptions {
+  /** Custom history for tests that need browser navigation behavior */
+  history?: RouterHistory;
   /** Initial entries for the memory history */
   initialEntries?: string[];
   /** Initial route path to navigate to */
@@ -34,6 +37,7 @@ export function renderRoute(
   options: RenderRouteOptions = {}
 ): RenderRouteResult {
   const {
+    history,
     initialPath = '/',
     initialEntries = [initialPath],
     queryClient = new QueryClient({
@@ -50,7 +54,7 @@ export function renderRoute(
 
   const router = createRouter({
     context: { queryClient },
-    history: createMemoryHistory({ initialEntries }),
+    history: history ?? createMemoryHistory({ initialEntries }),
     routeTree,
   });
 

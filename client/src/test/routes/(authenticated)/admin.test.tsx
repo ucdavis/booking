@@ -1,5 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { userEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { meQueryOptions, type User } from '@/queries/user.ts';
@@ -13,6 +14,7 @@ const siteAdmin: User = {
   iamId: '123456789',
   id: 'user-1',
   isSiteAdmin: true,
+  kerberos: 'taylor',
   name: 'Taylor',
   roles: [],
 };
@@ -22,6 +24,9 @@ let cleanup: (() => void) | undefined;
 afterEach(() => {
   cleanup?.();
   cleanup = undefined;
+  document
+    .querySelectorAll('form[action="/logout"]')
+    .forEach((form) => form.remove());
   vi.restoreAllMocks();
 });
 
@@ -33,6 +38,152 @@ function silenceRouteErrors() {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 }
+
+describe('account navigation', () => {
+  it('lets a signed-in non-admin open their profile from their name', async () => {
+    mockUser({ ...siteAdmin, isSiteAdmin: false });
+    const rendered = renderRoute({ initialPath: '/about' });
+    cleanup = rendered.cleanup;
+
+    const accountMenu = await screen.findByRole('button', { name: 'Taylor' });
+    expect(accountMenu).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.queryByRole('link', { name: 'Profile' })
+    ).not.toBeInTheDocument();
+    fireEvent.click(accountMenu);
+
+    expect(accountMenu).toHaveAttribute('aria-expanded', 'true');
+    const profileLink = screen.getByRole('link', { name: 'Profile' });
+    expect(profileLink).toHaveAttribute('href', '/me');
+    expect(screen.getByRole('button', { name: 'Log out' })).toBeEnabled();
+    fireEvent.click(profileLink);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'My profile' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: siteAdmin.name })
+    ).toBeInTheDocument();
+    expect(screen.getByText(siteAdmin.email)).toBeInTheDocument();
+    expect(screen.getByText(siteAdmin.iamId!)).toBeInTheDocument();
+    expect(screen.getByText(siteAdmin.kerberos!)).toBeInTheDocument();
+    expect(screen.queryByText('Sign-in ID')).not.toBeInTheDocument();
+    expect(screen.getByText('Standard user')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Open site administration' })
+    ).not.toBeInTheDocument();
+    expect(rendered.router.state.location.pathname).toBe('/me');
+    expect(screen.getByRole('button', { name: 'Taylor' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
+    expect(
+      screen.queryByRole('link', { name: 'Profile' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('supports keyboard navigation and closes on Escape, focus leaving, or an outside click', async () => {
+    const user = userEvent.setup();
+    mockUser({ ...siteAdmin, isSiteAdmin: false });
+    ({ cleanup } = renderRoute({ initialPath: '/about' }));
+    const accountMenu = await screen.findByRole('button', { name: 'Taylor' });
+
+    await user.click(accountMenu);
+    await user.tab();
+    expect(screen.getByRole('link', { name: 'Profile' })).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(accountMenu).toHaveAttribute('aria-expanded', 'false');
+    expect(accountMenu).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    await user.tab();
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Log out' })).toHaveFocus();
+    await user.tab();
+    expect(accountMenu).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(accountMenu);
+    expect(accountMenu).toHaveAttribute('aria-expanded', 'true');
+    await user.click(screen.getByRole('heading', { name: 'About Booking' }));
+    expect(accountMenu).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('submits logout as a native POST with a fresh verification token and prevents duplicate requests', async () => {
+    mockUser({ ...siteAdmin, isSiteAdmin: false });
+    const { promise: tokenReady, resolve: releaseToken } =
+      Promise.withResolvers<void>();
+    let tokenRequests = 0;
+    server.use(
+      http.get('/logout/antiforgery', async () => {
+        tokenRequests += 1;
+        await tokenReady;
+        return HttpResponse.json({
+          formFieldName: '__RequestVerificationToken',
+          requestToken: 'test-request-verification-token',
+        });
+      })
+    );
+    const submit = vi
+      .spyOn(HTMLFormElement.prototype, 'submit')
+      .mockImplementation(() => undefined);
+    ({ cleanup } = renderRoute({ initialPath: '/about' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Taylor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Log out' }));
+    const loggingOut = await screen.findByRole('button', {
+      name: 'Logging out…',
+    });
+    expect(loggingOut).toBeDisabled();
+    fireEvent.click(loggingOut);
+    expect(submit).not.toHaveBeenCalled();
+    releaseToken();
+
+    await waitFor(() => expect(submit).toHaveBeenCalledOnce());
+    const form = submit.mock.contexts[0] as HTMLFormElement;
+    expect(form).toHaveAttribute('method', 'post');
+    expect(form).toHaveAttribute('action', '/logout');
+    expect(new FormData(form).get('__RequestVerificationToken')).toBe(
+      'test-request-verification-token'
+    );
+    expect(tokenRequests).toBe(1);
+    expect(screen.getByRole('button', { name: 'Logging out…' })).toBeDisabled();
+  });
+
+  it('allows retrying logout when the verification request fails', async () => {
+    mockUser({ ...siteAdmin, isSiteAdmin: false });
+    server.use(
+      http.get(
+        '/logout/antiforgery',
+        () => new HttpResponse(null, { status: 503 })
+      )
+    );
+    const submit = vi
+      .spyOn(HTMLFormElement.prototype, 'submit')
+      .mockImplementation(() => undefined);
+    ({ cleanup } = renderRoute({ initialPath: '/about' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Taylor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Log out' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Unable to log out. Please try again.'
+    );
+    expect(submit).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Log out' })).toBeEnabled();
+
+    server.use(
+      http.get('/logout/antiforgery', () =>
+        HttpResponse.json({
+          formFieldName: '__RequestVerificationToken',
+          requestToken: 'test-retry-verification-token',
+        })
+      )
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Log out' }));
+
+    await waitFor(() => expect(submit).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
 
 describe('site administration', () => {
   it('lets a site admin navigate from resource inventory to the admin landing page', async () => {
@@ -148,6 +299,9 @@ describe('site administration', () => {
     expect(
       screen.queryByRole('button', { name: 'Site admin' })
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Taylor' })
+    ).not.toBeInTheDocument();
   });
 
   it('denies access when the API rejects a cached site admin user', async () => {
@@ -257,6 +411,9 @@ describe('site administration', () => {
     await waitFor(() => {
       expect(
         screen.queryByRole('button', { name: 'Site admin' })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: 'Taylor' })
       ).not.toBeInTheDocument();
     });
     expect(

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Server.Core.Domain;
 
 namespace Server.Helpers;
 
@@ -39,6 +40,38 @@ public static class LocalAuthentication
         if (isSample)
         {
             claims.Add(new Claim(ClaimTypes.Role, "SampleRole"));
+        }
+
+        return new ClaimsPrincipal(new ClaimsIdentity(claims, Scheme));
+    }
+
+    public static ClaimsPrincipal? CreatePersonPrincipal(Person person)
+    {
+        var iamId = person.IamId.Trim();
+        if (!person.IsActiveInIam || string.IsNullOrWhiteSpace(iamId))
+        {
+            return null;
+        }
+
+        var name = string.IsNullOrWhiteSpace(person.FullName)
+            ? $"{person.FirstName?.Trim()} {person.LastName?.Trim()}".Trim()
+            : person.FullName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = iamId;
+        }
+
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, $"local-person:{iamId}"),
+            new(ClaimTypes.Name, name),
+            new("name", name),
+            new("ucdPersonIAMID", iamId),
+            new(ClaimTypes.Role, "User"),
+        };
+        if (!string.IsNullOrWhiteSpace(person.Email))
+        {
+            claims.Add(new Claim("preferred_username", person.Email.Trim()));
         }
 
         return new ClaimsPrincipal(new ClaimsIdentity(claims, Scheme));

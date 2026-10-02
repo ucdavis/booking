@@ -9,14 +9,19 @@ namespace Server.Helpers;
 public static class AuthenticationHelper
 {
     public const string SiteAdminPolicy = "SiteAdmin";
+    public const string TeamAccessPolicy = "TeamAccess";
+    public const string TeamAdminPolicy = "TeamAdmin";
 
     /// <summary>
     /// Keeps Entra as the default; local sign-in must be explicitly enabled in Development.
     /// </summary>
     public static IServiceCollection AddAuthenticationServices(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
-        services.AddAuthorization(options => options.AddPolicy(SiteAdminPolicy, policy =>
-            policy.RequireAuthenticatedUser().RequireAssertion(async context =>
+        services.AddScoped<TeamAccessService>();
+        services.AddScoped<EmulationService>();
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy(SiteAdminPolicy, policy => policy.RequireAuthenticatedUser().RequireAssertion(async context =>
             {
                 var httpContext = context.Resource as HttpContext;
                 if (httpContext == null)
@@ -26,7 +31,32 @@ public static class AuthenticationHelper
 
                 var userService = httpContext.RequestServices.GetRequiredService<IUserService>();
                 return await userService.IsSiteAdmin(context.User, httpContext.RequestAborted);
-            })));
+            }));
+            options.AddPolicy(TeamAccessPolicy, policy => policy.RequireAuthenticatedUser().RequireAssertion(async context =>
+            {
+                var httpContext = context.Resource as HttpContext;
+                if (httpContext == null)
+                {
+                    return false;
+                }
+
+                var teamSlug = httpContext.Request.RouteValues["teamSlug"] as string;
+                var teamAccessService = httpContext.RequestServices.GetRequiredService<TeamAccessService>();
+                return await teamAccessService.CanAccessTeam(context.User, teamSlug, httpContext.RequestAborted);
+            }));
+            options.AddPolicy(TeamAdminPolicy, policy => policy.RequireAuthenticatedUser().RequireAssertion(async context =>
+            {
+                var httpContext = context.Resource as HttpContext;
+                if (httpContext == null)
+                {
+                    return false;
+                }
+
+                var teamSlug = httpContext.Request.RouteValues["teamSlug"] as string;
+                var teamAccessService = httpContext.RequestServices.GetRequiredService<TeamAccessService>();
+                return await teamAccessService.CanAdministerTeam(context.User, teamSlug, httpContext.RequestAborted);
+            }));
+        });
 
         if (LocalAuthentication.IsEnabled(configuration, environment))
         {
@@ -44,6 +74,7 @@ public static class AuthenticationHelper
                     options.Cookie.Name = cookieName;
                     options.LoginPath = "/login";
                     options.Events.OnSigningIn = OnSigningIn;
+                    options.Events.OnSigningOut = OnSigningOut;
                     options.Events.OnRedirectToLogin = ctx =>
                     {
                         if (ctx.Request.Path.StartsWithSegments("/api"))
@@ -99,6 +130,7 @@ public static class AuthenticationHelper
             options.Events = new CookieAuthenticationEvents
             {
                 OnSigningIn = OnSigningIn,
+                OnSigningOut = OnSigningOut,
                 OnValidatePrincipal = OnValidatePrincipal,
                 OnRedirectToAccessDenied = ctx =>
                 {
@@ -141,6 +173,16 @@ public static class AuthenticationHelper
     {
         var userService = ctx.HttpContext.RequestServices.GetRequiredService<IUserService>();
         await userService.UpdateUserOnLogin(ctx.Principal!, ctx.HttpContext.RequestAborted);
+        ctx.Properties.Items[EmulationService.SessionPropertyKey] = Guid.NewGuid().ToString("N");
+        ctx.HttpContext.RequestServices.GetRequiredService<EmulationService>().Clear(ctx.HttpContext, force: true);
+    }
+
+    private static Task OnSigningOut(CookieSigningOutContext ctx)
+    {
+        // OIDC sign-out must use the real login, even while the request is emulated.
+        ctx.HttpContext.User = EmulationService.GetActor(ctx.HttpContext);
+        ctx.HttpContext.RequestServices.GetRequiredService<EmulationService>().Clear(ctx.HttpContext, force: true);
+        return Task.CompletedTask;
     }
 
     /// <summary>

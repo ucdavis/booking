@@ -1,12 +1,16 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Server.Core.Data;
+using Server.Core.Domain;
 using Server.Core.Notification;
 using Server.Examples.Notifications;
 using Server.Helpers;
+using Server.Middleware;
 using Server.Services;
 
 WebApplication? app = null;
@@ -36,7 +40,9 @@ try
     // Use Entra by default; the Docker sandbox explicitly enables local cookies.
     builder.Services.AddAuthenticationServices(builder.Configuration, builder.Environment);
 
-    builder.Services.AddControllersWithViews();
+    builder.Services.AddControllersWithViews().AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters.Add(
+            new JsonStringEnumConverter<TeamRole>(JsonNamingPolicy.CamelCase, allowIntegerValues: false)));
     builder.Services.AddNotificationServices(builder.Configuration);
     builder.Services.AddNotificationExamples(builder.Configuration);
 
@@ -153,6 +159,7 @@ try
 
 
     app.UseAuthentication();
+    app.UseMiddleware<EmulationMiddleware>();
     app.UseAuthorization();
 
     // enrich every log with request context
@@ -172,7 +179,7 @@ try
         NoStore = false,
     });
 
-    app.MapFallbackToFile("/index.html", staticFileOptions);
+    app.MapFallbackToFile("/index.html", staticFileOptions).AllowAnonymous();
 
     app.Logger.LogInformation("Startup complete. Listening on {Urls}", string.Join(", ", app.Urls));
     app.Run();

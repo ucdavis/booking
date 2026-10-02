@@ -12,14 +12,19 @@
         p { line-height: 1.6; }
         button { display: block; width: 100%; padding: 16px; margin-top: 16px; text-align: left; border: 1px solid #b8c6d3; border-radius: 6px; background: white; color: #022851; font: inherit; cursor: pointer; }
         button:hover { background: #eef4fa; }
-        button:focus-visible, a:focus-visible { outline: 3px solid #13639e; outline-offset: 3px; }
+        button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid #13639e; outline-offset: 3px; }
         button span { display: block; margin-top: 6px; font-size: 14px; }
+        .person-sign-in { margin-top: 28px; padding-top: 12px; border-top: 1px solid #d6dfe7; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; }
+        input[type="text"] { box-sizing: border-box; width: 100%; padding: 12px; border: 1px solid #b8c6d3; border-radius: 6px; font: inherit; }
+        .hint { font-size: 14px; }
+        .validation-error { display: block; margin-top: 12px; color: #9b1c20; }
         a { color: #00588a; }
     </style>
 </head>
 <body>
 <main>
-    <p>Booking · Docker sandbox</p>
+    <p>Booking · Local development</p>
     <h1>Choose a local user</h1>
     <p>These fictional accounts work without Entra or a password. Sample User can open every example. Basic User lets you check access denied responses.</p>
     <form action="/login/local" method="post">
@@ -34,6 +39,29 @@
             <span>basic@example.test · User only</span>
         </button>
     </form>
+    <form action="/login/local/person" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="returnUrl" value="@Model" />
+        <input type="hidden" name="query" value="FAKE000055" />
+        <button type="submit">
+            <strong>Sign in as Fake055 User055</strong>
+            <span>FAKE000055 · Seeded site administrator</span>
+        </button>
+    </form>
+    <section class="person-sign-in" aria-labelledby="person-sign-in-heading">
+        <h2 id="person-sign-in-heading">Sign in as a person</h2>
+        <p>Use a person from the People table to try their existing site and team access.</p>
+        <form action="/login/local/person" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="returnUrl" value="@Model" />
+            <label for="people-query">Email, IAM ID, or Kerberos ID</label>
+            <input id="people-query" name="query" type="text" value="@ViewData["PeopleQuery"]"
+                   maxlength="128" required autocomplete="off" aria-describedby="people-query-hint people-query-error" />
+            <p class="hint" id="people-query-hint">Enter a complete email address or ID. The person must be active in IAM. Existing inactive application accounts cannot sign in.</p>
+            <span class="validation-error" id="people-query-error" role="alert">@Html.ValidationMessage("query")</span>
+            <button type="submit"><strong>Sign in as this person</strong></button>
+        </form>
+    </section>
     @if (User.Identity?.IsAuthenticated == true)
     {
         <p>Signed in as <strong>@User.Identity.Name</strong>. <a href="@Model">Continue to the app</a></p>

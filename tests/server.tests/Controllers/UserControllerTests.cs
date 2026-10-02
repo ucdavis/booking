@@ -26,6 +26,32 @@ public class UserControllerTests
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(okResult.Value));
         json.RootElement.GetProperty("IamId").GetString().Should().Be("123456789");
+        json.RootElement.GetProperty("Kerberos").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Theory]
+    [InlineData("tuser   ", "tuser")]
+    [InlineData(null, null)]
+    [InlineData("        ", null)]
+    public async Task Me_returns_kerberos_from_the_effective_users_matching_directory_person(
+        string? directoryUserId, string? expectedKerberos)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        db.People.AddRange(
+            new Server.Core.Domain.Person { IamId = "123456789", UserId = directoryUserId },
+            new Server.Core.Domain.Person { IamId = "actor-iam", UserId = "actor" });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var controller = CreateController(db, "123456789");
+        controller.HttpContext.Items[EmulationService.ActorItemKey] = new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim("ucdPersonIAMID", "actor-iam")], "TestAuth"));
+
+        var result = await controller.Me();
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(okResult.Value));
+        json.RootElement.GetProperty("Kerberos").GetString().Should().Be(expectedKerberos);
+        db.ChangeTracker.Entries().Should().BeEmpty();
     }
 
     [Fact]
@@ -39,6 +65,7 @@ public class UserControllerTests
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(okResult.Value));
         json.RootElement.GetProperty("IamId").ValueKind.Should().Be(JsonValueKind.Null);
+        json.RootElement.GetProperty("Kerberos").ValueKind.Should().Be(JsonValueKind.Null);
         json.RootElement.GetProperty("IsSiteAdmin").GetBoolean().Should().BeFalse();
     }
 
@@ -106,7 +133,7 @@ public class UserControllerTests
 
         var userService = new UserService(NullLogger<UserService>.Instance, db,
             new ConfigurationBuilder().Build(), new TestEnvironment());
-        return new UserController(userService)
+        return new UserController(userService, db)
         {
             ControllerContext = new ControllerContext
             {

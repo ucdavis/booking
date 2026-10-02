@@ -23,6 +23,8 @@ Try these flows:
 
 Sample User has ID `sandbox-sample`, email `sample@example.test`, IAM ID `sandbox-10001`, and roles `User` and `SampleRole`. Basic User has ID `sandbox-basic`, email `basic@example.test`, IAM ID `sandbox-10002`, and only `User`. Their claims and roles are fixed; each login creates or updates the matching `Users` row by IAM ID, including profile details and login timestamps. Extend `LocalAuthentication.cs` when adding application roles, and `DbInitializer.cs` when adding fixtures.
 
+The local sign-in page also offers **Sign in as a person**. Enter an exact email, IAM ID, or Kerberos ID from this sandbox's `People` table. This option requires a single match that is active in IAM and has no inactive application account. It signs in with the person's profile and the `User` application role, preserving their existing database site-admin flag and team memberships. Like the fictional choices, it requires no password and is available only with `Auth__UseLocal=true` in Development. Use an IAM ID to resolve ambiguous email or Kerberos matches.
+
 ## Stop, rebuild, and reset
 
 To stop the sandbox and preserve the database and cookie keys:
