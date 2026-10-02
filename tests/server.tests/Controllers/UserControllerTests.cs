@@ -132,7 +132,7 @@ public class UserControllerTests
         var user = new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuth"));
 
         var userService = new UserService(NullLogger<UserService>.Instance, db,
-            new ConfigurationBuilder().Build(), new TestEnvironment());
+            new ConfigurationBuilder().Build(), new TestEnvironment(), new FakeRosettaService());
         return new UserController(userService, db)
         {
             ControllerContext = new ControllerContext

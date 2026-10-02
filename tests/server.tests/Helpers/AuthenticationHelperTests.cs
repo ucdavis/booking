@@ -37,7 +37,7 @@ public class AuthenticationHelperTests : IDisposable
     }
 
     private static ServiceProvider CreateProvider(bool local = false, Func<AppDbContext>? createDbContext = null,
-        string? adminIamIds = null, string? environmentName = null)
+        string? adminIamIds = null, string? environmentName = null, FakeRosettaService? rosetta = null)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -59,6 +59,7 @@ public class AuthenticationHelperTests : IDisposable
         services.AddSingleton<IHostEnvironment>(environment);
         services.AddScoped(_ => createDbContext?.Invoke() ?? TestDbContextFactory.CreateInMemory());
         services.AddScoped<IUserService, UserService>();
+        services.AddSingleton<IRosettaService>(rosetta ?? new FakeRosettaService());
         services.AddAuthenticationServices(configuration, environment);
         return services.BuildServiceProvider();
     }
@@ -272,7 +273,7 @@ public class AuthenticationHelperTests : IDisposable
         cache.NoStore.Should().BeTrue();
         cache.Location.Should().Be(ResponseCacheLocation.None);
         using var db = TestDbContextFactory.CreateInMemory();
-        new AdminController(db).Access().Should().BeOfType<NoContentResult>();
+        new AdminController(db, new FakeRosettaService()).Access().Should().BeOfType<NoContentResult>();
     }
 
     [Theory]
@@ -293,13 +294,107 @@ public class AuthenticationHelperTests : IDisposable
         var user = await db.Users.SingleAsync();
         user.IamId.Should().Be("sandbox-10001");
         user.Name.Should().Be("Sample User");
-        user.Email.Should().Be("sample@example.test");
+        user.Email.Should().Be(local ? "sample@example.test" : null);
         user.IsAdmin.Should().BeFalse();
         user.IsActive.Should().BeTrue();
         user.CreatedAt.Should().BeOnOrAfter(startedAt).And.BeOnOrBefore(DateTimeOffset.UtcNow);
         user.UpdatedAt.Should().Be(user.CreatedAt);
         user.LastLoginAt.Should().Be(user.CreatedAt);
         context.Response.Headers.SetCookie.Should().NotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("changed@health.ucdavis.edu")]
+    public async Task First_Entra_login_uses_Rosetta_profile_and_later_login_preserves_campus_email_without_directory_calls(
+        string? laterLoginEmail)
+    {
+        var rosetta = new FakeRosettaService();
+        rosetta.People.Add(new Server.Models.Directory.DirectoryPerson
+        {
+            IamId = "sandbox-10001", Name = "Directory Name", Email = "directory@ucdavis.edu", Kerberos = "kerb1",
+        });
+        using var provider = CreateProvider(rosetta: rosetta);
+        using var scope = provider.CreateScope();
+
+        var principal = CreatePrincipal();
+        ((ClaimsIdentity)principal.Identity!).AddClaim(new Claim("preferred_username", "directory@health.ucdavis.edu"));
+        await SignIn(scope.ServiceProvider, principal);
+
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await db.Users.SingleAsync();
+        user.Name.Should().Be("Directory Name");
+        user.Email.Should().Be("directory@ucdavis.edu");
+        rosetta.LookupCalls.Should().Equal("sandbox-10001");
+        db.Model.FindEntityType(typeof(User))!.FindProperty("Kerberos").Should().BeNull();
+
+        rosetta.Failure = new HttpRequestException("Directory unavailable");
+        var laterPrincipal = CreatePrincipal();
+        if (laterLoginEmail != null)
+        {
+            ((ClaimsIdentity)laterPrincipal.Identity!).AddClaim(new Claim("preferred_username", laterLoginEmail));
+        }
+        await SignIn(scope.ServiceProvider, laterPrincipal);
+
+        rosetta.LookupCalls.Should().ContainSingle();
+        (await db.Users.SingleAsync()).Email.Should().Be("directory@ucdavis.edu");
+        (await db.Users.CountAsync()).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Entra_login_without_a_campus_email_never_saves_the_health_login_address(bool foundInRosetta)
+    {
+        var rosetta = new FakeRosettaService();
+        if (foundInRosetta)
+        {
+            rosetta.People.Add(new Server.Models.Directory.DirectoryPerson
+            {
+                IamId = "sandbox-10001", Name = "Directory Name", Kerberos = "kerb1", IsActiveInIam = true,
+            });
+        }
+        using var provider = CreateProvider(rosetta: rosetta);
+        using var scope = provider.CreateScope();
+        var principal = CreatePrincipal();
+        ((ClaimsIdentity)principal.Identity!).AddClaim(new Claim("preferred_username", "person@health.ucdavis.edu"));
+
+        await SignIn(scope.ServiceProvider, principal);
+
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await db.Users.SingleAsync();
+        user.Email.Should().BeNull();
+        user.Name.Should().Be(foundInRosetta ? "Directory Name" : "Sample User");
+    }
+
+    [Fact]
+    public async Task First_login_directory_failure_does_not_save_a_user_or_issue_a_cookie()
+    {
+        var rosetta = new FakeRosettaService { Failure = new HttpRequestException("Directory unavailable") };
+        using var provider = CreateProvider(rosetta: rosetta);
+        using var scope = provider.CreateScope();
+        var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+
+        var signIn = () => context.SignInAsync(GetCookieScheme(false), CreatePrincipal());
+
+        await signIn.Should().ThrowAsync<HttpRequestException>();
+        (await scope.ServiceProvider.GetRequiredService<AppDbContext>().Users.AnyAsync()).Should().BeFalse();
+        context.Response.Headers.SetCookie.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("sample")]
+    [InlineData("basic")]
+    public async Task Local_sandbox_login_does_not_call_Rosetta(string persona)
+    {
+        var rosetta = new FakeRosettaService { Failure = new HttpRequestException("Directory unavailable") };
+        using var provider = CreateProvider(local: true, rosetta: rosetta);
+        using var scope = provider.CreateScope();
+
+        await SignIn(scope.ServiceProvider, LocalAuthentication.CreatePrincipal(persona)!, local: true);
+
+        rosetta.LookupCalls.Should().BeEmpty();
+        (await scope.ServiceProvider.GetRequiredService<AppDbContext>().Users.CountAsync()).Should().Be(1);
     }
 
     [Theory]
@@ -549,6 +644,7 @@ public class AuthenticationHelperTests : IDisposable
         user.CreatedAt = originalCreatedAt;
         user.UpdatedAt = originalCreatedAt;
         user.LastLoginAt = originalCreatedAt;
+        user.Email = "saved@ucdavis.edu";
         user.IsAdmin = true;
         user.IsActive = false;
         await db.SaveChangesAsync();
@@ -567,7 +663,7 @@ public class AuthenticationHelperTests : IDisposable
         user.Id.Should().Be(userId);
         user.IamId.Should().Be("sandbox-10001");
         user.Name.Should().Be("Updated User");
-        user.Email.Should().Be("updated@example.test");
+        user.Email.Should().Be(local ? "updated@example.test" : "saved@ucdavis.edu");
         user.CreatedAt.Should().Be(originalCreatedAt);
         user.IsAdmin.Should().BeTrue();
         user.IsActive.Should().BeFalse();
@@ -591,7 +687,7 @@ public class AuthenticationHelperTests : IDisposable
             Id = 123,
             IamId = "sandbox-10001",
             Name = "Previous Name",
-            Email = "previous@example.test",
+            Email = "previous@ucdavis.edu",
             CreatedAt = createdAt,
             UpdatedAt = createdAt,
             LastLoginAt = createdAt,
@@ -618,7 +714,7 @@ public class AuthenticationHelperTests : IDisposable
         var user = await db.Users.SingleAsync();
         user.Id.Should().Be(competingUser.Id);
         user.Name.Should().Be("Sample User");
-        user.Email.Should().Be("current@example.test");
+        user.Email.Should().Be(local ? "current@example.test" : "previous@ucdavis.edu");
         user.CreatedAt.Should().Be(createdAt);
         user.IsAdmin.Should().BeTrue();
         user.IsActive.Should().BeFalse();
@@ -707,7 +803,7 @@ public class AuthenticationHelperTests : IDisposable
     [InlineData(false, "email")]
     [InlineData(true, ClaimTypes.Email)]
     [InlineData(true, "email")]
-    public async Task Login_accepts_the_identity_name_and_alternate_email_claims(bool local, string emailClaimType)
+    public async Task Login_accepts_the_identity_name_and_only_saves_alternate_email_claims_in_local_mode(bool local, string emailClaimType)
     {
         using var provider = CreateProvider(local);
         using var scope = provider.CreateScope();
@@ -721,7 +817,7 @@ public class AuthenticationHelperTests : IDisposable
         db.ChangeTracker.Clear();
         var user = await db.Users.SingleAsync();
         user.Name.Should().Be("Alternate User");
-        user.Email.Should().Be("alternate@example.test");
+        user.Email.Should().Be(local ? "alternate@example.test" : null);
     }
 
     [Theory]
@@ -1020,6 +1116,11 @@ public class AuthenticationHelperTests : IDisposable
     private static async Task<DefaultHttpContext> SignIn(
         IServiceProvider services, ClaimsPrincipal principal, bool local = false)
     {
+        if (local)
+        {
+            principal = new ClaimsPrincipal(principal.Identities.Select(identity =>
+                new ClaimsIdentity(identity.Claims, LocalAuthentication.Scheme, identity.NameClaimType, identity.RoleClaimType)));
+        }
         var context = new DefaultHttpContext { RequestServices = services };
         await context.SignInAsync(GetCookieScheme(local), principal);
         return context;

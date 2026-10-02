@@ -15,6 +15,7 @@ using Server.Core.Data;
 using Server.Core.Domain;
 using Server.Helpers;
 using Server.Models.Emulation;
+using Server.Models.Directory;
 using Server.Services;
 
 namespace Server.Tests.Controllers;
@@ -60,9 +61,9 @@ public class EmulationControllerTests
     public async Task Search_trims_identifiers_without_creating_users()
     {
         using var db = TestDbContextFactory.CreateInMemory();
-        var controller = await Controller(db);
-        db.People.Add(new Person { IamId = "1000000001", FullName = "Target", IsActiveInIam = true });
-        await db.SaveChangesAsync();
+        var rosetta = new FakeRosettaService(db);
+        rosetta.People.Add(new DirectoryPerson { IamId = "1000000001", Name = "Target", IsActiveInIam = true });
+        var controller = await Controller(db, rosetta);
 
         var result = await controller.Candidates(" 1000000001 ");
 
@@ -103,16 +104,17 @@ public class EmulationControllerTests
     public async Task Start_requires_a_bound_actor_session_before_creating_a_person_account()
     {
         using var db = TestDbContextFactory.CreateInMemory();
-        var controller = await Controller(db);
+        var rosetta = new FakeRosettaService(db);
+        rosetta.People.Add(new DirectoryPerson { IamId = "1000000001", Name = "Target", IsActiveInIam = true });
+        var controller = await Controller(db, rosetta);
         controller.HttpContext.Items.Remove(EmulationService.SessionItemKey);
-        db.People.Add(new Person { IamId = "1000000001", FullName = "Target", IsActiveInIam = true });
-        await db.SaveChangesAsync();
 
         var result = await controller.Start(new StartEmulationRequest { IamId = "1000000001" });
 
         result.Should().BeOfType<ForbidResult>();
         (await db.Users.CountAsync()).Should().Be(1);
         controller.Response.Headers.SetCookie.Should().BeEmpty();
+        rosetta.LookupCalls.Should().BeEmpty();
     }
 
     [Fact]
@@ -174,7 +176,7 @@ public class EmulationControllerTests
         controller.Response.Headers.SetCookie.Should().ContainSingle();
     }
 
-    private static async Task<EmulationController> Controller(AppDbContext db)
+    private static async Task<EmulationController> Controller(AppDbContext db, FakeRosettaService? rosetta = null)
     {
         db.Users.Add(new User { IamId = "actor", Name = "Administrator", IsAdmin = true });
         await db.SaveChangesAsync();
@@ -183,9 +185,10 @@ public class EmulationControllerTests
             ["Auth:UseLocal"] = "true",
         }).Build();
         var environment = new TestEnvironment();
-        var users = new UserService(NullLogger<UserService>.Instance, db, configuration, environment);
+        rosetta ??= new FakeRosettaService(db);
+        var users = new UserService(NullLogger<UserService>.Instance, db, configuration, environment, rosetta);
         var service = new EmulationService(db, users, configuration, environment,
-            new EphemeralDataProtectionProvider(), NullLogger<EmulationService>.Instance);
+            new EphemeralDataProtectionProvider(), NullLogger<EmulationService>.Instance, rosetta);
         var actor = Principal("actor");
         var context = new DefaultHttpContext { User = actor };
         context.Items[EmulationService.ActorItemKey] = actor;

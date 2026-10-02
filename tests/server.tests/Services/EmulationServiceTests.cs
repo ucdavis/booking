@@ -11,32 +11,38 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Net.Http.Headers;
 using Server.Core.Data;
 using Server.Core.Domain;
+using Server.Models.Directory;
 using Server.Services;
 
 namespace Server.Tests.Services;
 
 public class EmulationServiceTests
 {
+    private readonly List<DirectoryPerson> _people = [];
+
     [Fact]
-    public async Task Search_returns_accounts_before_directory_only_people_without_duplicates_or_writes()
+    public async Task Search_returns_accounts_without_directory_requests_or_writes()
     {
         using var db = TestDbContextFactory.CreateInMemory();
         db.Users.AddRange(
             new User { IamId = "account", Name = "Stored Name", Email = "match@example.test" },
             new User { IamId = "no-person", Name = "Standalone Account", Email = "match@example.test" });
-        db.People.AddRange(
-            new Person { IamId = "account", FullName = "Directory Name", Email = "match@example.test", IsActiveInIam = true },
-            new Person { IamId = "new-person", FullName = "New Person", Email = "match@example.test", IsActiveInIam = true });
+        _people.AddRange([
+            new DirectoryPerson { IamId = "account", Name = "Directory Name", Email = "match@example.test", IsActiveInIam = true },
+            new DirectoryPerson { IamId = "new-person", Name = "New Person", Email = "match@example.test", IsActiveInIam = true },
+        ]);
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
-        var matches = await Service(db).SearchAsync("match@example.test", default);
+        var rosetta = new FakeRosettaService(db) { Failure = new HttpRequestException("Directory unavailable.") };
+        var matches = await Service(db, rosetta: rosetta).SearchAsync("match@example.test", default);
 
-        matches.Select(match => match.IamId).Should().Equal("no-person", "account", "new-person");
+        matches.Select(match => match.IamId).Should().Equal("no-person", "account");
         matches.Single(match => match.IamId == "account").Name.Should().Be("Stored Name");
         matches.Single(match => match.IamId == "account").HasUserAccount.Should().BeTrue();
         matches.Single(match => match.IamId == "no-person").IsActiveInIam.Should().BeNull();
-        matches.Last().HasUserAccount.Should().BeFalse();
+        matches.Should().OnlyContain(match => match.HasUserAccount && match.Kerberos == null);
+        rosetta.LookupCalls.Should().BeEmpty();
         (await db.Users.CountAsync()).Should().Be(2);
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
@@ -48,13 +54,36 @@ public class EmulationServiceTests
     {
         using var db = TestDbContextFactory.CreateInMemory();
         db.Users.Add(new User { IamId = "1000000001", Name = "Stored Name", Email = "old@example.test" });
-        db.People.Add(Person());
+        _people.Add(Person());
         await db.SaveChangesAsync();
 
         var matches = await Service(db).SearchAsync(query, default);
 
         matches.Should().ContainSingle().Which.HasUserAccount.Should().BeTrue();
         matches[0].IamId.Should().Be("1000000001");
+        matches[0].Name.Should().Be("Stored Name");
+        matches[0].Email.Should().Be("old@example.test");
+        matches[0].Kerberos.Should().Be("person1");
+        matches[0].IsActiveInIam.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Search_returns_directory_only_people_without_creating_an_account()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        _people.Add(Person());
+
+        var matches = await Service(db).SearchAsync("person1", default);
+
+        var match = matches.Should().ContainSingle().Which;
+        match.Name.Should().Be("Directory Person");
+        match.Email.Should().Be("directory@example.test");
+        match.Kerberos.Should().Be("person1");
+        match.HasUserAccount.Should().BeFalse();
+        match.IsActive.Should().BeTrue();
+        match.IsActiveInIam.Should().BeTrue();
+        db.Users.Should().BeEmpty();
+        db.ChangeTracker.Entries().Should().BeEmpty();
     }
 
     [Fact]
@@ -73,13 +102,11 @@ public class EmulationServiceTests
     }
 
     [Fact]
-    public async Task Create_from_people_does_not_record_login_grant_admin_or_add_memberships()
+    public async Task Create_from_Rosetta_does_not_record_login_grant_admin_or_add_memberships()
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var person = Person();
-        person.FullName = " Directory Person ";
-        person.Email = " directory@example.test ";
-        db.People.Add(person);
+        _people.Add(person);
         await db.SaveChangesAsync();
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -102,19 +129,21 @@ public class EmulationServiceTests
     }
 
     [Fact]
-    public async Task Existing_accounts_without_people_are_reused_without_modifying_profile_or_timestamps()
+    public async Task Existing_accounts_without_directory_matches_are_reused_without_modifying_profile_or_timestamps()
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var originalTime = DateTimeOffset.UtcNow.AddDays(-10);
         var user = new User
         {
-            IamId = "sandbox-10001", Name = "Original", Email = "original@example.test", IsAdmin = true,
+            IamId = "1000000001", Name = "Original", Email = "original@example.test", IsAdmin = true,
             CreatedAt = originalTime, UpdatedAt = originalTime, LastLoginAt = originalTime,
         };
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var result = await Service(db).FindOrCreateTargetAsync(user.IamId, default);
+        var rosetta = new FakeRosettaService(db);
+        var service = Service(db, rosetta: rosetta);
+        var result = await service.FindOrCreateTargetAsync(user.IamId, default);
 
         result.User.Should().BeSameAs(user);
         result.Error.Should().BeNull();
@@ -124,6 +153,8 @@ public class EmulationServiceTests
         user.UpdatedAt.Should().Be(originalTime);
         user.LastLoginAt.Should().Be(originalTime);
         (await db.Users.CountAsync()).Should().Be(1);
+        (await service.GetActiveTargetAsync(user.IamId, default)).Should().NotBeNull();
+        rosetta.LookupCalls.Should().Equal(user.IamId, user.IamId);
     }
 
     [Theory]
@@ -135,7 +166,7 @@ public class EmulationServiceTests
         db.Users.Add(new User { IamId = "1000000001", Name = "Existing", IsActive = activeUser });
         var person = Person();
         person.IsActiveInIam = activePerson;
-        db.People.Add(person);
+        _people.Add(person);
         await db.SaveChangesAsync();
         var service = Service(db);
 
@@ -152,7 +183,7 @@ public class EmulationServiceTests
         using var db = TestDbContextFactory.CreateInMemory();
         var person = Person();
         person.IsActiveInIam = false;
-        db.People.Add(person);
+        _people.Add(person);
         await db.SaveChangesAsync();
         var service = Service(db);
 
@@ -167,17 +198,177 @@ public class EmulationServiceTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Unknown_directory_activity_prevents_creation_or_emulation(bool existingUser)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var person = Person();
+        person.IsActiveInIam = null;
+        _people.Add(person);
+        if (existingUser)
+        {
+            db.Users.Add(new User { IamId = person.IamId, Name = "Existing" });
+            await db.SaveChangesAsync();
+        }
+        var service = Service(db);
+
+        var result = await service.FindOrCreateTargetAsync(person.IamId, default);
+
+        result.User.Should().BeNull();
+        result.Error.Should().Be("This person's IAM activity could not be verified. Search again before emulating.");
+        (await service.GetActiveTargetAsync(person.IamId, default)).Should().BeNull();
+        (await db.Users.CountAsync()).Should().Be(existingUser ? 1 : 0);
+        db.ChangeTracker.HasChanges().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Starting_and_continuing_emulation_recheck_directory_activity()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var person = Person();
+        _people.Add(person);
+        db.Users.Add(new User { IamId = person.IamId, Name = "Stored Name", Email = "stored@example.test" });
+        await db.SaveChangesAsync();
+        var rosetta = new FakeRosettaService(db);
+        var service = Service(db, rosetta: rosetta);
+        await service.SearchAsync(person.IamId, default);
+
+        var result = await service.FindOrCreateTargetAsync(person.IamId, default);
+
+        result.User!.Name.Should().Be("Stored Name");
+        result.User.Email.Should().Be("stored@example.test");
+        result.Error.Should().BeNull();
+        person.IsActiveInIam = false;
+        (await service.GetActiveTargetAsync(person.IamId, default)).Should().BeNull();
+        (await service.FindOrCreateTargetAsync(person.IamId, default)).Error.Should()
+            .Be("This person is inactive in IAM and cannot be emulated.");
+        rosetta.LookupCalls.Should().Equal(person.IamId, person.IamId, person.IamId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Directory_failures_prevent_starting_emulation_without_writes(bool existingUser)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        if (existingUser)
+        {
+            db.Users.Add(new User { IamId = "1000000001", Name = "Existing" });
+            await db.SaveChangesAsync();
+        }
+        var rosetta = new FakeRosettaService(db) { Failure = new HttpRequestException("Directory unavailable.") };
+        var service = Service(db, rosetta: rosetta);
+
+        var start = () => service.FindOrCreateTargetAsync("1000000001", default);
+
+        await start.Should().ThrowAsync<HttpRequestException>();
+        (await db.Users.CountAsync()).Should().Be(existingUser ? 1 : 0);
+        db.ChangeTracker.HasChanges().Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Continuing_emulation_requires_recovery_when_directory_lookup_fails(bool ambiguous)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        db.Users.Add(new User { IamId = "1000000001", Name = "Existing" });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var rosetta = new FakeRosettaService(db)
+        {
+            Failure = ambiguous
+                ? new InvalidOperationException("Ambiguous directory lookup.")
+                : new HttpRequestException("Directory unavailable."),
+        };
+
+        var user = await Service(db, rosetta: rosetta).GetActiveTargetAsync("1000000001", default);
+
+        user.Should().BeNull();
+        rosetta.LookupCalls.Should().Equal("1000000001");
+        db.ChangeTracker.Entries().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Continuing_emulation_preserves_request_cancellation()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        db.Users.Add(new User { IamId = "1000000001", Name = "Existing" });
+        await db.SaveChangesAsync();
+        var rosetta = new FakeRosettaService(db) { Failure = new OperationCanceledException() };
+        var service = Service(db, rosetta: rosetta);
+
+        var lookup = () => service.GetActiveTargetAsync("1000000001", default);
+
+        await lookup.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task Inactive_users_are_rejected_without_directory_requests()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        db.Users.Add(new User { IamId = "1000000001", Name = "Inactive", IsActive = false });
+        await db.SaveChangesAsync();
+        var rosetta = new FakeRosettaService(db) { Failure = new HttpRequestException("Directory unavailable.") };
+        var service = Service(db, rosetta: rosetta);
+
+        var result = await service.FindOrCreateTargetAsync("1000000001", default);
+
+        result.User.Should().BeNull();
+        result.Error.Should().Be("This user is inactive and cannot be emulated.");
+        (await service.GetActiveTargetAsync("1000000001", default)).Should().BeNull();
+        rosetta.LookupCalls.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("sandbox-10001")]
+    [InlineData("sandbox-10002")]
+    public async Task Existing_local_personas_can_be_emulated_without_directory_requests(string iamId)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        db.Users.Add(new User { IamId = iamId, Name = "Local Persona" });
+        await db.SaveChangesAsync();
+        var rosetta = new FakeRosettaService(db) { Failure = new HttpRequestException("Directory unavailable.") };
+        var service = Service(db, rosetta: rosetta);
+
+        var result = await service.FindOrCreateTargetAsync(iamId, default);
+
+        result.User.Should().NotBeNull();
+        result.Error.Should().BeNull();
+        (await service.GetActiveTargetAsync(iamId, default)).Should().NotBeNull();
+        rosetta.LookupCalls.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Local_persona_directory_bypass_requires_local_mode_and_an_existing_account(
+        bool localMode, bool existingUser)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        if (existingUser)
+        {
+            db.Users.Add(new User { IamId = "sandbox-10001", Name = "Local Persona" });
+            await db.SaveChangesAsync();
+        }
+        var rosetta = new FakeRosettaService(db);
+
+        var result = await Service(db, local: localMode, rosetta: rosetta)
+            .FindOrCreateTargetAsync("sandbox-10001", default);
+
+        (result.User != null).Should().Be(existingUser);
+        rosetta.LookupCalls.Should().Equal("sandbox-10001");
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task Concurrent_creation_reuses_the_winner_and_preserves_flags_and_login(bool winnerActive)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase($"EmulationRace_{Guid.NewGuid():N}").Options;
-        using (var seed = new AppDbContext(options))
-        {
-            seed.People.Add(Person());
-            await seed.SaveChangesAsync();
-        }
+        _people.Add(Person());
         using var db = new ConcurrentInsertDbContext(options, winnerActive, insertWinner: true);
 
         var result = await Service(db).FindOrCreateTargetAsync("1000000001", default);
@@ -197,11 +388,7 @@ public class EmulationServiceTests
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase($"EmulationFailure_{Guid.NewGuid():N}").Options;
-        using (var seed = new AppDbContext(options))
-        {
-            seed.People.Add(Person());
-            await seed.SaveChangesAsync();
-        }
+        _people.Add(Person());
         using var db = new ConcurrentInsertDbContext(options, winnerActive: true, insertWinner: false);
 
         var create = () => Service(db).FindOrCreateTargetAsync("1000000001", default);
@@ -339,23 +526,25 @@ public class EmulationServiceTests
         cookie.Secure.Should().BeTrue();
     }
 
-    private static EmulationService Service(AppDbContext db, bool local = true,
-        IConfiguration? configuration = null, IDataProtectionProvider? provider = null)
+    private EmulationService Service(AppDbContext db, bool local = true,
+        IConfiguration? configuration = null, IDataProtectionProvider? provider = null, FakeRosettaService? rosetta = null)
     {
+        rosetta ??= new FakeRosettaService(db);
+        rosetta.People.AddRange(_people);
         configuration ??= new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Auth:UseLocal"] = local.ToString(),
         }).Build();
         var environment = new TestEnvironment();
-        var users = new UserService(NullLogger<UserService>.Instance, db, configuration, environment);
+        var users = new UserService(NullLogger<UserService>.Instance, db, configuration, environment, rosetta);
         return new EmulationService(db, users, configuration, environment,
-            provider ?? new EphemeralDataProtectionProvider(), NullLogger<EmulationService>.Instance);
+            provider ?? new EphemeralDataProtectionProvider(), NullLogger<EmulationService>.Instance, rosetta);
     }
 
-    private static Person Person() => new()
+    private static DirectoryPerson Person() => new()
     {
-        IamId = "1000000001", FullName = "Directory Person", Email = "directory@example.test",
-        UserId = "person1", IsActiveInIam = true,
+        IamId = "1000000001", Name = "Directory Person", Email = "directory@example.test",
+        Kerberos = "person1", IsActiveInIam = true,
     };
 
     private static ClaimsPrincipal Actor(string iamId = "actor-iam") => new(new ClaimsIdentity(

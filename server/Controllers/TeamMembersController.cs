@@ -5,6 +5,7 @@ using Server.Core.Data;
 using Server.Core.Domain;
 using Server.Helpers;
 using Server.Models.Teams;
+using Server.Services;
 
 namespace Server.Controllers;
 
@@ -13,7 +14,7 @@ namespace Server.Controllers;
 [Authorize(Policy = AuthenticationHelper.TeamAdminPolicy)]
 [AutoValidateAntiforgeryToken]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public class TeamMembersController(AppDbContext dbContext) : ControllerBase
+public class TeamMembersController(AppDbContext dbContext, IRosettaService rosettaService) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<List<TeamMemberResponse>>> GetMembers(
@@ -59,29 +60,35 @@ public class TeamMembersController(AppDbContext dbContext) : ControllerBase
             return NotFound("That team could not be found.");
         }
 
-        var matches = await (
-            from person in dbContext.People.AsNoTracking()
-            where person.Email == search || person.IamId == search || person.UserId == search
-            join user in dbContext.Users.AsNoTracking() on person.IamId equals user.IamId into users
-            from user in users.DefaultIfEmpty()
+        var people = (await rosettaService.SearchPeopleAsync(search, cancellationToken)).Take(10).ToList();
+        var iamIds = people.Select(person => person.IamId).ToList();
+        var users = await (
+            from user in dbContext.Users.AsNoTracking()
+            where iamIds.Contains(user.IamId)
             join permission in dbContext.TeamPermissions.AsNoTracking().Where(permission => permission.TeamId == teamId)
-                on (user == null ? (int?)null : user.Id) equals (int?)permission.UserId into permissions
+                on user.Id equals permission.UserId into permissions
             from permission in permissions.DefaultIfEmpty()
-            orderby person.FullName, person.IamId
-            select new TeamPersonResponse
+            select new
             {
-                IamId = person.IamId.Trim(),
-                Name = (person.FullName ?? "").Trim() != ""
-                    ? person.FullName!.Trim()
-                    : ((person.FirstName ?? "") + " " + (person.LastName ?? "")).Trim(),
-                Email = person.Email == null ? null : person.Email!.Trim(),
-                Kerberos = person.UserId == null ? null : person.UserId!.Trim(),
-                IsActive = user == null || user.IsActive,
-                IsActiveInIam = person.IsActiveInIam,
+                user.IamId,
+                user.IsActive,
                 Role = permission == null ? null : (TeamRole?)permission.Role,
             })
-            .Take(10)
-            .ToListAsync(cancellationToken);
+            .ToDictionaryAsync(user => user.IamId, cancellationToken);
+        var matches = people.Select(person =>
+        {
+            users.TryGetValue(person.IamId, out var user);
+            return new TeamPersonResponse
+            {
+                IamId = person.IamId,
+                Name = person.Name,
+                Email = person.Email,
+                Kerberos = person.Kerberos,
+                IsActive = user == null || user.IsActive,
+                IsActiveInIam = person.IsActiveInIam,
+                Role = user?.Role,
+            };
+        }).ToList();
 
         return Ok(matches);
     }
@@ -106,24 +113,6 @@ public class TeamMembersController(AppDbContext dbContext) : ControllerBase
             return NotFound("That team could not be found.");
         }
 
-        // Resolve the directory record again; profile fields and IAM status are never trusted from the client.
-        var person = await dbContext.People.AsNoTracking()
-            .Where(person => person.IamId == iamId)
-            .Select(person => new
-            {
-                person.IamId, person.FullName, person.FirstName, person.LastName, person.Email, person.IsActiveInIam,
-            })
-            .SingleOrDefaultAsync(cancellationToken);
-        if (person == null)
-        {
-            return NotFound("That person could not be found. Search again before adding a team member.");
-        }
-        if (!person.IsActiveInIam)
-        {
-            return Conflict("This person is inactive in IAM and cannot be added to the team.");
-        }
-
-        iamId = person.IamId.Trim();
         var user = await dbContext.Users.SingleOrDefaultAsync(user => user.IamId == iamId, cancellationToken);
         var isNewUser = user == null;
         if (user != null && !user.IsActive)
@@ -135,20 +124,31 @@ public class TeamMembersController(AppDbContext dbContext) : ControllerBase
             return Conflict("This user already belongs to the team. Change their role from the member list.");
         }
 
+        // Recheck IAM before granting access, including when the search matched an existing user.
+        var person = await rosettaService.FindByIamIdAsync(iamId, cancellationToken);
+        if (person == null)
+        {
+            return NotFound("That person could not be found. Search again before adding a team member.");
+        }
+        if (person.IsActiveInIam != true)
+        {
+            return Conflict(person.IsActiveInIam == false
+                ? "This person is inactive in IAM and cannot be added to the team."
+                : "This person's IAM activity could not be verified. Search again before adding a team member.");
+        }
+
         if (user == null)
         {
-            var name = string.IsNullOrWhiteSpace(person.FullName)
-                ? $"{person.FirstName} {person.LastName}".Trim()
-                : person.FullName.Trim();
             var now = DateTimeOffset.UtcNow;
             user = new User
             {
                 IamId = iamId,
-                Name = string.IsNullOrWhiteSpace(name) ? iamId : name,
-                Email = person.Email?.Trim(),
+                Name = person.Name,
+                Email = person.Email,
                 CreatedAt = now,
                 UpdatedAt = now,
             };
+            // TODO: Persist person.Kerberos after the Users schema change is approved.
             dbContext.Users.Add(user);
         }
 

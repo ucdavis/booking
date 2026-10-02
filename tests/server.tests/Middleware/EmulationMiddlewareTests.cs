@@ -137,6 +137,9 @@ public class EmulationMiddlewareTests
     [InlineData("inactive-target")]
     [InlineData("missing-target")]
     [InlineData("inactive-person")]
+    [InlineData("unknown-person")]
+    [InlineData("directory-failure")]
+    [InlineData("ambiguous-person")]
     [InlineData("revoked-admin")]
     [InlineData("inactive-admin")]
     public async Task Revocation_and_unavailable_targets_block_the_existing_selection(string change)
@@ -154,7 +157,22 @@ public class EmulationMiddlewareTests
                 case "inactive-target": target.IsActive = false; break;
                 case "missing-target": db.Users.Remove(target); break;
                 case "inactive-person":
-                    db.People.Add(new Person { IamId = Fixture.TargetIamId, IsActiveInIam = false });
+                    fixture.Rosetta.People.Add(new Server.Models.Directory.DirectoryPerson
+                    {
+                        IamId = Fixture.TargetIamId, Name = "Target", IsActiveInIam = false,
+                    });
+                    break;
+                case "unknown-person":
+                    fixture.Rosetta.People.Add(new Server.Models.Directory.DirectoryPerson
+                    {
+                        IamId = Fixture.TargetIamId, Name = "Target", IsActiveInIam = null,
+                    });
+                    break;
+                case "directory-failure":
+                    fixture.Rosetta.Failure = new HttpRequestException("Directory unavailable");
+                    break;
+                case "ambiguous-person":
+                    fixture.Rosetta.Failure = new InvalidOperationException("Ambiguous directory identity");
                     break;
                 case "revoked-admin": actor.IsAdmin = false; break;
                 case "inactive-admin": actor.IsActive = false; break;
@@ -162,6 +180,27 @@ public class EmulationMiddlewareTests
         });
 
         AssertBlocked(await fixture.RequestAsync(login.Cookie, selection));
+    }
+
+    [Theory]
+    [InlineData("/api/user/me")]
+    [InlineData("/api/antiforgery")]
+    [InlineData("/api/emulation/stop")]
+    public async Task Directory_failure_keeps_recovery_available_without_restoring_admin_permissions(string path)
+    {
+        using var fixture = new Fixture();
+        await fixture.SeedAsync();
+        var login = await fixture.SignInAsync();
+        var selection = fixture.Select(login.SessionId);
+        fixture.Rosetta.Failure = new HttpRequestException("Directory unavailable");
+
+        var result = await fixture.RequestAsync(login.Cookie, selection, path: path);
+
+        result.ReachedEndpoint.Should().BeTrue();
+        EmulationService.IsEmulating(result.Context).Should().BeTrue();
+        result.Context.User.FindFirst("ucdPersonIAMID").Should().BeNull();
+        result.Context.User.FindAll(ClaimTypes.Role).Should().BeEmpty();
+        EmulationService.GetActor(result.Context).FindFirst("ucdPersonIAMID")!.Value.Should().Be(Fixture.ActorIamId);
     }
 
     [Theory]
@@ -411,6 +450,7 @@ public class EmulationMiddlewareTests
         public const string TargetIamId = "target-10002";
         public const string SelectionCookieName = ".Booking.Emulation";
         private readonly ServiceProvider _provider;
+        public FakeRosettaService Rosetta { get; } = new();
         public string Scheme { get; }
         public string CookieName => _provider.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>().Get(Scheme).Cookie.Name!;
 
@@ -435,6 +475,7 @@ public class EmulationMiddlewareTests
             services.AddSingleton<IHostEnvironment>(environment);
             services.AddDbContext<AppDbContext>(options => options.UseInMemoryDatabase(databaseName));
             services.AddScoped<IUserService, UserService>();
+            services.AddSingleton<IRosettaService>(Rosetta);
             services.AddAuthenticationServices(configuration, environment);
             _provider = services.BuildServiceProvider();
         }

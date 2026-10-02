@@ -182,7 +182,7 @@ Local sign-in keeps the Sample User and Basic User choices and adds **Sign in as
 
 For a new application registration, redirect URIs, and app-specific auth settings, follow [the customization guide](README.customization.md#3-microsoft-entra-id-azure-ad-app-sign-in-setup).
 
-Each login creates or updates a `Users` row by IAM ID, refreshing the name, email, and login timestamps while preserving application-managed flags. Sign-in requires a name and the `ucdPersonIAMID` claim and fails if the user record cannot be saved. To configure the IAM claim, follow [Authentication](https://app.notion.com/p/caes-cru/Authentication-2eae70f674118020ba74e953828d2591?source=copy_link).
+Each login creates or updates a `Users` row by IAM ID, refreshing the name and login timestamps while preserving application-managed flags. Entra users receive their campus email from Rosetta on creation; later logins preserve that address. Local sign-in uses its local profile email. Sign-in requires a name and the `ucdPersonIAMID` claim and fails if the user record cannot be saved. To configure the IAM claim, follow [Authentication](https://app.notion.com/p/caes-cru/Authentication-2eae70f674118020ba74e953828d2591?source=copy_link).
 
 To grant yourself or other users admin status during development, add a comma-separated list of IAM IDs to `server/.env`:
 
@@ -193,6 +193,33 @@ DevelopmentData__AdminIamIds="123456789,987654321"
 Restart the backend and sign in again. In the `Development` environment, a matching IAM ID sets `Users.IsAdmin` to `true` when the user record is created or updated at login. The record does not need to exist beforehand. Matching uses complete, case-sensitive IAM IDs; surrounding spaces and empty entries are ignored. This setting is independent of sample-data seeding and is ignored outside Development. It leaves `IsActive` and other users' admin flags unchanged. Removing an ID or clearing the setting does not revoke an admin flag already saved in the database.
 
 For local sandbox users, the IAM IDs are `sandbox-10001` (Sample User) and `sandbox-10002` (Basic User). This setting updates the database admin flag; the template's fixed `User` and `SampleRole` claims stay unchanged. The Docker sandbox excludes host `.env` files, so pass `DevelopmentData__AdminIamIds` to the app container's environment when using Docker.
+
+### Rosetta directory lookup
+
+Configure the installed Rosetta client in `server/.env` using the placeholders in `server/.env.example`:
+
+```dotenv
+RosettaClient__BaseUrl="<Rosetta API base URL, optionally containing {version}>"
+RosettaClient__TokenUrl="<OAuth token endpoint>"
+RosettaClient__ClientId="<client ID>"
+RosettaClient__ClientSecret="<client secret>"
+# Optional: use the scope granted to this client.
+# RosettaClient__Scope="read:public"
+```
+
+The `.env` values bind directly to the client's options; no matching entries in `appsettings.json` are required. The client supplies its default API version and timeout.
+
+On a new Entra user's first login, Rosetta supplies the name and campus email by IAM ID. A successful lookup with no match falls back to the authenticated name, leaving email empty; a directory failure prevents partial user creation. Later logins refresh the name and login timestamps while preserving the saved campus email, since Entra's login address may be a health address. Local sandbox sign-in works without Rosetta.
+
+Site-admin and team-member searches first check `Users` by exact email or IAM ID. If no local user matches, they query Rosetta by exact email, IAM ID, or Kerberos login ID. Local results show IAM status as **Not checked**. Adding access rechecks the selected IAM ID in Rosetta and requires confirmed active status, while preserving any existing user's profile and application activity flag.
+
+Rosetta's email filter accepts `ucdavis.edu` addresses and subdomains; existing Users email matches can use other domains. IAM IDs sent to Rosetta must contain exactly ten digits. Unsupported remote search formats return no matches.
+
+A Rosetta person is considered active when they have an IAM ID, Kerberos login ID, and either a campus or health email. The adapter also returns their name and ignores provisioning status and other eligibility fields. Empty or masked identifiers and email addresses are treated as unavailable. Search accepts campus and health email matches, but only the campus email is returned for storage; a health email never substitutes for a missing campus email. Personal email is not used.
+
+Emulation uses the same Users-first search and Rosetta lookup when resolving a selected target. New targets require the IAM ID, Kerberos ID, and email described above; existing active accounts without a directory match remain usable. During emulation, each request checks the stored account and returned Rosetta profile again. Directory errors or an incomplete returned profile block emulated access while leaving the stop/recovery endpoints available. The two fictional sandbox accounts can still be emulated offline in local mode.
+
+Kerberos is returned with directory results but is not persisted yet; TODOs mark the future user column and write/lookup locations. The People table, migrations, and remaining consumers (local person sign-in and `/api/user/me`) remain in place for a later change.
 
 ### Google Analytics (GA4)
 

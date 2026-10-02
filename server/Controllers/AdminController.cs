@@ -7,12 +7,13 @@ using Server.Core.Domain;
 using Server.Helpers;
 using Server.Models.Admin;
 using Server.Models.Teams;
+using Server.Services;
 
 namespace Server.Controllers;
 
 [Authorize(Policy = AuthenticationHelper.SiteAdminPolicy)]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public class AdminController(AppDbContext dbContext) : ApiControllerBase
+public class AdminController(AppDbContext dbContext, IRosettaService rosettaService) : ApiControllerBase
 {
     [HttpGet("access")]
     public IActionResult Access() => NoContent();
@@ -103,27 +104,25 @@ public class AdminController(AppDbContext dbContext) : ApiControllerBase
             return BadRequest("Enter an email, IAM ID, or Kerb of no more than 128 characters.");
         }
 
-        // Keep the filter, projection, and result limit in SQL for the large directory.
-        var matches = await (
-            from person in dbContext.People.AsNoTracking()
-            where person.Email == search || person.IamId == search || person.UserId == search
-            join user in dbContext.Users.AsNoTracking() on person.IamId equals user.IamId into users
-            from user in users.DefaultIfEmpty()
-            orderby person.FullName, person.IamId
-            select new AdminPersonResponse
+        var people = (await rosettaService.SearchPeopleAsync(search, cancellationToken)).Take(10).ToList();
+        var iamIds = people.Select(person => person.IamId).ToList();
+        var users = await dbContext.Users.AsNoTracking()
+            .Where(user => iamIds.Contains(user.IamId))
+            .ToDictionaryAsync(user => user.IamId, cancellationToken);
+        var matches = people.Select(person =>
+        {
+            users.TryGetValue(person.IamId, out var user);
+            return new AdminPersonResponse
             {
-                IamId = person.IamId.Trim(),
-                Name = (person.FullName ?? "").Trim() != ""
-                    ? person.FullName!.Trim()
-                    : ((person.FirstName ?? "") + " " + (person.LastName ?? "")).Trim(),
-                Email = person.Email == null ? null : person.Email.Trim(),
-                Kerberos = person.UserId == null ? null : person.UserId.Trim(),
+                IamId = person.IamId,
+                Name = person.Name,
+                Email = person.Email,
+                Kerberos = person.Kerberos,
                 IsAdmin = user != null && user.IsAdmin,
                 IsActive = user == null || user.IsActive,
                 IsActiveInIam = person.IsActiveInIam,
-            })
-            .Take(10)
-            .ToListAsync(cancellationToken);
+            };
+        }).ToList();
 
         return Ok(matches);
     }
@@ -138,44 +137,41 @@ public class AdminController(AppDbContext dbContext) : ApiControllerBase
             return BadRequest("A valid IAM ID is required.");
         }
 
-        // Resolve the selected person again; names, email, and privileges never come from the client.
-        var person = await dbContext.People.AsNoTracking()
-            .Where(person => person.IamId == iamId)
-            .Select(person => new
-            {
-                person.IamId, person.FullName, person.FirstName, person.LastName, person.Email, person.IsActiveInIam,
-            })
-            .SingleOrDefaultAsync(cancellationToken);
-        if (person == null)
-        {
-            return NotFound("That person could not be found. Search again before adding an admin.");
-        }
-
-        if (!person.IsActiveInIam)
-        {
-            return Conflict("This person is inactive in IAM and cannot be added as a site admin.");
-        }
-
-        iamId = person.IamId.Trim();
         var user = await dbContext.Users.SingleOrDefaultAsync(user => user.IamId == iamId, cancellationToken);
         var isNewUser = user == null;
         if (user != null && !user.IsActive)
         {
             return Conflict("This user is inactive and cannot be added as a site admin.");
         }
+        if (user?.IsAdmin == true)
+        {
+            return Ok(ToResponse(user));
+        }
+
+        // Recheck IAM before granting access, including when the search matched an existing user.
+        var person = await rosettaService.FindByIamIdAsync(iamId, cancellationToken);
+        if (person == null)
+        {
+            return NotFound("That person could not be found. Search again before adding an admin.");
+        }
+
+        if (person.IsActiveInIam != true)
+        {
+            return Conflict(person.IsActiveInIam == false
+                ? "This person is inactive in IAM and cannot be added as a site admin."
+                : "This person's IAM activity could not be verified. Search again before adding a site admin.");
+        }
 
         if (user == null)
         {
-            var name = string.IsNullOrWhiteSpace(person.FullName)
-                ? $"{person.FirstName} {person.LastName}".Trim()
-                : person.FullName.Trim();
             user = new User
             {
                 IamId = iamId,
-                Name = string.IsNullOrWhiteSpace(name) ? iamId : name,
-                Email = person.Email?.Trim(),
+                Name = person.Name,
+                Email = person.Email,
                 CreatedAt = DateTimeOffset.UtcNow,
             };
+            // TODO: Persist person.Kerberos after the Users schema change is approved.
             dbContext.Users.Add(user);
         }
 
