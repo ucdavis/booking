@@ -6,5 +6,6 @@ export interface ResourceTemplate {
   id: number;
   isActive: boolean;
   name: string;
+  resourceDefaultsJson: string | null;
   updatedAt: string;
 }
