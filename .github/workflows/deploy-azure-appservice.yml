@@ -64,6 +64,14 @@ jobs:
 
       - name: Validate deployment configuration
         shell: bash
+        env:
+          DEPLOY_ENV: ${{ inputs.environment }}
+          # <deployment-settings:deploy-workflow-validation-env>
+          ROSETTACLIENT__BASEURL: ${{ vars.ROSETTACLIENT__BASEURL }}
+          ROSETTACLIENT__CLIENTID: ${{ vars.ROSETTACLIENT__CLIENTID }}
+          ROSETTACLIENT__CLIENTSECRET: ${{ secrets.ROSETTACLIENT__CLIENTSECRET }}
+          ROSETTACLIENT__TOKENURL: ${{ vars.ROSETTACLIENT__TOKENURL }}
+          # </deployment-settings:deploy-workflow-validation-env>
         run: |
           set -euo pipefail
 
@@ -88,6 +96,28 @@ jobs:
             echo "APP_HEALTH_TIMEOUT_SECONDS must be a positive integer."
             exit 1
           fi
+
+          # <deployment-settings:workflow-required-checks>
+          if [[ -z "$ROSETTACLIENT__BASEURL" ]]; then
+            echo "ROSETTACLIENT__BASEURL must be configured as a GitHub Environment variable."
+            exit 1
+          fi
+
+          if [[ -z "$ROSETTACLIENT__CLIENTID" ]]; then
+            echo "ROSETTACLIENT__CLIENTID must be configured as a GitHub Environment variable."
+            exit 1
+          fi
+
+          if [[ -z "$ROSETTACLIENT__CLIENTSECRET" ]]; then
+            echo "ROSETTACLIENT__CLIENTSECRET must be configured as a GitHub Environment secret."
+            exit 1
+          fi
+
+          if [[ -z "$ROSETTACLIENT__TOKENURL" ]]; then
+            echo "ROSETTACLIENT__TOKENURL must be configured as a GitHub Environment variable."
+            exit 1
+          fi
+          # </deployment-settings:workflow-required-checks>
 
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
@@ -170,6 +200,107 @@ jobs:
           fi
 
           echo "web_app_name=$web_app_name" >> "$GITHUB_OUTPUT"
+
+      - name: Apply runtime app settings
+        shell: bash
+        env:
+          WEB_APP_NAME: ${{ steps.resolve_app.outputs.web_app_name }}
+          DB_CONNECTION: ${{ secrets.DB_CONNECTION }}
+          # <deployment-settings:workflow-env>
+          AUTH_CALLBACK_PATH: ${{ vars.AUTH_CALLBACK_PATH || '/signin-oidc' }}
+          AUTH_CLIENT_ID: ${{ vars.AUTH_CLIENT_ID }}
+          AUTH_DOMAIN: ${{ vars.AUTH_DOMAIN }}
+          AUTH_INSTANCE: ${{ vars.AUTH_INSTANCE || 'https://login.microsoftonline.com/' }}
+          AUTH_TENANT_ID: ${{ vars.AUTH_TENANT_ID }}
+          NOTIFICATION_BASE_URL: ${{ vars.NOTIFICATION_BASE_URL }}
+          NOTIFICATION_DEFAULT_APP_NAME: ${{ vars.NOTIFICATION_DEFAULT_APP_NAME }}
+          NOTIFICATION_DEFAULT_BUTTON_TEXT: ${{ vars.NOTIFICATION_DEFAULT_BUTTON_TEXT }}
+          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT }}
+          OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
+          OTEL_EXPORTER_OTLP_PROTOCOL: ${{ vars.OTEL_EXPORTER_OTLP_PROTOCOL || 'http/protobuf' }}
+          OTEL_RESOURCE_ATTRIBUTES: ${{ vars.OTEL_RESOURCE_ATTRIBUTES }}
+          OTEL_SERVICE_NAME: ${{ vars.OTEL_SERVICE_NAME }}
+          ROSETTACLIENT__BASEURL: ${{ vars.ROSETTACLIENT__BASEURL }}
+          ROSETTACLIENT__CLIENTID: ${{ vars.ROSETTACLIENT__CLIENTID }}
+          ROSETTACLIENT__CLIENTSECRET: ${{ secrets.ROSETTACLIENT__CLIENTSECRET }}
+          ROSETTACLIENT__SCOPE: ${{ vars.ROSETTACLIENT__SCOPE }}
+          ROSETTACLIENT__TOKENURL: ${{ vars.ROSETTACLIENT__TOKENURL }}
+          SMTP_BCC_EMAIL: ${{ vars.SMTP_BCC_EMAIL }}
+          SMTP_FROM_EMAIL: ${{ vars.SMTP_FROM_EMAIL }}
+          SMTP_FROM_NAME: ${{ vars.SMTP_FROM_NAME }}
+          SMTP_HOST: ${{ vars.SMTP_HOST }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          SMTP_REPLY_TO_EMAIL: ${{ vars.SMTP_REPLY_TO_EMAIL }}
+          SMTP_TIMEOUT: ${{ vars.SMTP_TIMEOUT }}
+          SMTP_USE_SSL: ${{ vars.SMTP_USE_SSL }}
+          SMTP_USERNAME: ${{ vars.SMTP_USERNAME }}
+          # </deployment-settings:workflow-env>
+        run: |
+          set -euo pipefail
+
+          settings=(
+            "ASPNETCORE_ENVIRONMENT=$DEPLOY_ENV"
+            "WEBSITE_RUN_FROM_PACKAGE=1"
+          )
+
+          add_setting() {
+            local name="$1"
+            local value="$2"
+
+            if [[ -n "$value" ]]; then
+              settings+=("$name=$value")
+            fi
+          }
+
+          add_setting "DB_CONNECTION" "$DB_CONNECTION"
+          # <deployment-settings:workflow-runtime-settings>
+          disabled_settings=(
+          )
+
+          if (( ${#disabled_settings[@]} > 0 )); then
+            az webapp config appsettings delete \
+              --resource-group "$RESOURCE_GROUP" \
+              --name "$WEB_APP_NAME" \
+              --setting-names "${disabled_settings[@]}" \
+              --output none
+          fi
+
+          add_setting "Auth__CallbackPath" "$AUTH_CALLBACK_PATH"
+          add_setting "Auth__ClientId" "$AUTH_CLIENT_ID"
+          add_setting "Auth__Domain" "$AUTH_DOMAIN"
+          add_setting "Auth__Instance" "$AUTH_INSTANCE"
+          add_setting "Auth__TenantId" "$AUTH_TENANT_ID"
+          add_setting "Notification__BaseUrl" "$NOTIFICATION_BASE_URL"
+          add_setting "Notification__DefaultAppName" "$NOTIFICATION_DEFAULT_APP_NAME"
+          add_setting "Notification__DefaultButtonText" "$NOTIFICATION_DEFAULT_BUTTON_TEXT"
+          settings+=("OTEL_EXPORTER_OTLP_ENDPOINT=$OTEL_EXPORTER_OTLP_ENDPOINT")
+          add_setting "OTEL_EXPORTER_OTLP_HEADERS" "$OTEL_EXPORTER_OTLP_HEADERS"
+          add_setting "OTEL_EXPORTER_OTLP_PROTOCOL" "$OTEL_EXPORTER_OTLP_PROTOCOL"
+          add_setting "OTEL_RESOURCE_ATTRIBUTES" "$OTEL_RESOURCE_ATTRIBUTES"
+          add_setting "OTEL_SERVICE_NAME" "$OTEL_SERVICE_NAME"
+          add_setting "RosettaClient__BaseUrl" "$ROSETTACLIENT__BASEURL"
+          add_setting "RosettaClient__ClientId" "$ROSETTACLIENT__CLIENTID"
+          add_setting "RosettaClient__ClientSecret" "$ROSETTACLIENT__CLIENTSECRET"
+          add_setting "RosettaClient__Scope" "$ROSETTACLIENT__SCOPE"
+          add_setting "RosettaClient__TokenUrl" "$ROSETTACLIENT__TOKENURL"
+          add_setting "Smtp__BccEmail" "$SMTP_BCC_EMAIL"
+          add_setting "Smtp__FromEmail" "$SMTP_FROM_EMAIL"
+          add_setting "Smtp__FromName" "$SMTP_FROM_NAME"
+          add_setting "Smtp__Host" "$SMTP_HOST"
+          add_setting "Smtp__Password" "$SMTP_PASSWORD"
+          add_setting "Smtp__Port" "$SMTP_PORT"
+          add_setting "Smtp__ReplyToEmail" "$SMTP_REPLY_TO_EMAIL"
+          add_setting "Smtp__Timeout" "$SMTP_TIMEOUT"
+          add_setting "Smtp__UseSsl" "$SMTP_USE_SSL"
+          add_setting "Smtp__Username" "$SMTP_USERNAME"
+          # </deployment-settings:workflow-runtime-settings>
+
+          az webapp config appsettings set \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$WEB_APP_NAME" \
+            --settings "${settings[@]}" \
+            --output none
 
       - name: Check SCM readiness
         shell: bash

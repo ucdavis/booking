@@ -128,7 +128,7 @@ Most projects should edit only `deployment-settings.json`, then run:
 npm run deployment-settings:sync
 ```
 
-Pull request validation runs `npm run deployment-settings:check` so generated Configure Azure workflow and local deploy script regions cannot drift.
+Pull request validation runs `npm run deployment-settings:check` so generated regions in both Azure workflows and the local deploy script cannot drift.
 
 Override a built-in runtime mapping by GitHub Environment variable name:
 
@@ -160,7 +160,7 @@ Infrastructure deployment inputs, such as SQL admin values, database SKUs, exist
 
 Use `defaultValue` on a built-in override or added setting when generated deployment scripts should apply a stable fallback if the GitHub Environment variable is unset.
 
-`requiredWhen` values apply to the generated tooling as follows: `always` is required by Configure Azure and all local deployments; `deploy_infra` is required by Configure Azure and local infrastructure deployments; `existing_infra` applies only to local deployments with `DEPLOY_INFRA=false`; and `never` remains optional.
+`requiredWhen` values apply to the generated tooling as follows: `always` is required by both Azure workflows and all local deployments; `deploy_infra` is required by Configure Azure and local infrastructure deployments; `existing_infra` is required by the reusable App Service deployment workflow and local deployments with `DEPLOY_INFRA=false`; and `never` remains optional.
 
 Add a runtime App Service setting:
 
@@ -181,7 +181,7 @@ Add a runtime App Service setting:
 }
 ```
 
-Secrets use `"classification": "secret"` and are read from the selected GitHub Environment by the manual Configure Azure workflow. Routine package deployments do not receive application runtime secrets.
+Secrets use `"classification": "secret"` and are read from the selected GitHub Environment by both the manual Configure Azure workflow and the reusable App Service deployment workflow. Each package deployment validates required runtime settings and applies the generated settings before deploying the app.
 
 `DB_CONNECTION`, App Insights settings, `ASPNETCORE_ENVIRONMENT`, and `WEBSITE_RUN_FROM_PACKAGE` remain hand-authored or platform-derived settings rather than overlay entries. `NOTIFICATION_BASE_URL` is a direct runtime setting; set it explicitly when notification links should use a stable hostname or custom domain.
 
@@ -286,10 +286,13 @@ For an existing installation that used the previous deployment app registration,
 The `CI/CD` workflow:
 
 - Validates pull requests.
-- Deploys pushes to `main` to the `test` environment without changing infrastructure or App Service settings.
-- Supports manual package deployments to `test` or `prod`.
+- Deploys pushes to `main` to the `test` environment when `AZURE_TEST_READY` is `true`.
+- Supports manual deployments to `test` or `prod`.
+- Validates and applies generated runtime App Service settings from the selected GitHub Environment before each package deployment.
 
-Before the first package deployment, run the manual `Configure Azure` workflow for the target environment. Run it again whenever Bicep, deployment settings, GitHub Environment variables, or GitHub Environment secrets change. Wait for configuration to finish before starting a package deployment. Both workflows use the same environment-specific FIFO concurrency queue, so configuration and package deployment for one environment cannot overlap, pending operations do not displace one another, and running operations are not canceled. The `test` and `prod` queues are independent, and GitHub retains up to 100 pending operations in each queue.
+Before the first package deployment, run the manual `Configure Azure` workflow for the target environment. Run it again whenever Bicep or infrastructure inputs change. It also applies runtime settings and can be used to update those settings without deploying a package. Wait for configuration to finish before starting a package deployment. Both workflows use the same environment-specific FIFO concurrency queue, so configuration and package deployment for one environment cannot overlap, pending operations do not displace one another, and running operations are not canceled. The `test` and `prod` queues are independent, and GitHub retains up to 100 pending operations in each queue.
+
+Changing GitHub Environment variables or secrets alone does not trigger a deployment. The next automatic or manual `CI/CD` deployment applies the current generated runtime settings; run `CI/CD` manually to apply them immediately with the app package. Infrastructure and platform-derived settings still require `Configure Azure`.
 
 For production, complete the manual [SQL connectivity prerequisite](infrastructure/azure/README.md#production-sql-connectivity) before deploying the first package.
 
