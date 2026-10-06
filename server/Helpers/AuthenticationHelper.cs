@@ -58,7 +58,8 @@ public static class AuthenticationHelper
             }));
         });
 
-        if (LocalAuthentication.IsEnabled(configuration, environment))
+        var useLocal = LocalAuthentication.IsEnabled(configuration, environment);
+        if (useLocal)
         {
             var cookieName = ".Booking.LocalSandbox";
             var cookieSuffix = configuration["Auth:LocalCookieSuffix"];
@@ -75,6 +76,10 @@ public static class AuthenticationHelper
                     options.LoginPath = "/login";
                     options.Events.OnSigningIn = OnSigningIn;
                     options.Events.OnSigningOut = OnSigningOut;
+                    options.Events.OnValidatePrincipal = context =>
+                        context.Principal?.Identity?.AuthenticationType == LocalAuthentication.Scheme
+                            ? Task.CompletedTask
+                            : OnValidatePrincipal(context);
                     options.Events.OnRedirectToLogin = ctx =>
                     {
                         if (ctx.Request.Path.StartsWithSegments("/api"))
@@ -93,12 +98,13 @@ public static class AuthenticationHelper
                         return Task.CompletedTask;
                     };
                 });
-            return services;
+            if (!IsEntraConfigured(configuration))
+            {
+                return services;
+            }
         }
 
-        var clientId = configuration["Auth:ClientId"]?.Trim();
-        if (string.IsNullOrWhiteSpace(clientId) ||
-            string.Equals(clientId, "<client-guid>", StringComparison.OrdinalIgnoreCase))
+        if (!IsEntraConfigured(configuration))
         {
             throw new InvalidOperationException(
                 "Auth:ClientId is not configured. Replace the placeholder in server/appsettings.json or set the Auth__ClientId environment variable.");
@@ -107,12 +113,17 @@ public static class AuthenticationHelper
         services
             .AddAuthentication(options =>
             {
-                options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+                options.DefaultScheme = useLocal ? LocalAuthentication.Scheme : CookieAuthenticationDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = useLocal ? LocalAuthentication.Scheme : OpenIdConnectDefaults.AuthenticationScheme;
             })
             .AddMicrosoftIdentityWebApp(options =>
             {
                 configuration.Bind("Auth", options);
+                if (useLocal)
+                {
+                    // Both development login paths replace the same cookie, so switching users is unambiguous.
+                    options.SignInScheme = LocalAuthentication.Scheme;
+                }
 
                 options.TokenValidationParameters = new()
                 {
@@ -123,7 +134,12 @@ public static class AuthenticationHelper
                 options.Events ??= new OpenIdConnectEvents();
                 options.Events.OnRedirectToIdentityProvider = OnRedirectToIdentityProvider;
                 options.Events.OnTokenValidated = OnTokenValidated;
-            });
+            }, cookieScheme: useLocal ? null : CookieAuthenticationDefaults.AuthenticationScheme);
+
+        if (useLocal)
+        {
+            return services;
+        }
 
         services.PostConfigure<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme, options =>
         {
@@ -145,6 +161,13 @@ public static class AuthenticationHelper
         });
 
         return services;
+    }
+
+    public static bool IsEntraConfigured(IConfiguration configuration)
+    {
+        var clientId = configuration["Auth:ClientId"]?.Trim();
+        return !string.IsNullOrWhiteSpace(clientId) &&
+            !string.Equals(clientId, "<client-guid>", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
