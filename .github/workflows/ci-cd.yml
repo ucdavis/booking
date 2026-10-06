@@ -83,6 +83,7 @@ jobs:
     needs: validate
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AZURE_TEST_READY == 'true' }}
     uses: ./.github/workflows/deploy-azure-appservice.yml
+    secrets: inherit
     permissions:
       contents: read
       id-token: write
@@ -93,6 +94,7 @@ jobs:
     name: Deploy ${{ inputs.environment }}
     if: ${{ github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/deploy-azure-appservice.yml
+    secrets: inherit
     permissions:
       contents: read
       id-token: write
