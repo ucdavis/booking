@@ -14,6 +14,49 @@ export const resourceDefaultsDays = [
   { key: 'sunday', label: 'Sunday' },
 ] as const;
 
+// A mounted TanStack field restores its initial value when set to undefined.
+// Use null for explicitly cleared optional controls and omit it when saving.
+export function resourceDefaultsFormValues(defaults: ResourceDefaults) {
+  const days = Object.fromEntries(
+    resourceDefaultsDays.map(({ key }) => [
+      key,
+      defaults.openingHours?.[key] ?? null,
+    ])
+  ) as Record<
+    (typeof resourceDefaultsDays)[number]['key'],
+    OpeningHoursInterval[] | null
+  >;
+  return {
+    ...defaults,
+    billingRates: defaults.billingRates ?? null,
+    openingHours:
+      defaults.openingHours === undefined
+        ? null
+        : { ...defaults.openingHours, ...days },
+  };
+}
+
+export function resourceDefaultsFromForm(
+  values: ReturnType<typeof resourceDefaultsFormValues>
+): ResourceDefaults {
+  const { billingRates, openingHours, ...defaults } = values;
+  return {
+    ...defaults,
+    ...(billingRates === null ? {} : { billingRates }),
+    ...(openingHours === null
+      ? {}
+      : {
+          openingHours: Object.fromEntries(
+            Object.entries(openingHours).filter(
+              ([key, value]) =>
+                !resourceDefaultsDays.some((day) => day.key === key) ||
+                value !== null
+            )
+          ),
+        }),
+  };
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -224,58 +267,79 @@ function timeInMinutes(value: string): number | undefined {
 }
 
 export function validateResourceDefaults(defaults: ResourceDefaults): string[] {
-  const errors: string[] = [];
+  return [...new Set(Object.values(validateResourceDefaultsFields(defaults)))];
+}
+
+// Paths are relative to the defaults object so any owning form can bind them.
+export function validateResourceDefaultsFields(
+  defaults: ResourceDefaults
+): Record<string, string> {
+  const errors: Record<string, string> = {};
   resourceDefaultsDays.forEach(({ key, label }) => {
-    const intervals: { end: number; start: number }[] = [];
+    const intervals: { end: number; index: number; start: number }[] = [];
     (defaults.openingHours?.[key] ?? []).forEach((interval, index) => {
       const start = timeInMinutes(interval.start);
       const end = timeInMinutes(interval.end);
       const prefix = `${label}, period ${index + 1}:`;
+      const path = `openingHours.${key}[${index}]`;
       if (start === undefined || end === undefined) {
-        errors.push(`${prefix} enter both an opening time and a closing time.`);
+        const message = `${prefix} enter both an opening time and a closing time.`;
+        if (start === undefined) {
+          errors[`${path}.start`] = message;
+        }
+        if (end === undefined) {
+          errors[`${path}.end`] = message;
+        }
       } else if (end <= start) {
-        errors.push(
-          `${prefix} closing time must be after opening time on the same day.`
-        );
+        errors[`${path}.end`] =
+          `${prefix} closing time must be after opening time on the same day.`;
       } else {
-        intervals.push({ end, start });
+        intervals.push({ end, index, start });
       }
     });
     intervals.sort((left, right) => left.start - right.start);
-    if (
-      intervals.some(
-        (interval, index) =>
-          index > 0 && interval.start < intervals[index - 1].end
-      )
-    ) {
-      errors.push(`${label}: opening hours must not overlap.`);
-    }
+    let previous: (typeof intervals)[number] | undefined;
+    intervals.forEach((interval) => {
+      if (previous && interval.start < previous.end) {
+        const message = `${label}: opening hours must not overlap.`;
+        errors[`openingHours.${key}[${previous.index}].end`] = message;
+        errors[`openingHours.${key}[${interval.index}].start`] = message;
+      }
+      if (!previous || interval.end > previous.end) {
+        previous = interval;
+      }
+    });
   });
 
   const ids = new Set<string>();
   (defaults.billingRates ?? []).forEach((rate, index) => {
     const prefix = `Billing rate ${index + 1}:`;
+    const path = `billingRates[${index}]`;
     if (!rate.id.trim() || ids.has(rate.id)) {
-      errors.push(`${prefix} each rate must have a unique ID.`);
+      errors[`${path}.id`] = `${prefix} each rate must have a unique ID.`;
     }
     ids.add(rate.id);
     if (!rate.name.trim() || rate.name.trim().length > 100) {
-      errors.push(`${prefix} enter a name of 100 characters or fewer.`);
+      errors[`${path}.name`] =
+        `${prefix} enter a name of 100 characters or fewer.`;
     }
     if (!/^\d+(?:\.\d+)?$/.test(rate.amount)) {
-      errors.push(`${prefix} enter a nonnegative amount, such as 25 or 25.50.`);
+      errors[`${path}.amount`] =
+        `${prefix} enter a nonnegative amount, such as 25 or 25.50.`;
     }
     if ('currency' in rate && rate.currency !== 'USD') {
-      errors.push(`${prefix} only US dollar rates are supported.`);
+      errors[`${path}.currency`] =
+        `${prefix} only US dollar rates are supported.`;
     }
     if (!['hour', 'day', 'booking'].includes(rate.basis)) {
-      errors.push(`${prefix} select per hour, per day, or per booking.`);
+      errors[`${path}.basis`] =
+        `${prefix} select per hour, per day, or per booking.`;
     }
   });
   if (
     (serializeResourceDefaults(defaults, null)?.length ?? 0) > maxJsonLength
   ) {
-    errors.push('Resource defaults must be 1,048,576 characters or fewer.');
+    errors[''] = 'Resource defaults must be 1,048,576 characters or fewer.';
   }
   return errors;
 }

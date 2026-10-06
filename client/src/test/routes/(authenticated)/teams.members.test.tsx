@@ -241,6 +241,12 @@ describe('team members', () => {
     expect(searchRequests).toHaveBeenCalledTimes(1);
     fireEvent.click(dialog.getByRole('radio', { name: 'Sam Smith' }));
     expect(dialog.getByRole('button', { name: 'Add member' })).toBeEnabled();
+    fireEvent.change(
+      dialog.getByRole('textbox', { name: 'Email, IAM ID, or Kerberos ID' }),
+      { target: { value: 'another@example.com' } }
+    );
+    expect(dialog.getByRole('button', { name: 'Add member' })).toBeDisabled();
+    expect(dialog.queryByRole('radio')).not.toBeInTheDocument();
   });
 
   it('allows a local user with unchecked IAM status to be selected for addition', async () => {
@@ -370,6 +376,10 @@ describe('team members', () => {
     fireEvent.click(
       screen.getByRole('button', { name: 'Change role for Avery Editor' })
     );
+    expect(screen.getByRole('combobox', { name: 'New role' })).toHaveValue(
+      'editor'
+    );
+    expect(screen.getByRole('button', { name: 'Save role' })).toBeDisabled();
     fireEvent.change(screen.getByRole('combobox', { name: 'New role' }), {
       target: { value: 'admin' },
     });
@@ -387,6 +397,105 @@ describe('team members', () => {
     });
     expect(changes).toEqual([{ role: 'admin' }]);
     expect(token).toBe('team-antiforgery-token');
+  });
+
+  it('retains the selected person and role after a failed addition and submits them on retry', async () => {
+    mockAccess();
+    const additions: unknown[] = [];
+    server.use(
+      http.get('/api/teams/plant-sciences/members/people', () =>
+        HttpResponse.json([
+          person,
+          { ...person, iamId: '100004', name: 'Another Person' },
+        ])
+      ),
+      http.post('/api/teams/plant-sciences/members', async ({ request }) => {
+        additions.push(await request.json());
+        return additions.length === 1
+          ? new HttpResponse(null, { status: 500 })
+          : HttpResponse.json({ ...person, id: 3, role: 'admin' });
+      })
+    );
+    ({ cleanup } = renderRoute({
+      initialPath: '/teams/plant-sciences/members',
+    }));
+    const dialog = await openAddDialog();
+    fireEvent.change(
+      dialog.getByRole('textbox', { name: 'Email, IAM ID, or Kerberos ID' }),
+      { target: { value: person.email } }
+    );
+    fireEvent.click(dialog.getByRole('button', { name: 'Search' }));
+    fireEvent.click(await dialog.findByRole('radio', { name: 'Sam Smith' }));
+    fireEvent.change(dialog.getByRole('combobox', { name: 'Team role' }), {
+      target: { value: 'admin' },
+    });
+    fireEvent.click(dialog.getByRole('button', { name: 'Add member' }));
+
+    expect(await dialog.findByRole('alert')).toHaveTextContent(
+      'We could not add this team member.'
+    );
+    expect(dialog.getByRole('radio', { name: 'Sam Smith' })).toBeChecked();
+    expect(dialog.getByRole('combobox', { name: 'Team role' })).toHaveValue(
+      'admin'
+    );
+    await waitFor(() =>
+      expect(dialog.getByRole('button', { name: 'Add member' })).toBeEnabled()
+    );
+    fireEvent.click(dialog.getByRole('button', { name: 'Add member' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    );
+    expect(additions).toEqual([
+      { iamId: person.iamId, role: 'admin' },
+      { iamId: person.iamId, role: 'admin' },
+    ]);
+  });
+
+  it('retains a role edit after a failed save and allows retrying', async () => {
+    mockAccess();
+    const changes: unknown[] = [];
+    server.use(
+      http.put(
+        '/api/teams/plant-sciences/members/2/role',
+        async ({ request }) => {
+          changes.push(await request.json());
+          return changes.length === 1
+            ? new HttpResponse(null, { status: 500 })
+            : HttpResponse.json({ ...otherMember, role: 'admin' });
+        }
+      )
+    );
+    ({ cleanup } = renderRoute({
+      initialPath: '/teams/plant-sciences/members',
+    }));
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Change role for Avery Editor',
+      })
+    );
+    fireEvent.change(screen.getByRole('combobox', { name: 'New role' }), {
+      target: { value: 'admin' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save role' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "We could not change this member's role."
+    );
+    expect(screen.getByRole('combobox', { name: 'New role' })).toHaveValue(
+      'admin'
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save role' })).toBeEnabled()
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save role' }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('combobox', { name: 'New role' })
+      ).not.toBeInTheDocument()
+    );
+    expect(changes).toEqual([{ role: 'admin' }, { role: 'admin' }]);
   });
 
   it('requires removal confirmation and refreshes the team after removal', async () => {

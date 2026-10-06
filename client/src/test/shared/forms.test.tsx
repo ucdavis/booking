@@ -6,20 +6,34 @@ import { useAppForm } from '@/shared/forms/formContext.tsx';
 
 afterEach(cleanup);
 
-function ExampleForm() {
+function ExampleForm({
+  stringValidation = false,
+}: {
+  stringValidation?: boolean;
+}) {
   const form = useAppForm({
     defaultValues: { name: '', role: '' },
     validators: {
-      onChange: z.object({
-        name: z.string().min(2, 'Name must have two characters'),
-        role: z.string(),
-      }),
+      onChange: stringValidation
+        ? undefined
+        : z.object({
+            name: z.string().min(2, 'Name must have two characters'),
+            role: z.string(),
+          }),
     },
   });
 
   return (
     <form>
-      <form.AppField name="name">
+      <form.AppField
+        name="name"
+        validators={{
+          onChange: stringValidation
+            ? ({ value }) =>
+                value.length < 2 ? 'Name must have two characters' : undefined
+            : undefined,
+        }}
+      >
         {(field) => <field.TextField label="Name" />}
       </form.AppField>
       <form.AppField name="role">
@@ -35,24 +49,29 @@ function ExampleForm() {
 }
 
 describe('shared form controls', () => {
-  it('associates labels and validation errors with their controls', async () => {
-    const user = userEvent.setup();
-    render(<ExampleForm />);
+  it.each([false, true])(
+    'associates labels and validation errors with their controls (string validator: %s)',
+    async (stringValidation) => {
+      const user = userEvent.setup();
+      render(<ExampleForm stringValidation={stringValidation} />);
 
-    const name = screen.getByRole('textbox', { name: 'Name' });
-    await user.type(name, 'x');
-    await user.tab();
-    expect(name).toHaveAttribute('aria-invalid', 'true');
-    expect(name).toHaveAccessibleDescription('Name must have two characters');
+      const name = screen.getByRole('textbox', { name: 'Name' });
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(name).not.toHaveAttribute('aria-invalid');
+      await user.type(name, 'x');
+      await user.tab();
+      expect(name).toHaveAttribute('aria-invalid', 'true');
+      expect(name).toHaveAccessibleDescription('Name must have two characters');
 
-    const role = screen.getByRole('combobox', { name: 'Role' });
-    await user.selectOptions(role, 'user');
-    expect(role).toHaveValue('user');
+      const role = screen.getByRole('combobox', { name: 'Role' });
+      await user.selectOptions(role, 'user');
+      expect(role).toHaveValue('user');
 
-    await user.type(name, 'y');
-    expect(name).not.toHaveAttribute('aria-invalid');
-    expect(name).not.toHaveAttribute('aria-describedby');
-  });
+      await user.type(name, 'y');
+      expect(name).not.toHaveAttribute('aria-invalid');
+      expect(name).not.toHaveAttribute('aria-describedby');
+    }
+  );
 
   it('uses distinct control IDs when forms share field names', () => {
     render(

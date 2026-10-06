@@ -3,8 +3,11 @@ import {
   createBillingRate,
   createOpeningHoursInterval,
   parseResourceDefaultsJson,
+  resourceDefaultsFormValues,
+  resourceDefaultsFromForm,
   serializeResourceDefaults,
   validateResourceDefaults,
+  validateResourceDefaultsFields,
 } from '@/features/resource-defaults/resourceDefaults.ts';
 import type { ResourceDefaults } from '@/features/resource-defaults/models/ResourceDefaults.ts';
 
@@ -21,6 +24,9 @@ describe('resource defaults JSON', () => {
     (source) => {
       expect(parseResourceDefaultsJson(source)).toEqual({ defaults: {} });
       expect(serializeResourceDefaults({}, source)).toBeNull();
+      expect(resourceDefaultsFromForm(resourceDefaultsFormValues({}))).toEqual(
+        {}
+      );
     }
   );
 
@@ -85,6 +91,44 @@ describe('resource defaults JSON', () => {
     expect(validateResourceDefaults(edited)).toEqual([]);
   });
 
+  it('round-trips optional form values without losing unknown root, hours, interval, or rate data', () => {
+    const defaults: ResourceDefaults = {
+      billingRates: [{ ...rate, futurePolicy: { mode: 'inherit' } }],
+      futureSetting: { capacity: 12 },
+      nullableFutureSetting: null,
+      openingHours: {
+        holidayPolicy: null,
+        monday: [{ end: '17:00', futureFlag: true, start: '09:00' }],
+        sunday: [],
+      },
+      schemaVersion: 1,
+    };
+    const values = resourceDefaultsFormValues(defaults);
+    expect(values.openingHours?.tuesday).toBeNull();
+    expect(resourceDefaultsFromForm(values)).toEqual(defaults);
+  });
+
+  it('omits cleared form sections and days while retaining closed days and unknown data', () => {
+    const values = resourceDefaultsFormValues({
+      billingRates: [rate],
+      capacity: 12,
+      openingHours: {
+        holidayPolicy: null,
+        monday: [{ end: '17:00', start: '09:00' }],
+        sunday: [],
+      },
+    });
+    values.billingRates = null;
+    values.openingHours!.monday = null;
+    expect(resourceDefaultsFromForm(values)).toEqual({
+      capacity: 12,
+      openingHours: { holidayPolicy: null, sunday: [] },
+    });
+
+    values.openingHours = null;
+    expect(resourceDefaultsFromForm(values)).toEqual({ capacity: 12 });
+  });
+
   it('writes a version only when settings are edited and distinguishes unspecified from closed', () => {
     expect(
       JSON.parse(
@@ -103,6 +147,9 @@ describe('resource defaults JSON', () => {
   ])(
     'preserves explicitly included empty sections through saving and later edits: %j',
     (defaults) => {
+      expect(
+        resourceDefaultsFromForm(resourceDefaultsFormValues(defaults))
+      ).toEqual(defaults);
       const source = serializeResourceDefaults(defaults, null)!;
       const parsed = parseResourceDefaultsJson(source);
       expect(parsed.unavailableReason).toBeUndefined();
@@ -229,6 +276,9 @@ describe('resource defaults JSON', () => {
     expect(validateResourceDefaults(defaults)).toEqual([
       'Resource defaults must be 1,048,576 characters or fewer.',
     ]);
+    expect(validateResourceDefaultsFields(defaults)).toEqual({
+      '': 'Resource defaults must be 1,048,576 characters or fewer.',
+    });
     expect(serializeResourceDefaults({}, source)).toBe(source);
   });
 });
@@ -285,9 +335,38 @@ describe('opening hours validation', () => {
       })
     ).toEqual([]);
   });
+
+  it('associates overlap and missing-time errors with the original interval positions', () => {
+    expect(
+      validateResourceDefaultsFields({
+        openingHours: {
+          monday: [
+            { end: '17:00', start: '11:00' },
+            { end: '12:00', start: '09:00' },
+            { end: '', start: '18:00' },
+          ],
+        },
+      })
+    ).toEqual({
+      'openingHours.monday[0].start': expect.stringMatching(/must not overlap/),
+      'openingHours.monday[1].end': expect.stringMatching(/must not overlap/),
+      'openingHours.monday[2].end': expect.stringMatching(/enter both/),
+    });
+  });
 });
 
 describe('billing rate validation', () => {
+  it('associates invalid names and amounts with their rate without marking valid controls', () => {
+    expect(
+      validateResourceDefaultsFields({
+        billingRates: [rate, { ...rate, amount: '-1', id: 'second', name: '' }],
+      })
+    ).toEqual({
+      'billingRates[1].amount': expect.stringMatching(/nonnegative amount/),
+      'billingRates[1].name': expect.stringMatching(/enter a name/),
+    });
+  });
+
   it.each([
     '0',
     '0.00',

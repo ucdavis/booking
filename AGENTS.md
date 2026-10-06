@@ -158,7 +158,9 @@ See [Development Architecture](docs/ARCHITECTURE.md#development-request-flow) fo
 
 ### Form Handling
 
-- Use TanStack React Form for complex forms
+- Use TanStack React Form for production create/edit forms, including dialogs. Simple search/filter controls may use local state.
+- Register nested editable values and array items as individual fields so validation errors, touched state, and array changes stay associated with the correct inputs. Reuse the shared form hook and field groups when composing editors.
+- Show accessible field errors beside the related controls, keep entered values after failed submissions, and reset form state after a successful save or when opening a different record.
 - Combine form state with TanStack Query mutations for server interactions
 - Follow existing validation and submission patterns where present
 
