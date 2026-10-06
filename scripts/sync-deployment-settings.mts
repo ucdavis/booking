@@ -39,6 +39,7 @@ const defaultsPath = path.join(repoRoot, 'infrastructure/azure/deployment-settin
 
 const generatedTargets = [
   '.github/workflows/configure-azure.yml',
+  '.github/workflows/deploy-azure-appservice.yml',
   'infrastructure/azure/deploy.sh',
 ];
 
@@ -325,9 +326,13 @@ function renderWorkflowEnv(settings: DeploymentSetting[]): string[] {
   });
 }
 
-function renderConfigureWorkflowRequiredChecks(settings: DeploymentSetting[]): string[] {
+function renderWorkflowRequiredChecks(
+  settings: DeploymentSetting[],
+  requiredWhen: 'deploy_infra' | 'existing_infra',
+): string[] {
   const lines: string[] = [];
-  const deployInfraSettings = requiredSettings(settings, 'deploy_infra');
+  const conditionalSettings = requiredSettings(settings, requiredWhen);
+  const operation = requiredWhen === 'deploy_infra' ? 'configuring Azure' : 'deploying to existing Azure infrastructure';
   const alwaysSettings = requiredSettings(settings, 'always');
 
   for (const setting of alwaysSettings) {
@@ -338,9 +343,9 @@ function renderConfigureWorkflowRequiredChecks(settings: DeploymentSetting[]): s
     lines.push('');
   }
 
-  for (const setting of deployInfraSettings) {
+  for (const setting of conditionalSettings) {
     lines.push(`if [[ -z "$${setting.githubName}" ]]; then`);
-    lines.push(`  echo "${setting.githubName} must be configured as a GitHub Environment ${setting.classification} when configuring Azure."`);
+    lines.push(`  echo "${setting.githubName} must be configured as a GitHub Environment ${setting.classification} when ${operation}."`);
     lines.push('  exit 1');
     lines.push('fi');
     lines.push('');
@@ -468,8 +473,23 @@ function renderFile(
 
   switch (relativePath) {
     case '.github/workflows/configure-azure.yml':
+    case '.github/workflows/deploy-azure-appservice.yml':
       content = replaceBlock(content, 'workflow-env', renderWorkflowEnv(settings));
-      content = replaceBlock(content, 'workflow-required-checks', renderConfigureWorkflowRequiredChecks(settings));
+      content = replaceBlock(
+        content,
+        'workflow-required-checks',
+        renderWorkflowRequiredChecks(
+          settings,
+          relativePath === '.github/workflows/configure-azure.yml' ? 'deploy_infra' : 'existing_infra',
+        ),
+      );
+      if (relativePath === '.github/workflows/deploy-azure-appservice.yml') {
+        content = replaceBlock(
+          content,
+          'deploy-workflow-validation-env',
+          renderWorkflowEnv(settings.filter((setting) => setting.requiredWhen === 'always' || setting.requiredWhen === 'existing_infra')),
+        );
+      }
       content = replaceBlock(content, 'workflow-runtime-settings', [
         ...renderWorkflowDisabledSettings(disabledSettings),
         ...renderWorkflowRuntimeSettings(settings),

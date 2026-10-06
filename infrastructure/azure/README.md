@@ -6,9 +6,11 @@ Booking uses GitHub's immutable OIDC subject prefix `repo:ucdavis@573450/booking
 
 Both GitHub environments use `APP_NAME=booking`. Test targets `rg-booking-test` and production targets `rg-booking-prod`. Shared plans remain `DefaultPlan2` and `Nibbler`. Public URLs are https://booking-test.ucdavis.edu and https://booking.ucdavis.edu.
 
-1. Run **Configure Azure** for infrastructure or runtime setting changes.
-2. Run **CI/CD** for a package deployment. Pushes to `main` deploy to test; manual runs can select test or prod.
+1. Run **Configure Azure** before the first deployment and whenever infrastructure changes. It also applies runtime settings and can update those settings without deploying a package.
+2. Run **CI/CD** to validate and apply generated runtime settings from the selected GitHub Environment, then deploy the app package. Pushes to `main` deploy to test when `AZURE_TEST_READY` is `true`; manual runs can select test or prod.
 3. Check the deployment's application health result and verify sign-in at the app's hostname.
+
+Changing GitHub Environment variables or secrets alone does not trigger a deployment. The next automatic or manual **CI/CD** deployment applies the current generated runtime settings. Infrastructure and platform-derived settings still require **Configure Azure**.
 
 Local `deploy_test.sh` and `deploy_prod.sh` are secondary operator tools. They apply runtime settings as part of deployment and do not perform the GitHub workflow's explicit application health check. Verify `/health` and sign-in after using them.
 
