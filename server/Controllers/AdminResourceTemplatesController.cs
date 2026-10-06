@@ -132,8 +132,14 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             return BadRequest(error);
         }
 
+        if (!request.HasResourceDefaultsJson)
+        {
+            requestedDefaultsJson = template.ResourceDefaultsJson;
+        }
         var formChanged = !FormDefinitionValidator.AreEquivalent(savedForm!, requestedForm!);
-        if (formChanged && template.FormSchemaVersion == int.MaxValue)
+        var defaultsChanged = !string.Equals(template.ResourceDefaultsJson, requestedDefaultsJson, StringComparison.Ordinal);
+        var revisionChanged = formChanged || defaultsChanged;
+        if (revisionChanged && template.FormSchemaVersion == int.MaxValue)
         {
             return Conflict("This template has reached the maximum supported version and cannot create another revision.");
         }
@@ -146,15 +152,11 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             }
             now = template.UpdatedAt.AddTicks(1);
         }
-        var name = formChanged ? template.Name : request.Name.Trim();
+        var name = revisionChanged ? template.Name : request.Name.Trim();
         var requestedDescription = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
-        var description = formChanged ? template.Description : requestedDescription;
-        if (!request.HasResourceDefaultsJson)
-        {
-            requestedDefaultsJson = template.ResourceDefaultsJson;
-        }
-        var resourceDefaultsJson = formChanged ? template.ResourceDefaultsJson : requestedDefaultsJson;
-        var isActive = !formChanged && request.IsActive;
+        var description = revisionChanged ? template.Description : requestedDescription;
+        var resourceDefaultsJson = template.ResourceDefaultsJson;
+        var isActive = !revisionChanged && request.IsActive;
         var isRelational = dbContext.Database.IsRelational();
         await using var transaction = isRelational
             ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
@@ -194,7 +196,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
         }
 
         ResourceTemplate result;
-        if (formChanged)
+        if (revisionChanged)
         {
             result = new ResourceTemplate
             {
@@ -202,7 +204,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
                 Name = request.Name.Trim(),
                 Description = requestedDescription,
                 FormSchemaVersion = template.FormSchemaVersion + 1,
-                FormJson = request.FormJson,
+                FormJson = formChanged ? request.FormJson : template.FormJson,
                 ResourceDefaultsJson = requestedDefaultsJson,
                 IsActive = true,
                 CreatedAt = now,
@@ -229,7 +231,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             await transaction.CommitAsync(cancellationToken);
         }
 
-        if (formChanged)
+        if (revisionChanged)
         {
             return CreatedAtAction(nameof(GetTemplate), new { id = result.Id }, ToResponse(result));
         }
