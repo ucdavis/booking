@@ -15,15 +15,17 @@ The app health check at `/health` verifies SQL connectivity after migrations and
 
 Try these flows:
 
-1. Sign in as Sample User, open Fetch, and page through the fixed weather records.
-2. Open Table Export and download the example CSV. Open Form to try validation.
-3. Open Notification and send either example. Read the rendered email in the local inbox linked in the quick start. Mailpit captures all recipients locally and has no relay configured.
-4. Visit `/login`, switch to Basic User, and request `/api/weatherforecast`. It returns `403` because this user lacks `SampleRole`. `/api/user/me` still returns their identity.
+1. Sign in as Basic User and request `/api/user/me` to check the local identity.
+2. Request `/api/weatherforecast`. It returns `403` because Basic User lacks `SampleRole`.
+3. Visit `/login` and use **Sign in as a person** with `FAKE000055` to check the seeded site administrator's access.
+4. If Entra is configured, use **Continue to normal login** to test the usual sign-in flow and its return URL. The button is disabled in an offline sandbox without Entra configuration.
 5. Visit `/login` and sign out. `/api/user/me` returns `401`. The public `/about` page still opens.
 
-Sample User has ID `sandbox-sample`, email `sample@example.test`, IAM ID `sandbox-10001`, and roles `User` and `SampleRole`. Basic User has ID `sandbox-basic`, email `basic@example.test`, IAM ID `sandbox-10002`, and only `User`. Their claims and roles are fixed; each login creates or updates the matching `Users` row by IAM ID, including profile details and login timestamps. Extend `LocalAuthentication.cs` when adding application roles, and `DbInitializer.cs` when adding fixtures.
+Basic User has ID `sandbox-basic`, email `basic@example.test`, IAM ID `sandbox-10002`, and only `User`. The Sample User persona remains available to automated tests but has no button on the sign-in page. Their claims and roles are fixed; each login creates or updates the matching `Users` row by IAM ID, including profile details and login timestamps. Extend `LocalAuthentication.cs` when adding application roles, and `DbInitializer.cs` when adding fixtures.
 
-The local sign-in page also offers **Sign in as a person**. Enter an exact email, IAM ID, or Kerberos ID from this sandbox's `People` table. This option requires a single match that is active in IAM and has no inactive application account. It signs in with the person's profile and the `User` application role, preserving their existing database site-admin flag and team memberships. Like the fictional choices, it requires no password and is available only with `Auth__UseLocal=true` in Development. Use an IAM ID to resolve ambiguous email or Kerberos matches.
+The local sign-in page also offers **Sign in as a person**. Enter an exact email, IAM ID, or Kerberos ID; the lookup checks `Users` first and then Rosetta. This option requires a single match and rejects inactive application accounts. A new Rosetta profile must have an IAM ID, Kerberos ID, and campus or health email. It signs in with the person's name and campus email, saves Kerberos, and grants the `User` application role, preserving any existing database site-admin flag and team memberships. A health email can find a person but is never saved. Like Basic User, it requires no password and is available only with `Auth__UseLocal=true` in Development. Use an IAM ID to resolve ambiguous email or Kerberos matches. Rosetta configuration is required for people who are not already in `Users`; Basic User remains available offline.
+
+Startup applies the `AddUserKerberosAndRemovePeople` migration, adding nullable `Users.Kerberos` and dropping the People table. Existing users are not backfilled by the migration. Rolling it back recreates the People schema without restoring its deleted rows.
 
 ## Stop, rebuild, and reset
 

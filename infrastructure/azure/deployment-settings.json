@@ -3,5 +3,45 @@
   "version": 1,
   "disabled": [],
   "overrides": {},
-  "additions": []
+  "additions": [
+    {
+      "githubName": "ROSETTACLIENT__BASEURL",
+      "appServiceName": "RosettaClient__BaseUrl",
+      "classification": "variable",
+      "valueType": "string",
+      "description": "Rosetta API base URL, optionally containing {version}.",
+      "requiredWhen": "always"
+    },
+    {
+      "githubName": "ROSETTACLIENT__TOKENURL",
+      "appServiceName": "RosettaClient__TokenUrl",
+      "classification": "variable",
+      "valueType": "string",
+      "description": "Rosetta OAuth token endpoint.",
+      "requiredWhen": "always"
+    },
+    {
+      "githubName": "ROSETTACLIENT__CLIENTID",
+      "appServiceName": "RosettaClient__ClientId",
+      "classification": "variable",
+      "valueType": "string",
+      "description": "Rosetta OAuth client ID.",
+      "requiredWhen": "always"
+    },
+    {
+      "githubName": "ROSETTACLIENT__CLIENTSECRET",
+      "appServiceName": "RosettaClient__ClientSecret",
+      "classification": "secret",
+      "valueType": "string",
+      "description": "Rosetta OAuth client secret.",
+      "requiredWhen": "always"
+    },
+    {
+      "githubName": "ROSETTACLIENT__SCOPE",
+      "appServiceName": "RosettaClient__Scope",
+      "classification": "variable",
+      "valueType": "string",
+      "description": "Optional Rosetta OAuth scope override."
+    }
+  ]
 }

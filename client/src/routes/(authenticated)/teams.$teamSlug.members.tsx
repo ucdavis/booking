@@ -1,4 +1,5 @@
 import { UserPlusIcon } from '@heroicons/react/24/outline';
+import { useForm, useStore } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createFileRoute,
@@ -68,7 +69,6 @@ function TeamMembersPage() {
   });
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
-  const [newRole, setNewRole] = useState<TeamRole>(TeamRole.Editor);
   const [removingMember, setRemovingMember] = useState<TeamMember | null>(null);
   const [notice, setNotice] = useState('');
   const [accessDenied, setAccessDenied] = useState(false);
@@ -95,6 +95,33 @@ function TeamMembersPage() {
       setNotice(`${member.name}'s role is now ${teamRoleLabels[member.role]}.`);
     },
   });
+  const roleForm = useForm({
+    defaultValues: { role: TeamRole.Editor as TeamRole },
+    onSubmit: async ({ value }) => {
+      if (
+        !editingMember ||
+        isCurrentUser(editingMember) ||
+        value.role === editingMember.role ||
+        roleMutation.isPending
+      ) {
+        return;
+      }
+      try {
+        await roleMutation.mutateAsync({
+          member: editingMember,
+          role: value.role,
+        });
+      } catch {
+        // Keep the selected role available when saving fails.
+      }
+    },
+  });
+  const newRole = useStore(roleForm.store, (state) => state.values.role);
+  const isRoleSubmitting = useStore(
+    roleForm.store,
+    (state) => state.isSubmitting
+  );
+  const isRolePending = isRoleSubmitting || roleMutation.isPending;
   const removeMutation = useMutation({
     mutationFn: (member: TeamMember) => removeTeamMember(teamSlug, member.id),
     onError: (error) => {
@@ -126,7 +153,7 @@ function TeamMembersPage() {
     }
   }, [membersQuery.error, queryClient, teamSlug]);
 
-  const isBusy = roleMutation.isPending || removeMutation.isPending;
+  const isBusy = isRolePending || removeMutation.isPending;
   const columns: ColumnDef<TeamMember>[] = [
     {
       accessorKey: 'name',
@@ -169,11 +196,12 @@ function TeamMembersPage() {
               disabled={isBusy}
               onClick={() => {
                 setEditingMember(row.original);
-                setNewRole(
-                  row.original.role === TeamRole.Admin
-                    ? TeamRole.Admin
-                    : TeamRole.Editor
-                );
+                roleForm.reset({
+                  role:
+                    row.original.role === TeamRole.Admin
+                      ? TeamRole.Admin
+                      : TeamRole.Editor,
+                });
                 setRemovingMember(null);
                 setNotice('');
                 roleMutation.reset();
@@ -255,9 +283,14 @@ function TeamMembersPage() {
       )}
 
       {editingMember && !isCurrentUser(editingMember) && (
-        <section
+        <form
           aria-labelledby="change-team-role-heading"
           className="mt-6 rounded-xl border border-base-300 bg-base-100 p-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void roleForm.handleSubmit();
+          }}
         >
           <h3 className="font-semibold" id="change-team-role-heading">
             Change team role
@@ -272,27 +305,32 @@ function TeamMembersPage() {
           >
             New role
           </label>
-          <select
-            className="select select-bordered w-full max-w-xs"
-            disabled={roleMutation.isPending}
-            id="team-member-new-role"
-            onChange={(event) => {
-              const selectedRole = assignableTeamRoles.find(
-                (value) => value === event.target.value
-              );
-              if (selectedRole) {
-                setNewRole(selectedRole);
-                roleMutation.reset();
-              }
-            }}
-            value={newRole}
-          >
-            {assignableTeamRoles.map((value) => (
-              <option key={value} value={value}>
-                {teamRoleLabels[value]}
-              </option>
-            ))}
-          </select>
+          <roleForm.Field name="role">
+            {(field) => (
+              <select
+                className="select select-bordered w-full max-w-xs"
+                disabled={isRolePending}
+                id="team-member-new-role"
+                onBlur={field.handleBlur}
+                onChange={(event) => {
+                  const selectedRole = assignableTeamRoles.find(
+                    (value) => value === event.target.value
+                  );
+                  if (selectedRole) {
+                    field.handleChange(selectedRole);
+                    roleMutation.reset();
+                  }
+                }}
+                value={field.state.value}
+              >
+                {assignableTeamRoles.map((value) => (
+                  <option key={value} value={value}>
+                    {teamRoleLabels[value]}
+                  </option>
+                ))}
+              </select>
+            )}
+          </roleForm.Field>
           <p className="mt-2 text-sm text-base-content/65">
             {newRole === TeamRole.Admin
               ? 'Admins can manage this team and its members.'
@@ -307,28 +345,21 @@ function TeamMembersPage() {
           <div className="mt-4 flex flex-wrap gap-3">
             <button
               className="btn btn-primary btn-sm"
-              disabled={
-                roleMutation.isPending || newRole === editingMember.role
-              }
-              onClick={() => {
-                if (!isCurrentUser(editingMember)) {
-                  roleMutation.mutate({ member: editingMember, role: newRole });
-                }
-              }}
-              type="button"
+              disabled={isRolePending || newRole === editingMember.role}
+              type="submit"
             >
-              {roleMutation.isPending ? 'Saving…' : 'Save role'}
+              {isRolePending ? 'Saving…' : 'Save role'}
             </button>
             <button
               className="btn btn-ghost btn-sm"
-              disabled={roleMutation.isPending}
+              disabled={isRolePending}
               onClick={() => setEditingMember(null)}
               type="button"
             >
               Cancel
             </button>
           </div>
-        </section>
+        </form>
       )}
 
       {removingMember && !isCurrentUser(removingMember) && (

@@ -1,4 +1,5 @@
 import { MagnifyingGlassIcon, UserPlusIcon } from '@heroicons/react/24/outline';
+import { useForm, useStore } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { TeamMember } from './models/TeamMember.ts';
@@ -31,23 +32,22 @@ export function AddTeamMemberDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const [searchText, setSearchText] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState<string | null>(null);
-  const [selectedIamId, setSelectedIamId] = useState<string | null>(null);
-  const [role, setRole] = useState<TeamRole>(TeamRole.Editor);
   const queryClient = useQueryClient();
   const peopleQuery = useQuery(
     teamPeopleQueryOptions(teamSlug, userId, submittedQuery)
   );
   const people = submittedQuery ? peopleQuery.data : undefined;
-  const selectedPerson = people?.find(
-    (person) =>
-      person.isActive &&
-      person.isActiveInIam &&
-      person.role === null &&
-      (person.iamId === selectedIamId ||
-        (selectedIamId === null && people.length === 1))
-  );
+  const findSelectedPerson = (iamId: string | null) =>
+    people?.find(
+      (person) =>
+        person.isActive &&
+        person.isActiveInIam !== false &&
+        person.role === null &&
+        (person.iamId === iamId || (iamId === null && people.length === 1))
+    );
   const addMutation = useMutation({
-    mutationFn: (iamId: string) => addTeamMember(teamSlug, iamId, role),
+    mutationFn: ({ iamId, role }: { iamId: string; role: TeamRole }) =>
+      addTeamMember(teamSlug, iamId, role),
     onError: (error) => {
       if (error instanceof HttpError && error.status === 403) {
         onAccessDenied();
@@ -58,6 +58,35 @@ export function AddTeamMemberDialog({
       onAdded(member);
     },
   });
+  const form = useForm({
+    defaultValues: {
+      role: TeamRole.Editor as TeamRole,
+      selectedIamId: null as string | null,
+    },
+    onSubmit: async ({ value }) => {
+      const person = findSelectedPerson(value.selectedIamId);
+      if (
+        !person ||
+        peopleQuery.isFetching ||
+        peopleQuery.isError ||
+        addMutation.isPending
+      ) {
+        return;
+      }
+      try {
+        await addMutation.mutateAsync({ iamId: person.iamId, role: value.role });
+      } catch {
+        // Keep the selected person and role available when adding fails.
+      }
+    },
+  });
+  const selectedIamId = useStore(
+    form.store,
+    (state) => state.values.selectedIamId
+  );
+  const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
+  const isPending = isSubmitting || addMutation.isPending;
+  const selectedPerson = findSelectedPerson(selectedIamId);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -84,11 +113,11 @@ export function AddTeamMemberDialog({
   function searchPeople(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const query = searchText.trim();
-    if (!query || addMutation.isPending) {
+    if (!query || isPending) {
       return;
     }
 
-    setSelectedIamId(null);
+    form.setFieldValue('selectedIamId', null);
     addMutation.reset();
     if (query === submittedQuery) {
       void peopleQuery.refetch();
@@ -99,7 +128,7 @@ export function AddTeamMemberDialog({
 
   function searchAgain() {
     setSubmittedQuery(null);
-    setSelectedIamId(null);
+    form.setFieldValue('selectedIamId', null);
     addMutation.reset();
     inputRef.current?.focus();
     inputRef.current?.select();
@@ -109,7 +138,7 @@ export function AddTeamMemberDialog({
     selectedPerson &&
     !peopleQuery.isFetching &&
     !peopleQuery.isError &&
-    !addMutation.isPending;
+    !isPending;
   let addError =
     'We could not add this team member. Search again to check their current details, then retry.';
   if (addMutation.error instanceof HttpError) {
@@ -129,7 +158,7 @@ export function AddTeamMemberDialog({
       className="modal"
       onCancel={(event) => {
         event.preventDefault();
-        if (!addMutation.isPending) {
+        if (!isPending) {
           onClose();
         }
       }}
@@ -164,13 +193,13 @@ export function AddTeamMemberDialog({
             <input
               autoComplete="off"
               className="input input-bordered w-full"
-              disabled={addMutation.isPending}
+              disabled={isPending}
               id="team-person-search"
               maxLength={128}
               onChange={(event) => {
                 setSearchText(event.target.value);
                 setSubmittedQuery(null);
-                setSelectedIamId(null);
+                form.setFieldValue('selectedIamId', null);
                 addMutation.reset();
               }}
               placeholder="Enter a complete email or ID"
@@ -184,7 +213,7 @@ export function AddTeamMemberDialog({
               disabled={
                 !searchText.trim() ||
                 peopleQuery.isFetching ||
-                addMutation.isPending
+                isPending
               }
               type="submit"
             >
@@ -242,12 +271,13 @@ export function AddTeamMemberDialog({
                         disabled={
                           person.role !== null ||
                           !person.isActive ||
-                          !person.isActiveInIam ||
-                          addMutation.isPending
+                          person.isActiveInIam === false ||
+                          isPending
                         }
+                        form="add-team-member-form"
                         name="team-person"
                         onChange={() => {
-                          setSelectedIamId(person.iamId);
+                          form.setFieldValue('selectedIamId', person.iamId);
                           addMutation.reset();
                         }}
                         type="radio"
@@ -264,11 +294,17 @@ export function AddTeamMemberDialog({
                           <dd>{person.iamId}</dd>
                           <dt className="text-base-content/60">IAM status</dt>
                           <dd>
-                            <span
-                              className={`badge badge-sm ${person.isActiveInIam ? 'badge-success' : 'badge-error'}`}
-                            >
-                              {person.isActiveInIam ? 'Active' : 'Inactive'}
-                            </span>
+                            {person.isActiveInIam === null ? (
+                              <span className="badge badge-neutral badge-sm">
+                                Not checked
+                              </span>
+                            ) : (
+                              <span
+                                className={`badge badge-sm ${person.isActiveInIam ? 'badge-success' : 'badge-error'}`}
+                              >
+                                {person.isActiveInIam ? 'Active' : 'Inactive'}
+                              </span>
+                            )}
                           </dd>
                           <dt className="text-base-content/60">Kerberos ID</dt>
                           <dd>{person.kerberos || 'Not available'}</dd>
@@ -279,7 +315,7 @@ export function AddTeamMemberDialog({
                             )
                           </p>
                         )}
-                        {!person.isActiveInIam && (
+                        {person.isActiveInIam === false && (
                           <p className="mt-3 text-sm text-error">
                             This person is inactive in IAM and cannot be added.
                           </p>
@@ -297,40 +333,55 @@ export function AddTeamMemberDialog({
             ))}
         </div>
 
-        <div className="mt-6">
-          <label
-            className="mb-2 block text-sm font-semibold"
-            htmlFor="add-team-member-role"
-          >
-            Team role
-          </label>
-          <select
-            className="select select-bordered w-full"
-            disabled={addMutation.isPending}
-            id="add-team-member-role"
-            onChange={(event) => {
-              const selectedRole = assignableTeamRoles.find(
-                (value) => value === event.target.value
-              );
-              if (selectedRole) {
-                setRole(selectedRole);
-                addMutation.reset();
-              }
-            }}
-            value={role}
-          >
-            {assignableTeamRoles.map((value) => (
-              <option key={value} value={value}>
-                {teamRoleLabels[value]}
-              </option>
-            ))}
-          </select>
-          <p className="mt-2 text-sm text-base-content/65">
-            {role === TeamRole.Admin
-              ? 'Admins can manage this team and its members.'
-              : 'Editors have team access but cannot manage members.'}
-          </p>
-        </div>
+        <form
+          className="mt-6"
+          id="add-team-member-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void form.handleSubmit();
+          }}
+        >
+          <form.Field name="role">
+            {(field) => (
+              <>
+                <label
+                  className="mb-2 block text-sm font-semibold"
+                  htmlFor="add-team-member-role"
+                >
+                  Team role
+                </label>
+                <select
+                  className="select select-bordered w-full"
+                  disabled={isPending}
+                  id="add-team-member-role"
+                  onBlur={field.handleBlur}
+                  onChange={(event) => {
+                    const selectedRole = assignableTeamRoles.find(
+                      (value) => value === event.target.value
+                    );
+                    if (selectedRole) {
+                      field.handleChange(selectedRole);
+                      addMutation.reset();
+                    }
+                  }}
+                  value={field.state.value}
+                >
+                  {assignableTeamRoles.map((value) => (
+                    <option key={value} value={value}>
+                      {teamRoleLabels[value]}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-sm text-base-content/65">
+                  {field.state.value === TeamRole.Admin
+                    ? 'Admins can manage this team and its members.'
+                    : 'Editors have team access but cannot manage members.'}
+                </p>
+              </>
+            )}
+          </form.Field>
+        </form>
 
         {addMutation.isError && (
           <p className="alert alert-error mt-4" role="alert">
@@ -341,7 +392,7 @@ export function AddTeamMemberDialog({
         <div className="modal-action flex-wrap">
           <button
             className="btn btn-ghost"
-            disabled={addMutation.isPending}
+            disabled={isPending}
             onClick={onClose}
             type="button"
           >
@@ -350,7 +401,7 @@ export function AddTeamMemberDialog({
           {submittedQuery && (
             <button
               className="btn btn-outline"
-              disabled={addMutation.isPending}
+              disabled={isPending}
               onClick={searchAgain}
               type="button"
             >
@@ -360,14 +411,10 @@ export function AddTeamMemberDialog({
           <button
             className="btn btn-primary"
             disabled={!canAdd}
-            onClick={() => {
-              if (canAdd && selectedPerson) {
-                addMutation.mutate(selectedPerson.iamId);
-              }
-            }}
-            type="button"
+            form="add-team-member-form"
+            type="submit"
           >
-            {addMutation.isPending ? 'Adding…' : 'Add member'}
+            {isPending ? 'Adding…' : 'Add member'}
           </button>
         </div>
       </div>

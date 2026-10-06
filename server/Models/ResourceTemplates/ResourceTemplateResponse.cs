@@ -7,6 +7,7 @@ public sealed class ResourceTemplateResponse
     public string? Description { get; init; }
     public int FormSchemaVersion { get; init; }
     public required string FormJson { get; init; }
+    public string? ResourceDefaultsJson { get; init; }
     public bool IsActive { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }

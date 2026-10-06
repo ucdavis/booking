@@ -1,11 +1,12 @@
 using System.Security.Claims;
-using Server.Core.Domain;
+using Server.Models.Directory;
 
 namespace Server.Helpers;
 
 public static class LocalAuthentication
 {
     public const string Scheme = "LocalSandbox";
+    public const string KerberosClaimType = "kerberos";
 
     public static bool IsEnabled(IConfiguration configuration, IHostEnvironment environment)
     {
@@ -45,21 +46,15 @@ public static class LocalAuthentication
         return new ClaimsPrincipal(new ClaimsIdentity(claims, Scheme));
     }
 
-    public static ClaimsPrincipal? CreatePersonPrincipal(Person person)
+    public static ClaimsPrincipal? CreatePersonPrincipal(DirectoryPerson person, bool hasActiveAccount = false)
     {
         var iamId = person.IamId.Trim();
-        if (!person.IsActiveInIam || string.IsNullOrWhiteSpace(iamId))
+        if ((!hasActiveAccount && person.IsActiveInIam != true) || string.IsNullOrWhiteSpace(iamId))
         {
             return null;
         }
 
-        var name = string.IsNullOrWhiteSpace(person.FullName)
-            ? $"{person.FirstName?.Trim()} {person.LastName?.Trim()}".Trim()
-            : person.FullName.Trim();
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            name = iamId;
-        }
+        var name = string.IsNullOrWhiteSpace(person.Name) ? iamId : person.Name.Trim();
 
         var claims = new List<Claim>
         {
@@ -72,6 +67,10 @@ public static class LocalAuthentication
         if (!string.IsNullOrWhiteSpace(person.Email))
         {
             claims.Add(new Claim("preferred_username", person.Email.Trim()));
+        }
+        if (!string.IsNullOrWhiteSpace(person.Kerberos))
+        {
+            claims.Add(new Claim(KerberosClaimType, person.Kerberos.Trim()));
         }
 
         return new ClaimsPrincipal(new ClaimsIdentity(claims, Scheme));

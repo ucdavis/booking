@@ -12,6 +12,7 @@ using Server.Examples.Notifications;
 using Server.Helpers;
 using Server.Middleware;
 using Server.Services;
+using UCD.Rosetta.Client.Core.Extensions;
 
 WebApplication? app = null;
 
@@ -53,6 +54,8 @@ try
     // add scoped services here
     builder.Services.AddScoped<IDbInitializer, DbInitializer>();
     builder.Services.AddScoped<IUserService, UserService>();
+    builder.Services.AddRosettaClientWithFactory(options => builder.Configuration.GetSection("RosettaClient").Bind(options));
+    builder.Services.AddScoped<IRosettaService, RosettaService>();
     // add auth policies here
 
     // add db context (check secrets first, then config, then default)

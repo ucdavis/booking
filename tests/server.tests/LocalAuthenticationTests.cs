@@ -14,9 +14,11 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Server.Controllers;
 using Server.Core.Domain;
 using Server.Helpers;
+using Server.Models.Directory;
 
 namespace Server.Tests;
 
@@ -74,6 +76,25 @@ public class LocalAuthenticationTests
     }
 
     [Fact]
+    public async Task Configured_Entra_uses_the_local_cookie_without_changing_the_local_defaults()
+    {
+        var configuration = Configuration("true", "11111111-1111-1111-1111-111111111111");
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IConfiguration>(configuration);
+        services.AddAuthenticationServices(configuration, new TestEnvironment("Development"));
+        await using var provider = services.BuildServiceProvider();
+        var schemes = provider.GetRequiredService<IAuthenticationSchemeProvider>();
+
+        (await schemes.GetDefaultAuthenticateSchemeAsync())!.Name.Should().Be(LocalAuthentication.Scheme);
+        (await schemes.GetDefaultChallengeSchemeAsync())!.Name.Should().Be(LocalAuthentication.Scheme);
+        (await schemes.GetSchemeAsync(OpenIdConnectDefaults.AuthenticationScheme)).Should().NotBeNull();
+        (await schemes.GetSchemeAsync(CookieAuthenticationDefaults.AuthenticationScheme)).Should().BeNull();
+        provider.GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>()
+            .Get(OpenIdConnectDefaults.AuthenticationScheme).SignInScheme.Should().Be(LocalAuthentication.Scheme);
+    }
+
+    [Fact]
     public void Personas_exercise_the_existing_role_boundary()
     {
         var sample = LocalAuthentication.CreatePrincipal("sample")!;
@@ -119,6 +140,55 @@ public class LocalAuthenticationTests
         challenge.Properties!.RedirectUri.Should().Be("/fetch?example=1");
     }
 
+    [Theory]
+    [InlineData(null, "/")]
+    [InlineData("", "/")]
+    [InlineData("https://example.test/phishing", "/")]
+    [InlineData("//example.test/phishing", "/")]
+    [InlineData("/\\example.test/phishing", "/")]
+    [InlineData("/teams/demo?view=all", "/teams/demo?view=all")]
+    public void Normal_login_bypasses_the_local_chooser_and_only_accepts_local_return_urls(
+        string? returnUrl, string expectedUrl)
+    {
+        var controller = Controller("true", clientId: "11111111-1111-1111-1111-111111111111");
+        controller.HttpContext.User = LocalAuthentication.CreatePrincipal("basic")!;
+
+        var challenge = controller.NormalLogin(returnUrl).Should().BeOfType<ChallengeResult>().Subject;
+
+        challenge.AuthenticationSchemes.Should().Equal(OpenIdConnectDefaults.AuthenticationScheme);
+        challenge.Properties!.RedirectUri.Should().Be(expectedUrl);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("<client-guid>")]
+    [InlineData(" <CLIENT-GUID> ")]
+    public void Unconfigured_normal_login_keeps_the_local_chooser_available(string clientId)
+    {
+        var controller = Controller("true", clientId: clientId);
+
+        var view = controller.NormalLogin("https://example.test/phishing").Should().BeOfType<ViewResult>().Subject;
+
+        view.ViewName.Should().Be("LocalLogin");
+        view.Model.Should().Be("/");
+        view.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
+        view.ViewData["NormalLoginAvailable"].Should().Be(false);
+        controller.ModelState.IsValid.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("<client-guid>", false)]
+    [InlineData("11111111-1111-1111-1111-111111111111", true)]
+    public void Local_chooser_reports_whether_normal_login_is_available(string clientId, bool available)
+    {
+        var controller = Controller("true", clientId: clientId);
+
+        var view = controller.Login("/teams/demo").Should().BeOfType<ViewResult>().Subject;
+
+        view.ViewData["NormalLoginAvailable"].Should().Be(available);
+    }
+
     [Fact]
     public async Task Local_login_and_logout_are_unavailable_by_default()
     {
@@ -148,7 +218,9 @@ public class LocalAuthenticationTests
         await using var db = TestDbContextFactory.CreateInMemory();
         var controller = Controller(local);
 
-        (await controller.LocalPersonLogin("10010001", "/", db)).Should().BeOfType<NotFoundResult>();
+        var directory = new FakeRosettaService(db);
+        (await controller.LocalPersonLogin("10010001", "/", db, directory)).Should().BeOfType<NotFoundResult>();
+        directory.SearchCalls.Should().BeEmpty();
         (await db.Users.AnyAsync()).Should().BeFalse();
     }
 
@@ -159,19 +231,21 @@ public class LocalAuthenticationTests
     public async Task People_login_uses_an_exact_directory_identifier_and_preserves_local_return_urls(string query)
     {
         await using var db = TestDbContextFactory.CreateInMemory();
-        db.People.Add(Person());
-        await db.SaveChangesAsync();
+        var directory = new FakeRosettaService(db);
+        directory.People.Add(Person());
         var authentication = new RecordingAuthenticationService();
         using var services = new ServiceCollection().AddSingleton<IAuthenticationService>(authentication).BuildServiceProvider();
         var controller = Controller("true", services);
 
-        var result = await controller.LocalPersonLogin($"  {query}  ", "/teams/demo/members?view=all", db);
+        var result = await controller.LocalPersonLogin($"  {query}  ", "/teams/demo/members?view=all", db, directory);
 
         result.Should().BeOfType<LocalRedirectResult>().Which.Url.Should().Be("/teams/demo/members?view=all");
         authentication.SignInCount.Should().Be(1);
         authentication.Scheme.Should().Be(LocalAuthentication.Scheme);
         authentication.Principal!.FindFirst("ucdPersonIAMID")!.Value.Should().Be("10010001");
         authentication.Principal.Identity!.Name.Should().Be("Jordan Demo");
+        authentication.Principal.FindFirst(LocalAuthentication.KerberosClaimType)!.Value.Should().Be("jdemo");
+        directory.SearchCalls.Should().Equal(query);
     }
 
     [Theory]
@@ -181,13 +255,13 @@ public class LocalAuthenticationTests
     public async Task People_login_does_not_redirect_to_an_external_site(string returnUrl)
     {
         await using var db = TestDbContextFactory.CreateInMemory();
-        db.People.Add(Person());
-        await db.SaveChangesAsync();
+        var directory = new FakeRosettaService(db);
+        directory.People.Add(Person());
         var authentication = new RecordingAuthenticationService();
         using var services = new ServiceCollection().AddSingleton<IAuthenticationService>(authentication).BuildServiceProvider();
         var controller = Controller("true", services);
 
-        var result = await controller.LocalPersonLogin("10010001", returnUrl, db);
+        var result = await controller.LocalPersonLogin("10010001", returnUrl, db, directory);
 
         result.Should().BeOfType<LocalRedirectResult>().Which.Url.Should().Be("/");
         authentication.SignInCount.Should().Be(1);
@@ -203,13 +277,13 @@ public class LocalAuthenticationTests
     public async Task People_login_rejects_empty_missing_and_partial_matches_without_signing_in(string? query)
     {
         await using var db = TestDbContextFactory.CreateInMemory();
-        db.People.Add(Person());
-        await db.SaveChangesAsync();
+        var directory = new FakeRosettaService(db);
+        directory.People.Add(Person());
         var authentication = new RecordingAuthenticationService();
         using var services = new ServiceCollection().AddSingleton<IAuthenticationService>(authentication).BuildServiceProvider();
         var controller = Controller("true", services);
 
-        var result = await controller.LocalPersonLogin(query, "https://example.com/", db);
+        var result = await controller.LocalPersonLogin(query, "https://example.com/", db, directory);
 
         AssertPeopleLoginError(controller, result, authentication, "/");
         controller.ViewData["PeopleQuery"].Should().Be(query?.Trim());
@@ -220,15 +294,16 @@ public class LocalAuthenticationTests
     {
         await using var db = TestDbContextFactory.CreateInMemory();
         var query = new string('a', 129);
-        db.People.Add(new Person { IamId = "10010001", Email = query, IsActiveInIam = true });
-        await db.SaveChangesAsync();
+        var directory = new FakeRosettaService(db);
+        directory.People.Add(new DirectoryPerson { IamId = "10010001", Name = "Jordan Demo", Email = query, IsActiveInIam = true });
         var authentication = new RecordingAuthenticationService();
         using var services = new ServiceCollection().AddSingleton<IAuthenticationService>(authentication).BuildServiceProvider();
         var controller = Controller("true", services);
 
-        var result = await controller.LocalPersonLogin(query, "/teams/demo", db);
+        var result = await controller.LocalPersonLogin(query, "/teams/demo", db, directory);
 
         AssertPeopleLoginError(controller, result, authentication, "/teams/demo");
+        directory.SearchCalls.Should().BeEmpty();
     }
 
     [Theory]
@@ -239,46 +314,107 @@ public class LocalAuthenticationTests
     {
         await using var db = TestDbContextFactory.CreateInMemory();
         var first = Person();
-        var second = new Person { IamId = "10010002", FullName = "Another Person", IsActiveInIam = secondIsActive };
+        var second = new DirectoryPerson { IamId = "10010002", Name = "Another Person", IsActiveInIam = secondIsActive };
         var query = differentFields ? first.IamId : first.Email!;
         if (differentFields)
         {
-            second.UserId = query;
+            second.Kerberos = query;
         }
         else
         {
             second.Email = query;
         }
-        db.People.AddRange(first, second);
-        await db.SaveChangesAsync();
+        var directory = new FakeRosettaService(db);
+        directory.People.AddRange([first, second]);
         var authentication = new RecordingAuthenticationService();
         using var services = new ServiceCollection().AddSingleton<IAuthenticationService>(authentication).BuildServiceProvider();
         var controller = Controller("true", services);
 
-        var result = await controller.LocalPersonLogin(query, "/teams/demo", db);
+        var result = await controller.LocalPersonLogin(query, "/teams/demo", db, directory);
 
         AssertPeopleLoginError(controller, result, authentication, "/teams/demo");
     }
 
     [Theory]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    public async Task People_login_rejects_inactive_directory_and_application_users(bool isActiveInIam, bool isActiveUser)
+    [InlineData(false)]
+    [InlineData(null)]
+    public async Task People_login_requires_directory_eligibility_for_a_new_user(bool? isActiveInIam)
     {
         await using var db = TestDbContextFactory.CreateInMemory();
         var person = Person();
         person.IsActiveInIam = isActiveInIam;
-        db.People.Add(person);
-        db.Users.Add(new User { IamId = person.IamId, Name = "Existing User", IsActive = isActiveUser, IsAdmin = true });
-        await db.SaveChangesAsync();
+        var directory = new FakeRosettaService(db);
+        directory.People.Add(person);
         var authentication = new RecordingAuthenticationService();
         using var services = new ServiceCollection().AddSingleton<IAuthenticationService>(authentication).BuildServiceProvider();
         var controller = Controller("true", services);
 
-        var result = await controller.LocalPersonLogin(person.IamId, "/teams/demo", db);
+        var result = await controller.LocalPersonLogin(person.IamId, "/teams/demo", db, directory);
 
         AssertPeopleLoginError(controller, result, authentication, "/teams/demo");
-        (await db.Users.SingleAsync()).IsActive.Should().Be(isActiveUser);
+        (await db.Users.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task People_login_rejects_an_inactive_application_user()
+    {
+        await using var db = TestDbContextFactory.CreateInMemory();
+        var person = Person();
+        db.Users.Add(new User { IamId = person.IamId, Name = "Existing User", IsActive = false, IsAdmin = true });
+        await db.SaveChangesAsync();
+        var directory = new FakeRosettaService(db);
+        directory.People.Add(person);
+        var authentication = new RecordingAuthenticationService();
+        using var services = new ServiceCollection().AddSingleton<IAuthenticationService>(authentication).BuildServiceProvider();
+        var controller = Controller("true", services);
+
+        var result = await controller.LocalPersonLogin(person.IamId, "/teams/demo", db, directory);
+
+        AssertPeopleLoginError(controller, result, authentication, "/teams/demo");
+        (await db.Users.SingleAsync()).IsActive.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("10010001")]
+    [InlineData("existing@ucdavis.edu")]
+    [InlineData("existingkerb")]
+    public async Task People_login_uses_an_active_existing_account_without_Rosetta_configuration(string query)
+    {
+        await using var db = TestDbContextFactory.CreateInMemory();
+        db.Users.Add(new User
+        {
+            IamId = "10010001", Name = "Existing User", Email = "existing@ucdavis.edu",
+            Kerberos = "existingkerb", IsActive = true, IsAdmin = true,
+        });
+        await db.SaveChangesAsync();
+        var directory = new FakeRosettaService(db) { Failure = new HttpRequestException("Directory unavailable") };
+        var authentication = new RecordingAuthenticationService();
+        using var services = new ServiceCollection().AddSingleton<IAuthenticationService>(authentication).BuildServiceProvider();
+        var controller = Controller("true", services);
+
+        var result = await controller.LocalPersonLogin(query, "/teams/demo", db, directory);
+
+        result.Should().BeOfType<LocalRedirectResult>().Which.Url.Should().Be("/teams/demo");
+        authentication.SignInCount.Should().Be(1);
+        authentication.Principal!.Identity!.Name.Should().Be("Existing User");
+        authentication.Principal.FindFirst("preferred_username")!.Value.Should().Be("existing@ucdavis.edu");
+        authentication.Principal.FindFirst(LocalAuthentication.KerberosClaimType)!.Value.Should().Be("existingkerb");
+        authentication.Principal.FindAll(ClaimTypes.Role).Select(claim => claim.Value).Should().Equal("User");
+    }
+
+    [Fact]
+    public async Task People_login_reports_directory_failure_without_signing_in_or_exposing_exception_details()
+    {
+        await using var db = TestDbContextFactory.CreateInMemory();
+        var directory = new FakeRosettaService(db) { Failure = new HttpRequestException("private upstream details") };
+        var authentication = new RecordingAuthenticationService();
+        using var services = new ServiceCollection().AddSingleton<IAuthenticationService>(authentication).BuildServiceProvider();
+        var controller = Controller("true", services);
+
+        var result = await controller.LocalPersonLogin("jdemo", "/teams/demo", db, directory);
+
+        AssertPeopleLoginError(controller, result, authentication, "/teams/demo");
+        controller.ModelState["query"]!.Errors.Single().ErrorMessage.Should().Be("The directory could not be reached. Try again later.");
     }
 
     [Fact]
@@ -286,8 +422,9 @@ public class LocalAuthenticationTests
     {
         var person = Person();
         person.IamId = " 10010001 ";
-        person.FullName = " Jordan Demo ";
+        person.Name = " Jordan Demo ";
         person.Email = " jordan@example.test ";
+        person.Kerberos = " jdemo ";
 
         var principal = LocalAuthentication.CreatePersonPrincipal(person)!;
 
@@ -298,20 +435,19 @@ public class LocalAuthenticationTests
         principal.FindFirst("ucdPersonIAMID")!.Value.Should().Be("10010001");
         principal.FindFirst("name")!.Value.Should().Be("Jordan Demo");
         principal.FindFirst("preferred_username")!.Value.Should().Be("jordan@example.test");
+        principal.FindFirst(LocalAuthentication.KerberosClaimType)!.Value.Should().Be("jdemo");
         principal.FindAll(ClaimTypes.Role).Select(claim => claim.Value).Should().Equal("User");
     }
 
     [Theory]
-    [InlineData(null, " Jordan ", " Demo ", "Jordan Demo")]
-    [InlineData(" ", " Jordan ", null, "Jordan")]
-    [InlineData(null, null, " Demo ", "Demo")]
-    [InlineData(null, " ", null, "10010001")]
+    [InlineData(" Jordan Demo ", "Jordan Demo")]
+    [InlineData(" ", "10010001")]
     public void Directory_principal_has_a_name_fallback_and_omits_empty_email(
-        string? fullName, string? firstName, string? lastName, string expectedName)
+        string name, string expectedName)
     {
-        var person = new Person
+        var person = new DirectoryPerson
         {
-            IamId = "10010001", FullName = fullName, FirstName = firstName, LastName = lastName,
+            IamId = "10010001", Name = name,
             Email = " ", IsActiveInIam = true,
         };
 
@@ -320,6 +456,7 @@ public class LocalAuthenticationTests
         principal.Identity!.Name.Should().Be(expectedName);
         principal.FindFirst("name")!.Value.Should().Be(expectedName);
         principal.FindFirst("preferred_username").Should().BeNull();
+        principal.FindFirst(LocalAuthentication.KerberosClaimType).Should().BeNull();
     }
 
     [Theory]
@@ -327,7 +464,7 @@ public class LocalAuthenticationTests
     [InlineData(" ")]
     public void Directory_principal_requires_an_iam_identifier(string iamId)
     {
-        LocalAuthentication.CreatePersonPrincipal(new Person { IamId = iamId, IsActiveInIam = true }).Should().BeNull();
+        LocalAuthentication.CreatePersonPrincipal(new DirectoryPerson { IamId = iamId, Name = "Jordan Demo", IsActiveInIam = true }).Should().BeNull();
     }
 
     [Fact]
@@ -339,9 +476,9 @@ public class LocalAuthenticationTests
         LocalAuthentication.CreatePersonPrincipal(person).Should().BeNull();
     }
 
-    private static Person Person() => new()
+    private static DirectoryPerson Person() => new()
     {
-        IamId = "10010001", FullName = "Jordan Demo", Email = "jordan@example.test", UserId = "jdemo", IsActiveInIam = true,
+        IamId = "10010001", Name = "Jordan Demo", Email = "jordan@example.test", Kerberos = "jdemo", IsActiveInIam = true,
     };
 
     private static void AssertPeopleLoginError(
@@ -352,13 +489,15 @@ public class LocalAuthenticationTests
         view.Model.Should().Be(returnUrl);
         (view.StatusCode ?? controller.Response.StatusCode).Should().Be(StatusCodes.Status400BadRequest);
         controller.ModelState["query"]!.Errors.Should().NotBeEmpty();
+        view.ViewData["NormalLoginAvailable"].Should().Be(false);
         authentication.SignInCount.Should().Be(0);
         controller.Response.Headers.SetCookie.Should().BeEmpty();
     }
 
-    private static AccountController Controller(string? local = null, IServiceProvider? services = null)
+    private static AccountController Controller(string? local = null, IServiceProvider? services = null,
+        string clientId = "<client-guid>")
     {
-        var controller = new AccountController(Configuration(local), new TestEnvironment("Development"))
+        var controller = new AccountController(Configuration(local, clientId), new TestEnvironment("Development"))
         {
             ControllerContext = new ControllerContext
             {
@@ -380,6 +519,8 @@ public class LocalAuthenticationTests
         {
             ["Auth:UseLocal"] = local,
             ["Auth:ClientId"] = clientId,
+            ["Auth:Instance"] = "https://login.microsoftonline.com/",
+            ["Auth:TenantId"] = "11111111-1111-1111-1111-111111111111",
         }).Build();
 
     private sealed class EmptyTempDataProvider : ITempDataProvider

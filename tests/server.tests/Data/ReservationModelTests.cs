@@ -21,7 +21,7 @@ public class ReservationModelTests
 
         string[] tables =
         [
-            "People", "Users", "Teams", "TeamPermissions", "Spaces", "TeamSpaces", "Resources",
+            "Users", "Teams", "TeamPermissions", "Spaces", "TeamSpaces", "Resources",
             "ResourceTemplates", "ResourceConfigs", "Files", "ReservationSeries",
             "Reservations", "ReservationEvents", "Notifications", "ScheduleExceptions", "CalendarFeeds"
         ];
@@ -32,7 +32,8 @@ public class ReservationModelTests
         }
 
         script.Should().Contain("[IamId] varchar(50) NOT NULL");
-        script.Should().Contain("[IamId] char(10) NOT NULL");
+        script.Should().Contain("[Kerberos] nvarchar(64) NULL");
+        script.Should().NotContain("CREATE TABLE [People]");
         script.Should().Contain("[Amount] decimal(12,2) NULL");
         script.Should().Contain("[LocalDate] date NOT NULL");
         script.Should().Contain("[StartsAt] datetimeoffset NOT NULL");
@@ -60,6 +61,41 @@ public class ReservationModelTests
         using var context = CreateContext();
 
         context.Database.HasPendingModelChanges().Should().BeFalse();
+    }
+
+    [Fact]
+    public void Kerberos_migration_only_adds_the_user_column_and_removes_the_people_table()
+    {
+        using var context = CreateContext();
+        var migration = new Server.Core.Migrations.AddUserKerberosAndRemovePeople();
+
+        migration.UpOperations.Should().HaveCount(2);
+        var column = migration.UpOperations.OfType<Microsoft.EntityFrameworkCore.Migrations.Operations.AddColumnOperation>()
+            .Should().ContainSingle().Which;
+        column.Table.Should().Be("Users");
+        column.Name.Should().Be("Kerberos");
+        column.ColumnType.Should().Be("nvarchar(64)");
+        column.IsNullable.Should().BeTrue();
+        migration.UpOperations.OfType<Microsoft.EntityFrameworkCore.Migrations.Operations.DropTableOperation>()
+            .Should().ContainSingle().Which.Name.Should().Be("People");
+
+        var script = context.GetService<IMigrator>().GenerateScript(
+            "20261001195254_AddResourceTemplateDescription", "20261002231502_AddUserKerberosAndRemovePeople");
+
+        script.Should().Contain("ALTER TABLE [Users] ADD [Kerberos] nvarchar(64) NULL;");
+        script.Should().Contain("DROP TABLE [People];");
+        script.Should().NotContain("DROP COLUMN");
+    }
+
+    [Fact]
+    public void Users_store_optional_Kerberos_without_a_People_lookup_entity()
+    {
+        using var context = CreateContext();
+
+        context.Model.GetEntityTypes().Should().NotContain(entity => entity.GetTableName() == "People");
+        var kerberos = context.Model.FindEntityType(typeof(User))!.FindProperty(nameof(User.Kerberos))!;
+        kerberos.GetMaxLength().Should().Be(64);
+        kerberos.IsNullable.Should().BeTrue();
     }
 
     [Theory]
@@ -164,10 +200,6 @@ public class ReservationModelTests
         model.GetEntityTypes().SelectMany(entity => entity.GetForeignKeys())
             .Should().OnlyContain(key => key.DeleteBehavior == DeleteBehavior.NoAction);
 
-        var person = model.FindEntityType(typeof(Person))!;
-        person.IsTableExcludedFromMigrations().Should().BeFalse("Booking manages the People schema");
-        person.GetForeignKeys().Should().BeEmpty();
-        person.GetReferencingForeignKeys().Should().BeEmpty("People remains a lookup without reservation relationships");
     }
 
     [Fact]

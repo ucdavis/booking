@@ -8,5 +8,5 @@ public sealed class AdminPersonResponse
     public string? Kerberos { get; init; }
     public bool IsAdmin { get; init; }
     public bool IsActive { get; init; }
-    public bool IsActiveInIam { get; init; }
+    public bool? IsActiveInIam { get; init; }
 }

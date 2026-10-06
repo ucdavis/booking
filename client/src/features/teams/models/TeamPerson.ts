@@ -4,7 +4,7 @@ export interface TeamPerson {
   email: string | null;
   iamId: string;
   isActive: boolean;
-  isActiveInIam: boolean;
+  isActiveInIam: boolean | null;
   kerberos: string | null;
   name: string;
   role: TeamRole | null;
