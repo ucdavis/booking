@@ -49,7 +49,6 @@ const person = {
   email: 'sam@example.com',
   iamId: '100003',
   isActive: true,
-  isActiveInIam: true,
   isAdmin: false,
   kerberos: 'samsmith',
   name: 'Sam Smith',
@@ -211,18 +210,15 @@ describe('site admin users', () => {
       expect(dialog.getByText(person.email)).toBeInTheDocument();
       expect(dialog.getByText(new RegExp(person.iamId))).toBeInTheDocument();
       expect(dialog.getByText(new RegExp(person.kerberos))).toBeInTheDocument();
-      expect(dialog.getByText('IAM status')).toBeInTheDocument();
-      expect(dialog.getByText('Active')).toBeInTheDocument();
+      expect(dialog.queryByText('IAM status')).not.toBeInTheDocument();
       expect(searchQueries).toEqual([identifier]);
     }
   );
 
-  it('allows a local user with unchecked IAM status to be selected for addition', async () => {
+  it('automatically selects the only eligible user for addition', async () => {
     mockAdminAccess();
     server.use(
-      http.get('/api/admin/people', () =>
-        HttpResponse.json([{ ...person, isActiveInIam: null }])
-      )
+      http.get('/api/admin/people', () => HttpResponse.json([person]))
     );
     ({ cleanup } = renderRoute({ initialPath: '/admin/users' }));
     const dialog = await openAddDialog();
@@ -235,11 +231,7 @@ describe('site admin users', () => {
     const match = await dialog.findByRole('radio', { name: 'Sam Smith' });
     expect(match).toBeEnabled();
     expect(match).toBeChecked();
-    expect(dialog.getByText('Not checked')).toHaveClass('badge-neutral');
-    expect(dialog.queryByText('Inactive')).not.toBeInTheDocument();
-    expect(
-      dialog.queryByText('This person is inactive in IAM and cannot be added.')
-    ).not.toBeInTheDocument();
+    expect(dialog.queryByText('IAM status')).not.toBeInTheDocument();
     expect(
       dialog.getByRole('button', { name: 'Add admin user' })
     ).toBeEnabled();
@@ -345,12 +337,6 @@ describe('site admin users', () => {
             isActive: false,
             name: 'Inactive Person',
           },
-          {
-            ...person,
-            iamId: '100005',
-            isActiveInIam: false,
-            name: 'Inactive IAM Person',
-          },
           { ...person, iamId: '100006', name: 'Active Person' },
         ])
       )
@@ -370,9 +356,6 @@ describe('site admin users', () => {
       dialog.getByRole('radio', { name: /Inactive Person/ })
     ).toBeDisabled();
     expect(
-      dialog.getByRole('radio', { name: 'Inactive IAM Person' })
-    ).toBeDisabled();
-    expect(
       dialog.getByRole('button', { name: 'Add admin user' })
     ).toBeDisabled();
 
@@ -382,13 +365,11 @@ describe('site admin users', () => {
     ).toBeEnabled();
   });
 
-  it('shows a sole IAM-inactive match without allowing an add request', async () => {
+  it('does not allow an add request when the lookup returns no eligible person', async () => {
     mockAdminAccess();
     const addRequests = vi.fn(() => HttpResponse.json({ ...person, id: 3 }));
     server.use(
-      http.get('/api/admin/people', () =>
-        HttpResponse.json([{ ...person, isActiveInIam: false }])
-      ),
+      http.get('/api/admin/people', () => HttpResponse.json([])),
       http.post('/api/admin/users', addRequests)
     );
     ({ cleanup } = renderRoute({ initialPath: '/admin/users' }));
@@ -399,14 +380,12 @@ describe('site admin users', () => {
     );
     fireEvent.click(dialog.getByRole('button', { name: 'Search' }));
 
-    const match = await dialog.findByRole('radio', { name: 'Sam Smith' });
-    expect(match).toBeDisabled();
-    expect(match).not.toBeChecked();
-    expect(dialog.getByText('IAM status')).toBeInTheDocument();
-    expect(dialog.getByText('Inactive')).toBeInTheDocument();
     expect(
-      dialog.getByText('This person is inactive in IAM and cannot be added.')
+      await dialog.findByText(
+        'No people matched that email, IAM ID, or Kerberos ID.'
+      )
     ).toBeInTheDocument();
+    expect(dialog.queryByRole('radio')).not.toBeInTheDocument();
     expect(
       dialog.queryByText(/Adding Sam Smith grants access/)
     ).not.toBeInTheDocument();

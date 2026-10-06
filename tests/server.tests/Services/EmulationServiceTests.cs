@@ -26,10 +26,10 @@ public class EmulationServiceTests
         using var db = TestDbContextFactory.CreateInMemory();
         db.Users.AddRange(
             new User { IamId = "account", Name = "Stored Name", Email = "match@example.test", Kerberos = "storedkerb" },
-            new User { IamId = "no-person", Name = "Standalone Account", Email = "match@example.test" });
+            new User { IamId = "no-person", Name = "Standalone Account", Email = "match@example.test", Kerberos = "standalone" });
         _people.AddRange([
-            new DirectoryPerson { IamId = "account", Name = "Directory Name", Email = "match@example.test", IsActiveInIam = true },
-            new DirectoryPerson { IamId = "new-person", Name = "New Person", Email = "match@example.test", IsActiveInIam = true },
+            new DirectoryPerson { IamId = "account", Name = "Directory Name", Email = "match@example.test", Kerberos = "account" },
+            new DirectoryPerson { IamId = "new-person", Name = "New Person", Email = "match@example.test", Kerberos = "newperson" },
         ]);
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
@@ -41,8 +41,7 @@ public class EmulationServiceTests
         matches.Single(match => match.IamId == "account").Name.Should().Be("Stored Name");
         matches.Single(match => match.IamId == "account").HasUserAccount.Should().BeTrue();
         matches.Single(match => match.IamId == "account").Kerberos.Should().Be("storedkerb");
-        matches.Single(match => match.IamId == "no-person").IsActiveInIam.Should().BeNull();
-        matches.Single(match => match.IamId == "no-person").Kerberos.Should().BeNull();
+        matches.Single(match => match.IamId == "no-person").Kerberos.Should().Be("standalone");
         matches.Should().OnlyContain(match => match.HasUserAccount);
         rosetta.LookupCalls.Should().BeEmpty();
         (await db.Users.CountAsync()).Should().Be(2);
@@ -69,7 +68,6 @@ public class EmulationServiceTests
         matches[0].Name.Should().Be("Stored Name");
         matches[0].Email.Should().Be("old@example.test");
         matches[0].Kerberos.Should().Be("storedkerb");
-        matches[0].IsActiveInIam.Should().BeTrue();
     }
 
     [Fact]
@@ -86,7 +84,6 @@ public class EmulationServiceTests
         match.Kerberos.Should().Be("person1");
         match.HasUserAccount.Should().BeFalse();
         match.IsActive.Should().BeTrue();
-        match.IsActiveInIam.Should().BeTrue();
         db.Users.Should().BeEmpty();
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
@@ -97,7 +94,7 @@ public class EmulationServiceTests
         using var db = TestDbContextFactory.CreateInMemory();
         for (var index = 0; index < 12; index++)
         {
-            db.Users.Add(new User { IamId = $"account-{index}", Name = $"Name {index:D2}", Email = "match@example.test" });
+            db.Users.Add(new User { IamId = $"account-{index}", Name = $"Name {index:D2}", Email = "match@example.test", Kerberos = $"kerb{index}" });
         }
         await db.SaveChangesAsync();
         var service = Service(db);
@@ -161,18 +158,15 @@ public class EmulationServiceTests
         user.LastLoginAt.Should().Be(originalTime);
         (await db.Users.CountAsync()).Should().Be(1);
         (await service.GetActiveTargetAsync(user.IamId, default)).Should().NotBeNull();
-        rosetta.LookupCalls.Should().Equal(user.IamId, user.IamId);
+        rosetta.LookupCalls.Should().Equal(user.IamId);
     }
 
-    [Theory]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    public async Task Inactive_accounts_and_inactive_directory_people_are_rejected(bool activeUser, bool activePerson)
+    [Fact]
+    public async Task Inactive_accounts_are_rejected_even_with_a_complete_directory_profile()
     {
         using var db = TestDbContextFactory.CreateInMemory();
-        db.Users.Add(new User { IamId = "1000000001", Name = "Existing", IsActive = activeUser });
+        db.Users.Add(new User { IamId = "1000000001", Name = "Existing", IsActive = false });
         var person = Person();
-        person.IsActiveInIam = activePerson;
         _people.Add(person);
         await db.SaveChangesAsync();
         var service = Service(db);
@@ -184,53 +178,79 @@ public class EmulationServiceTests
         (await service.GetActiveTargetAsync(person.IamId, default)).Should().BeNull();
     }
 
-    [Fact]
-    public async Task Missing_identity_and_inactive_directory_person_do_not_create_an_account()
+    [Theory]
+    [InlineData("iam")]
+    [InlineData("email")]
+    [InlineData("kerberos")]
+    public async Task Missing_identity_and_incomplete_directory_person_do_not_create_an_account(string missingField)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var person = Person();
-        person.IsActiveInIam = false;
+        if (missingField == "iam") person.IamId = "";
+        if (missingField == "email") person.Email = " ";
+        if (missingField == "kerberos") person.Kerberos = null;
         _people.Add(person);
         await db.SaveChangesAsync();
         var service = Service(db);
 
         var missing = await service.FindOrCreateTargetAsync("missing", default);
-        var inactive = await service.FindOrCreateTargetAsync(person.IamId, default);
+        var incomplete = await service.FindOrCreateTargetAsync(person.IamId, default);
 
         missing.User.Should().BeNull();
         missing.Error.Should().BeNull();
-        inactive.User.Should().BeNull();
-        inactive.Error.Should().NotBeNull();
+        incomplete.User.Should().BeNull();
+        incomplete.Error.Should().BeNull();
+        (await service.SearchAsync(person.Email ?? person.IamId, default)).Should().BeEmpty();
         (await db.Users.AnyAsync()).Should().BeFalse();
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Unknown_directory_activity_prevents_creation_or_emulation(bool existingUser)
+    [Fact]
+    public async Task Existing_complete_accounts_can_be_emulated_without_directory_requests()
     {
         using var db = TestDbContextFactory.CreateInMemory();
-        var person = Person();
-        person.IsActiveInIam = null;
-        _people.Add(person);
-        if (existingUser)
-        {
-            db.Users.Add(new User { IamId = person.IamId, Name = "Existing" });
-            await db.SaveChangesAsync();
-        }
-        var service = Service(db);
+        var user = new User { IamId = "1000000001", Name = "Existing", Email = "stored@example.test", Kerberos = "storedkerb" };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+        var rosetta = new FakeRosettaService(db) { Failure = new HttpRequestException("Directory unavailable.") };
+        var service = Service(db, rosetta: rosetta);
 
-        var result = await service.FindOrCreateTargetAsync(person.IamId, default);
+        var result = await service.FindOrCreateTargetAsync(user.IamId, default);
 
-        result.User.Should().BeNull();
-        result.Error.Should().Be("This person's IAM activity could not be verified. Search again before emulating.");
-        (await service.GetActiveTargetAsync(person.IamId, default)).Should().BeNull();
-        (await db.Users.CountAsync()).Should().Be(existingUser ? 1 : 0);
+        result.User.Should().BeSameAs(user);
+        result.Error.Should().BeNull();
+        (await service.GetActiveTargetAsync(user.IamId, default)).Should().NotBeNull();
+        rosetta.LookupCalls.Should().BeEmpty();
+        (await db.Users.CountAsync()).Should().Be(1);
         db.ChangeTracker.HasChanges().Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(" ")]
+    public async Task Starting_emulation_fills_missing_email_from_a_complete_directory_profile(string? email)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var person = Person();
+        _people.Add(person);
+        var user = new User
+        {
+            IamId = person.IamId, Name = "Stored Name", Email = email, Kerberos = "storedkerb",
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var result = await Service(db).FindOrCreateTargetAsync(person.IamId, default);
+
+        result.User.Should().BeSameAs(user);
+        result.Error.Should().BeNull();
+        (await db.Users.AsNoTracking().SingleAsync()).Email.Should().Be(person.Email);
+        user.Kerberos.Should().Be("storedkerb");
+        user.Name.Should().Be("Stored Name");
+        user.LastLoginAt.Should().BeNull();
+    }
+
     [Fact]
-    public async Task Starting_and_continuing_emulation_recheck_directory_activity()
+    public async Task Starting_emulation_fills_missing_details_and_continuing_emulation_rechecks_application_activity()
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var person = Person();
@@ -245,18 +265,20 @@ public class EmulationServiceTests
 
         result.User!.Name.Should().Be("Stored Name");
         result.User.Email.Should().Be("stored@example.test");
+        result.User.Kerberos.Should().Be("person1");
         result.Error.Should().BeNull();
-        person.IsActiveInIam = false;
+        result.User.IsActive = false;
+        await db.SaveChangesAsync();
         (await service.GetActiveTargetAsync(person.IamId, default)).Should().BeNull();
         (await service.FindOrCreateTargetAsync(person.IamId, default)).Error.Should()
-            .Be("This person is inactive in IAM and cannot be emulated.");
-        rosetta.LookupCalls.Should().Equal(person.IamId, person.IamId, person.IamId);
+            .Be("This user is inactive and cannot be emulated.");
+        rosetta.LookupCalls.Should().Equal(person.IamId);
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Directory_failures_prevent_starting_emulation_without_writes(bool existingUser)
+    public async Task Directory_failures_prevent_creating_or_completing_a_profile_without_writes(bool existingUser)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         if (existingUser)
@@ -277,7 +299,7 @@ public class EmulationServiceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Continuing_emulation_requires_recovery_when_directory_lookup_fails(bool ambiguous)
+    public async Task Continuing_emulation_does_not_depend_on_directory_availability(bool ambiguous)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         db.Users.Add(new User { IamId = "1000000001", Name = "Existing" });
@@ -292,8 +314,8 @@ public class EmulationServiceTests
 
         var user = await Service(db, rosetta: rosetta).GetActiveTargetAsync("1000000001", default);
 
-        user.Should().BeNull();
-        rosetta.LookupCalls.Should().Equal("1000000001");
+        user.Should().NotBeNull();
+        rosetta.LookupCalls.Should().BeEmpty();
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
 
@@ -303,10 +325,11 @@ public class EmulationServiceTests
         using var db = TestDbContextFactory.CreateInMemory();
         db.Users.Add(new User { IamId = "1000000001", Name = "Existing" });
         await db.SaveChangesAsync();
-        var rosetta = new FakeRosettaService(db) { Failure = new OperationCanceledException() };
-        var service = Service(db, rosetta: rosetta);
+        var service = Service(db);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
 
-        var lookup = () => service.GetActiveTargetAsync("1000000001", default);
+        var lookup = () => service.GetActiveTargetAsync("1000000001", cancellation.Token);
 
         await lookup.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -386,6 +409,7 @@ public class EmulationServiceTests
         (result.Error != null).Should().Be(!winnerActive);
         var user = await db.Users.SingleAsync();
         user.Name.Should().Be("Concurrent Sign-in");
+        user.Email.Should().Be(winnerActive ? "directory@example.test" : null);
         user.Kerberos.Should().Be(winnerActive ? winnerKerberos ?? "person1" : winnerKerberos);
         user.IsAdmin.Should().BeTrue();
         user.IsActive.Should().Be(winnerActive);
@@ -554,7 +578,7 @@ public class EmulationServiceTests
     private static DirectoryPerson Person() => new()
     {
         IamId = "1000000001", Name = "Directory Person", Email = "directory@example.test",
-        Kerberos = "person1", IsActiveInIam = true,
+        Kerberos = "person1",
     };
 
     private static ClaimsPrincipal Actor(string iamId = "actor-iam") => new(new ClaimsIdentity(

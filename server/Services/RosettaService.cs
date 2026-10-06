@@ -33,11 +33,12 @@ public sealed class RosettaService(
 
         var users = await dbContext.Users.AsNoTracking()
             .Where(user => user.IamId == search || user.Email == search || user.Kerberos == search)
+            .Where(user => !string.IsNullOrWhiteSpace(user.IamId) && !string.IsNullOrWhiteSpace(user.Kerberos) &&
+                !string.IsNullOrWhiteSpace(user.Email))
             .OrderBy(user => user.Name).ThenBy(user => user.IamId)
             .Select(user => new DirectoryPerson
             {
                 IamId = user.IamId, Name = user.Name, Email = user.Email, Kerberos = user.Kerberos,
-                // Current IAM activity must still be checked in Rosetta before granting access.
             })
             .Take(10).ToListAsync(cancellationToken);
         if (users.Count > 0)
@@ -132,22 +133,20 @@ public sealed class RosettaService(
     private static DirectoryPerson? MapPerson(Person person)
     {
         var iamId = Clean(person.Iam_id) ?? Clean(person.Id?.Iam_id);
-        if (iamId == null)
+        var kerberos = Clean(person.Id?.Login_id);
+        var campusEmail = Clean(person.Email?.Campus);
+        if (iamId == null || kerberos == null || campusEmail == null)
         {
             return null;
         }
 
         var livedName = Clean($"{Clean(person.Name?.Lived_first_name)} {Clean(person.Name?.Lived_last_name)}");
-        var kerberos = Clean(person.Id?.Login_id);
-        var campusEmail = Clean(person.Email?.Campus);
-        var healthEmail = Clean(person.Email?.Health);
         return new DirectoryPerson
         {
             IamId = iamId,
             Name = Clean(person.Displayname) ?? livedName ?? iamId,
             Email = campusEmail,
             Kerberos = kerberos,
-            IsActiveInIam = kerberos != null && (campusEmail != null || healthEmail != null),
         };
     }
 

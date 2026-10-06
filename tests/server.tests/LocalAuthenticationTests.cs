@@ -295,7 +295,7 @@ public class LocalAuthenticationTests
         await using var db = TestDbContextFactory.CreateInMemory();
         var query = new string('a', 129);
         var directory = new FakeRosettaService(db);
-        directory.People.Add(new DirectoryPerson { IamId = "10010001", Name = "Jordan Demo", Email = query, IsActiveInIam = true });
+        directory.People.Add(new DirectoryPerson { IamId = "10010001", Name = "Jordan Demo", Email = query, Kerberos = "jdemo" });
         var authentication = new RecordingAuthenticationService();
         using var services = new ServiceCollection().AddSingleton<IAuthenticationService>(authentication).BuildServiceProvider();
         var controller = Controller("true", services);
@@ -307,14 +307,13 @@ public class LocalAuthenticationTests
     }
 
     [Theory]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    [InlineData(false, false)]
-    public async Task People_login_rejects_ambiguous_matches_instead_of_selecting_a_person(bool differentFields, bool secondIsActive)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task People_login_rejects_ambiguous_matches_instead_of_selecting_a_person(bool differentFields)
     {
         await using var db = TestDbContextFactory.CreateInMemory();
         var first = Person();
-        var second = new DirectoryPerson { IamId = "10010002", Name = "Another Person", IsActiveInIam = secondIsActive };
+        var second = new DirectoryPerson { IamId = "10010002", Name = "Another Person", Email = "another@example.test", Kerberos = "another" };
         var query = differentFields ? first.IamId : first.Email!;
         if (differentFields)
         {
@@ -336,20 +335,24 @@ public class LocalAuthenticationTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(null)]
-    public async Task People_login_requires_directory_eligibility_for_a_new_user(bool? isActiveInIam)
+    [InlineData("iam")]
+    [InlineData("email")]
+    [InlineData("kerberos")]
+    public async Task People_login_requires_a_complete_directory_profile_for_a_new_user(string missingField)
     {
         await using var db = TestDbContextFactory.CreateInMemory();
         var person = Person();
-        person.IsActiveInIam = isActiveInIam;
+        if (missingField == "iam") person.IamId = " ";
+        if (missingField == "email") person.Email = null;
+        if (missingField == "kerberos") person.Kerberos = " ";
         var directory = new FakeRosettaService(db);
         directory.People.Add(person);
         var authentication = new RecordingAuthenticationService();
         using var services = new ServiceCollection().AddSingleton<IAuthenticationService>(authentication).BuildServiceProvider();
         var controller = Controller("true", services);
 
-        var result = await controller.LocalPersonLogin(person.IamId, "/teams/demo", db, directory);
+        var query = missingField == "iam" ? person.Email : person.IamId;
+        var result = await controller.LocalPersonLogin(query, "/teams/demo", db, directory);
 
         AssertPeopleLoginError(controller, result, authentication, "/teams/demo");
         (await db.Users.AnyAsync()).Should().BeFalse();
@@ -442,21 +445,21 @@ public class LocalAuthenticationTests
     [Theory]
     [InlineData(" Jordan Demo ", "Jordan Demo")]
     [InlineData(" ", "10010001")]
-    public void Directory_principal_has_a_name_fallback_and_omits_empty_email(
+    public void Directory_principal_has_a_name_fallback(
         string name, string expectedName)
     {
         var person = new DirectoryPerson
         {
             IamId = "10010001", Name = name,
-            Email = " ", IsActiveInIam = true,
+            Email = "jordan@example.test", Kerberos = "jdemo",
         };
 
         var principal = LocalAuthentication.CreatePersonPrincipal(person)!;
 
         principal.Identity!.Name.Should().Be(expectedName);
         principal.FindFirst("name")!.Value.Should().Be(expectedName);
-        principal.FindFirst("preferred_username").Should().BeNull();
-        principal.FindFirst(LocalAuthentication.KerberosClaimType).Should().BeNull();
+        principal.FindFirst("preferred_username")!.Value.Should().Be("jordan@example.test");
+        principal.FindFirst(LocalAuthentication.KerberosClaimType)!.Value.Should().Be("jdemo");
     }
 
     [Theory]
@@ -464,21 +467,29 @@ public class LocalAuthenticationTests
     [InlineData(" ")]
     public void Directory_principal_requires_an_iam_identifier(string iamId)
     {
-        LocalAuthentication.CreatePersonPrincipal(new DirectoryPerson { IamId = iamId, Name = "Jordan Demo", IsActiveInIam = true }).Should().BeNull();
+        var person = Person();
+        person.IamId = iamId;
+
+        LocalAuthentication.CreatePersonPrincipal(person).Should().BeNull();
     }
 
-    [Fact]
-    public void Directory_principal_rejects_an_inactive_person()
+    [Theory]
+    [InlineData(null, "jdemo")]
+    [InlineData(" ", "jdemo")]
+    [InlineData("jordan@example.test", null)]
+    [InlineData("jordan@example.test", " ")]
+    public void Directory_principal_requires_email_and_kerberos(string? email, string? kerberos)
     {
         var person = Person();
-        person.IsActiveInIam = false;
+        person.Email = email;
+        person.Kerberos = kerberos;
 
         LocalAuthentication.CreatePersonPrincipal(person).Should().BeNull();
     }
 
     private static DirectoryPerson Person() => new()
     {
-        IamId = "10010001", Name = "Jordan Demo", Email = "jordan@example.test", Kerberos = "jdemo", IsActiveInIam = true,
+        IamId = "10010001", Name = "Jordan Demo", Email = "jordan@example.test", Kerberos = "jdemo",
     };
 
     private static void AssertPeopleLoginError(

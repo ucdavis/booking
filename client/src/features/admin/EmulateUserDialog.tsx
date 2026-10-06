@@ -34,7 +34,6 @@ export function EmulateUserDialog({
   const selectedCandidate = candidates?.find(
     (candidate) =>
       candidate.isActive &&
-      candidate.isActiveInIam !== false &&
       (candidate.iamId === selectedIamId ||
         (selectedIamId === null && candidates.length === 1))
   );
@@ -198,11 +197,7 @@ export function EmulateUserDialog({
                         aria-label={candidate.name}
                         checked={selectedCandidate?.iamId === candidate.iamId}
                         className="radio radio-primary mt-1 shrink-0"
-                        disabled={
-                          !candidate.isActive ||
-                          candidate.isActiveInIam === false ||
-                          isStarting
-                        }
+                        disabled={!candidate.isActive || isStarting}
                         name="emulation-person"
                         onChange={() => {
                           setSelectedIamId(candidate.iamId);
@@ -222,28 +217,10 @@ export function EmulateUserDialog({
                           <dd>{candidate.iamId}</dd>
                           <dt className="text-base-content/60">Kerberos ID</dt>
                           <dd>{candidate.kerberos || 'Not available'}</dd>
-                          {candidate.isActiveInIam !== null && (
-                            <>
-                              <dt className="text-base-content/60">
-                                IAM status
-                              </dt>
-                              <dd>
-                                {candidate.isActiveInIam
-                                  ? 'Active'
-                                  : 'Inactive'}
-                              </dd>
-                            </>
-                          )}
                         </dl>
                         {!candidate.isActive && (
                           <p className="mt-3 text-sm text-error">
                             This user is inactive and cannot be emulated.
-                          </p>
-                        )}
-                        {candidate.isActiveInIam === false && (
-                          <p className="mt-3 text-sm text-error">
-                            This person is inactive in IAM and cannot be
-                            emulated.
                           </p>
                         )}
                       </div>

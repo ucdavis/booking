@@ -152,7 +152,7 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
             return PersonLoginError(search, returnUrl, "This user's application account is inactive and cannot sign in.");
         }
 
-        var principal = LocalAuthentication.CreatePersonPrincipal(person, existingUser?.IsActive == true);
+        var principal = LocalAuthentication.CreatePersonPrincipal(person);
         if (principal == null)
         {
             return PersonLoginError(search, returnUrl, "This person does not have the IAM ID, Kerberos ID, and email required to sign in.");

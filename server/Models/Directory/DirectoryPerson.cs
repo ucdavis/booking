@@ -7,5 +7,8 @@ public sealed class DirectoryPerson
     // Campus email only. Health email can match a lookup but is never persisted.
     public string? Email { get; set; }
     public string? Kerberos { get; set; }
-    public bool? IsActiveInIam { get; set; }
+
+    public bool HasRequiredDetails()
+        => !string.IsNullOrWhiteSpace(IamId) && !string.IsNullOrWhiteSpace(Kerberos) &&
+            !string.IsNullOrWhiteSpace(Email);
 }

@@ -194,33 +194,31 @@ public class AdminControllerTests
         person.Kerberos.Should().Be("person1");
         person.IsAdmin.Should().BeFalse();
         person.IsActive.Should().BeTrue();
-        person.IsActiveInIam.Should().BeTrue();
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task SearchPeople_returns_iam_inactive_people_without_changing_booking_activity(bool hasExistingUser)
+    [InlineData(null, "person1", "directory@example.test")]
+    [InlineData("", "person1", "directory@example.test")]
+    [InlineData("   ", "person1", "directory@example.test")]
+    [InlineData("0000000001", null, "directory@example.test")]
+    [InlineData("0000000001", "", "directory@example.test")]
+    [InlineData("0000000001", "   ", "directory@example.test")]
+    [InlineData("0000000001", "person1", null)]
+    [InlineData("0000000001", "person1", "")]
+    [InlineData("0000000001", "person1", "   ")]
+    public async Task SearchPeople_excludes_people_missing_required_details(string? iamId, string? kerberos, string? email)
     {
         using var db = TestDbContextFactory.CreateInMemory();
-        var person = CreatePerson();
-        person.IsActiveInIam = false;
-        _people.Add(person);
-        if (hasExistingUser)
+        _people.Add(new DirectoryPerson
         {
-            db.Users.Add(new User { IamId = person.IamId, Name = "Active Booking User" });
-        }
-        await db.SaveChangesAsync();
-        db.ChangeTracker.Clear();
+            IamId = iamId!, Name = "Incomplete Person", Kerberos = kerberos, Email = email,
+        });
 
-        var result = await CreateController(db).SearchPeople("person1");
+        var query = string.IsNullOrWhiteSpace(email) ? "person1" : "directory@example.test";
+        var result = await CreateController(db).SearchPeople(query);
 
-        var match = ReadValue<List<AdminPersonResponse>>(result).Should().ContainSingle().Which;
-        match.IamId.Should().Be(person.IamId);
-        match.IsActiveInIam.Should().BeFalse();
-        match.IsActive.Should().BeTrue();
-        match.IsAdmin.Should().BeFalse();
+        ReadValue<List<AdminPersonResponse>>(result).Should().BeEmpty();
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
 
@@ -247,7 +245,6 @@ public class AdminControllerTests
         person.Email.Should().Be("existing@example.test");
         person.IsAdmin.Should().BeTrue();
         person.IsActive.Should().BeFalse();
-        person.IsActiveInIam.Should().BeNull();
         person.Kerberos.Should().Be("existingkerb");
         rosetta.LookupCalls.Should().BeEmpty();
         db.ChangeTracker.Entries().Should().BeEmpty();
@@ -302,7 +299,7 @@ public class AdminControllerTests
                 IamId = $"{index:D10}",
                 Name = $"Person {index:D2}",
                 Email = "shared@example.test",
-                IsActiveInIam = true,
+                Kerberos = $"person{index}",
             });
         }
         db.Users.Add(new User
@@ -317,7 +314,6 @@ public class AdminControllerTests
         people.Should().HaveCount(10);
         people[0].IsAdmin.Should().BeTrue();
         people[0].IsActive.Should().BeFalse();
-        people[0].IsActiveInIam.Should().BeTrue();
     }
 
     [Fact]
@@ -365,17 +361,20 @@ public class AdminControllerTests
     }
 
     [Theory]
-    [InlineData(null, "person1")]
-    [InlineData("existingkerb", "existingkerb")]
-    public async Task AddUser_populates_missing_kerberos_without_replacing_existing_profile_or_login_fields(
-        string? existingKerberos, string expectedKerberos)
+    [InlineData(null, "existing@example.test")]
+    [InlineData("existingkerb", "existing@example.test")]
+    [InlineData("existingkerb", null)]
+    [InlineData("existingkerb", "")]
+    [InlineData("   ", "   ")]
+    public async Task AddUser_populates_missing_required_details_without_replacing_existing_profile_or_login_fields(
+        string? existingKerberos, string? existingEmail)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         _people.Add(CreatePerson());
         var originalTime = DateTimeOffset.UtcNow.AddDays(-1);
         db.Users.Add(new User
         {
-            IamId = "0000000001", Name = "Existing Name", Email = "existing@example.test",
+            IamId = "0000000001", Name = "Existing Name", Email = existingEmail,
             Kerberos = existingKerberos,
             CreatedAt = originalTime, UpdatedAt = originalTime, LastLoginAt = originalTime,
         });
@@ -388,8 +387,8 @@ public class AdminControllerTests
         var user = await db.Users.SingleAsync();
         user.IsAdmin.Should().BeTrue();
         user.Name.Should().Be("Existing Name");
-        user.Email.Should().Be("existing@example.test");
-        user.Kerberos.Should().Be(expectedKerberos);
+        user.Email.Should().Be(string.IsNullOrWhiteSpace(existingEmail) ? "directory@example.test" : existingEmail);
+        user.Kerberos.Should().Be(string.IsNullOrWhiteSpace(existingKerberos) ? "person1" : existingKerberos);
         user.CreatedAt.Should().Be(originalTime);
         user.LastLoginAt.Should().Be(originalTime);
         user.UpdatedAt.Should().BeAfter(originalTime);
@@ -434,45 +433,58 @@ public class AdminControllerTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task AddUser_rejects_iam_inactive_people_without_creating_or_promoting_a_user(bool hasExistingUser)
+    [InlineData(null, "person1", "directory@example.test")]
+    [InlineData("", "person1", "directory@example.test")]
+    [InlineData("   ", "person1", "directory@example.test")]
+    [InlineData("0000000001", null, "directory@example.test")]
+    [InlineData("0000000001", "", "directory@example.test")]
+    [InlineData("0000000001", "   ", "directory@example.test")]
+    [InlineData("0000000001", "person1", null)]
+    [InlineData("0000000001", "person1", "")]
+    [InlineData("0000000001", "person1", "   ")]
+    public async Task AddUser_rejects_incomplete_directory_details_without_creating_or_promoting_a_user(
+        string? iamId, string? kerberos, string? email)
     {
-        using var db = TestDbContextFactory.CreateInMemory();
-        var person = CreatePerson();
-        person.IsActiveInIam = false;
-        _people.Add(person);
+        _people.Add(new DirectoryPerson
+        {
+            IamId = iamId!, Name = "Incomplete Person", Kerberos = kerberos, Email = email,
+        });
         var originalTime = DateTimeOffset.UtcNow.AddDays(-1);
-        if (hasExistingUser)
+        foreach (var hasExistingUser in new[] { false, true })
         {
-            db.Users.Add(new User
+            using var db = TestDbContextFactory.CreateInMemory();
+            if (hasExistingUser)
             {
-                IamId = person.IamId, Name = "Active Booking User", IsActive = true, UpdatedAt = originalTime,
-            });
-        }
-        await db.SaveChangesAsync();
-        db.ChangeTracker.Clear();
+                db.Users.Add(new User
+                {
+                    IamId = "0000000001", Name = "Active Booking User", IsActive = true, UpdatedAt = originalTime,
+                });
+            }
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
 
-        var result = await CreateController(db).AddUser(new AddAdminUserRequest { IamId = person.IamId });
+            var rosetta = new FakeRosettaService(db);
+            var result = await CreateController(db, rosetta: rosetta).AddUser(new AddAdminUserRequest { IamId = "0000000001" });
 
-        result.Result.Should().BeOfType<ConflictObjectResult>().Which.Value.Should()
-            .Be("This person is inactive in IAM and cannot be added as a site admin.");
-        db.ChangeTracker.HasChanges().Should().BeFalse();
-        if (hasExistingUser)
-        {
-            var user = await db.Users.SingleAsync();
-            user.IsAdmin.Should().BeFalse();
-            user.IsActive.Should().BeTrue();
-            user.UpdatedAt.Should().Be(originalTime);
-        }
-        else
-        {
-            (await db.Users.AnyAsync()).Should().BeFalse();
+            result.Result.Should().BeOfType<NotFoundObjectResult>();
+            rosetta.LookupCalls.Should().Equal("0000000001");
+            db.ChangeTracker.HasChanges().Should().BeFalse();
+            if (hasExistingUser)
+            {
+                var user = await db.Users.SingleAsync();
+                user.IsAdmin.Should().BeFalse();
+                user.IsActive.Should().BeTrue();
+                user.UpdatedAt.Should().Be(originalTime);
+            }
+            else
+            {
+                (await db.Users.AnyAsync()).Should().BeFalse();
+            }
         }
     }
 
     [Fact]
-    public async Task AddUser_rechecks_iam_activity_after_search()
+    public async Task AddUser_rechecks_required_directory_details_after_search()
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var person = CreatePerson();
@@ -481,44 +493,38 @@ public class AdminControllerTests
         var controller = CreateController(db);
         var searchResult = await controller.SearchPeople("person1");
         var match = ReadValue<List<AdminPersonResponse>>(searchResult).Should().ContainSingle().Which;
-        match.IsActiveInIam.Should().BeTrue();
-        person.IsActiveInIam = false;
-        await db.SaveChangesAsync();
-        db.ChangeTracker.Clear();
+        person.Email = null;
 
         var result = await controller.AddUser(new AddAdminUserRequest { IamId = match.IamId });
 
-        result.Result.Should().BeOfType<ConflictObjectResult>().Which.Value.Should()
-            .Be("This person is inactive in IAM and cannot be added as a site admin.");
+        result.Result.Should().BeOfType<NotFoundObjectResult>();
         (await db.Users.AnyAsync()).Should().BeFalse();
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task AddUser_rejects_unverified_IAM_activity_for_new_and_existing_users(bool hasExistingUser)
+    [InlineData(null, "existingkerb")]
+    [InlineData("   ", "existingkerb")]
+    [InlineData("existing@example.test", null)]
+    [InlineData("existing@example.test", "   ")]
+    public async Task SearchPeople_uses_complete_directory_details_when_the_saved_user_is_incomplete(string? email, string? kerberos)
     {
         using var db = TestDbContextFactory.CreateInMemory();
-        var person = CreatePerson();
-        person.IsActiveInIam = null;
-        _people.Add(person);
-        if (hasExistingUser)
+        _people.Add(CreatePerson());
+        db.Users.Add(new User
         {
-            db.Users.Add(new User { IamId = person.IamId, Name = "Existing User" });
-            await db.SaveChangesAsync();
-        }
-        var rosetta = new FakeRosettaService(db);
-        var controller = CreateController(db, rosetta: rosetta);
-        await controller.SearchPeople(person.IamId);
+            IamId = "0000000001", Name = "Existing User", Email = email, Kerberos = kerberos,
+        });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
 
-        var result = await controller.AddUser(new AddAdminUserRequest { IamId = person.IamId });
+        var result = await CreateController(db).SearchPeople("0000000001");
 
-        result.Result.Should().BeOfType<ConflictObjectResult>().Which.Value.Should()
-            .Be("This person's IAM activity could not be verified. Search again before adding a site admin.");
-        rosetta.LookupCalls.Should().Equal(person.IamId);
-        (await db.Users.AnyAsync(user => user.IsAdmin)).Should().BeFalse();
-        (await db.Users.CountAsync()).Should().Be(hasExistingUser ? 1 : 0);
-        db.ChangeTracker.HasChanges().Should().BeFalse();
+        var match = ReadValue<List<AdminPersonResponse>>(result).Should().ContainSingle().Which;
+        match.IamId.Should().Be("0000000001");
+        match.Name.Should().Be("Directory Person");
+        match.Email.Should().Be("directory@example.test");
+        match.Kerberos.Should().Be("person1");
+        db.ChangeTracker.Entries().Should().BeEmpty();
     }
 
     [Fact]
@@ -561,15 +567,17 @@ public class AdminControllerTests
     }
 
     [Theory]
-    [InlineData(true, null)]
-    [InlineData(true, "existingkerb")]
-    [InlineData(false, null)]
+    [InlineData(true, null, "login@example.test")]
+    [InlineData(true, "existingkerb", "login@example.test")]
+    [InlineData(true, "existingkerb", null)]
+    [InlineData(true, "   ", "   ")]
+    [InlineData(false, null, null)]
     public async Task AddUser_handles_a_concurrent_insert_without_overwriting_or_reactivating_the_user(
-        bool isActive, string? existingKerberos)
+        bool isActive, string? existingKerberos, string? existingEmail)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase($"AdminRace_{Guid.NewGuid():N}").Options;
-        using var db = new ConcurrentInsertDbContext(options, isActive, existingKerberos);
+        using var db = new ConcurrentInsertDbContext(options, isActive, existingKerberos, existingEmail);
         _people.Add(CreatePerson());
         await db.SaveChangesAsync();
 
@@ -578,8 +586,8 @@ public class AdminControllerTests
         db.ChangeTracker.Clear();
         var user = await db.Users.SingleAsync();
         user.Name.Should().Be("Concurrent Login");
-        user.Email.Should().Be("login@example.test");
-        user.Kerberos.Should().Be(isActive ? existingKerberos ?? "person1" : existingKerberos);
+        user.Email.Should().Be(isActive && string.IsNullOrWhiteSpace(existingEmail) ? "directory@example.test" : existingEmail);
+        user.Kerberos.Should().Be(isActive && string.IsNullOrWhiteSpace(existingKerberos) ? "person1" : existingKerberos);
         user.LastLoginAt.Should().NotBeNull();
         user.IsActive.Should().Be(isActive);
         user.IsAdmin.Should().Be(isActive);
@@ -681,7 +689,6 @@ public class AdminControllerTests
     {
         IamId = "0000000001", Name = "Directory Person",
         Email = "directory@example.test", Kerberos = "person1",
-        IsActiveInIam = true,
     };
 
     private AdminController CreateController(AppDbContext db, string? iamId = "current-admin", FakeRosettaService? rosetta = null)
@@ -728,7 +735,7 @@ public class AdminControllerTests
         }
     }
 
-    private sealed class ConcurrentInsertDbContext(DbContextOptions<AppDbContext> options, bool isActive, string? kerberos)
+    private sealed class ConcurrentInsertDbContext(DbContextOptions<AppDbContext> options, bool isActive, string? kerberos, string? email)
         : AppDbContext(options)
     {
         private bool _insertedConcurrentUser;
@@ -742,7 +749,7 @@ public class AdminControllerTests
                 using var concurrentDb = new AppDbContext(options);
                 concurrentDb.Users.Add(new User
                 {
-                    IamId = candidate.Entity.IamId, Name = "Concurrent Login", Email = "login@example.test",
+                    IamId = candidate.Entity.IamId, Name = "Concurrent Login", Email = email,
                     Kerberos = kerberos,
                     IsActive = isActive, LastLoginAt = DateTimeOffset.UtcNow,
                 });

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Server.Core.Data;
 using Server.Core.Domain;
 using Server.Helpers;
+using Server.Models.Directory;
 using Server.Models.Emulation;
 
 namespace Server.Services;
@@ -57,7 +58,8 @@ public sealed class EmulationService
 
     public async Task<List<EmulationCandidateResponse>> SearchAsync(string search, CancellationToken cancellationToken)
     {
-        var people = (await _rosettaService.SearchPeopleAsync(search, cancellationToken)).Take(10).ToList();
+        var people = (await _rosettaService.SearchPeopleAsync(search, cancellationToken))
+            .Where(person => person.HasRequiredDetails()).Take(10).ToList();
         var iamIds = people.Select(person => person.IamId).ToList();
         var users = await _dbContext.Users.AsNoTracking()
             .Where(user => iamIds.Contains(user.IamId))
@@ -69,11 +71,10 @@ public sealed class EmulationService
             {
                 IamId = person.IamId,
                 Name = user == null ? person.Name : user.Name,
-                Email = user == null ? person.Email : user.Email,
-                Kerberos = user?.Kerberos ?? person.Kerberos,
+                Email = string.IsNullOrWhiteSpace(user?.Email) ? person.Email : user.Email,
+                Kerberos = string.IsNullOrWhiteSpace(user?.Kerberos) ? person.Kerberos : user.Kerberos,
                 HasUserAccount = user != null,
                 IsActive = user == null || user.IsActive,
-                IsActiveInIam = person.IsActiveInIam,
             };
         }).ToList();
     }
@@ -87,23 +88,22 @@ public sealed class EmulationService
         {
             return (null, "This user is inactive and cannot be emulated.");
         }
-        if (user != null && IsLocalPersona(iamId))
+        if (user != null && (IsLocalPersona(iamId) ||
+            (!string.IsNullOrWhiteSpace(user.Email) && !string.IsNullOrWhiteSpace(user.Kerberos))))
         {
             return (user, null);
         }
 
         var person = await _rosettaService.FindByIamIdAsync(iamId, cancellationToken);
-        if (person != null && person.IsActiveInIam != true)
-        {
-            return (null, person.IsActiveInIam == false
-                ? "This person is inactive in IAM and cannot be emulated."
-                : "This person's IAM activity could not be verified. Search again before emulating.");
-        }
         if (user != null)
         {
+            if (person?.HasRequiredDetails() == true)
+            {
+                await FillMissingDetailsAsync(user, person, cancellationToken);
+            }
             return (user, null);
         }
-        if (person == null)
+        if (person == null || !person.HasRequiredDetails())
         {
             return (null, null);
         }
@@ -137,47 +137,36 @@ public sealed class EmulationService
                 return (null, "This user is inactive and cannot be emulated.");
             }
 
-            if (string.IsNullOrWhiteSpace(user.Kerberos) && !string.IsNullOrWhiteSpace(person.Kerberos))
-            {
-                user.Kerberos = person.Kerberos;
-                user.UpdatedAt = DateTimeOffset.UtcNow;
-                await _dbContext.SaveChangesAsync(cancellationToken);
-            }
+            await FillMissingDetailsAsync(user, person, cancellationToken);
         }
 
         return (user, null);
     }
 
-    public async Task<User?> GetActiveTargetAsync(string iamId, CancellationToken cancellationToken)
+    private async Task FillMissingDetailsAsync(User user, DirectoryPerson person,
+        CancellationToken cancellationToken)
     {
-        var user = await _dbContext.Users.AsNoTracking()
-            .SingleOrDefaultAsync(user => user.IamId == iamId && user.IsActive, cancellationToken);
-        if (user == null)
+        var changed = false;
+        if (string.IsNullOrWhiteSpace(user.Email))
         {
-            return null;
+            user.Email = person.Email;
+            changed = true;
         }
-        if (IsLocalPersona(iamId))
+        if (string.IsNullOrWhiteSpace(user.Kerberos))
         {
-            return user;
+            user.Kerberos = person.Kerberos;
+            changed = true;
         }
-
-        try
+        if (changed)
         {
-            var person = await _rosettaService.FindByIamIdAsync(iamId, cancellationToken);
-            if (person != null && person.IsActiveInIam != true)
-            {
-                return null;
-            }
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (Exception exception) when (exception is HttpRequestException || exception is InvalidOperationException)
-        {
-            // Preserve the selection and let middleware require explicit recovery before another request.
-            _logger.LogWarning("The emulation target could not be verified with Rosetta.");
-            return null;
-        }
-
-        return user;
     }
+
+    public Task<User?> GetActiveTargetAsync(string iamId, CancellationToken cancellationToken)
+        => _dbContext.Users.AsNoTracking()
+            .SingleOrDefaultAsync(user => user.IamId == iamId && user.IsActive, cancellationToken);
 
     private bool IsLocalPersona(string iamId)
         => _useLocal && (iamId == "sandbox-10001" || iamId == "sandbox-10002");

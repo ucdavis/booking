@@ -35,7 +35,6 @@ const candidate: EmulationCandidate = {
   hasUserAccount: true,
   iamId: '100002',
   isActive: true,
-  isActiveInIam: null,
   kerberos: null,
   name: 'Sam Smith',
 };
@@ -264,6 +263,7 @@ describe('user emulation', () => {
     expect(
       dialog.queryByText(/account will be created/)
     ).not.toBeInTheDocument();
+    expect(dialog.queryByText('IAM status')).not.toBeInTheDocument();
     expect(searchedQuery).toBe('sam@example.com');
 
     fireEvent.click(dialog.getByRole('button', { name: 'Start emulating' }));
@@ -294,18 +294,12 @@ describe('user emulation', () => {
     server.use(
       http.get('/api/emulation/candidates', () =>
         HttpResponse.json([
-          { ...candidate, hasUserAccount: false, isActiveInIam: true },
+          { ...candidate, hasUserAccount: false },
           {
             ...candidate,
             iamId: '100003',
             isActive: false,
             name: 'Inactive User',
-          },
-          {
-            ...candidate,
-            iamId: '100004',
-            isActiveInIam: false,
-            name: 'Inactive Person',
           },
         ])
       )
@@ -320,9 +314,6 @@ describe('user emulation', () => {
       dialog.getByRole('button', { name: 'Start emulating' })
     ).toBeDisabled();
     expect(dialog.getByRole('radio', { name: 'Inactive User' })).toBeDisabled();
-    expect(
-      dialog.getByRole('radio', { name: 'Inactive Person' })
-    ).toBeDisabled();
 
     fireEvent.click(activePerson);
     expect(

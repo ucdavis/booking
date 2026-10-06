@@ -171,7 +171,6 @@ public class TeamsControllerTests
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var person = CreatePerson();
-        person.IsActiveInIam = false;
         _people.Add(person);
         var user = new User { IamId = person.IamId, Name = "Existing", IsActive = false };
         db.TeamPermissions.Add(new TeamPermission
@@ -187,7 +186,6 @@ public class TeamsControllerTests
         match.Name.Should().Be("Directory Person");
         match.Kerberos.Should().Be("person1");
         match.IsActive.Should().BeFalse();
-        match.IsActiveInIam.Should().BeFalse();
         match.Role.Should().Be(TeamRole.Viewer);
         ReadValue(await CreateMembersController(db).SearchPeople("team-b", query)).Single().Role.Should().BeNull();
     }
@@ -218,7 +216,6 @@ public class TeamsControllerTests
         person.Name.Should().Be("Existing User");
         person.Email.Should().Be("existing@example.test");
         person.IsActive.Should().BeFalse();
-        person.IsActiveInIam.Should().BeNull();
         person.Kerberos.Should().Be("existingkerb");
         person.Role.Should().Be(TeamRole.Editor);
         rosetta.LookupCalls.Should().BeEmpty();
@@ -234,7 +231,7 @@ public class TeamsControllerTests
         {
             _people.Add(new DirectoryPerson
             {
-                IamId = $"{index:D10}", Name = $"Person {index:D2}", Email = "shared@example.test", IsActiveInIam = true,
+                IamId = $"{index:D10}", Name = $"Person {index:D2}", Email = "shared@example.test", Kerberos = $"person{index}",
             });
         }
         await db.SaveChangesAsync();
@@ -243,7 +240,7 @@ public class TeamsControllerTests
         var matches = ReadValue(await controller.SearchPeople("team-a", " shared@example.test "));
 
         matches.Should().HaveCount(10);
-        matches.Should().OnlyContain(person => person.IsActive && person.IsActiveInIam == true && person.Role == null);
+        matches.Should().OnlyContain(person => person.IsActive && person.Role == null);
         ReadValue(await controller.SearchPeople("team-a", "shared")).Should().BeEmpty();
         ReadValue(await controller.SearchPeople("team-a", "%")).Should().BeEmpty();
         (await controller.SearchPeople("team-a", " ")).Result.Should().BeOfType<BadRequestObjectResult>();
@@ -251,9 +248,64 @@ public class TeamsControllerTests
     }
 
     [Theory]
+    [InlineData(null, "person1", "directory@example.test")]
+    [InlineData("", "person1", "directory@example.test")]
+    [InlineData("   ", "person1", "directory@example.test")]
+    [InlineData("0000000001", null, "directory@example.test")]
+    [InlineData("0000000001", "", "directory@example.test")]
+    [InlineData("0000000001", "   ", "directory@example.test")]
+    [InlineData("0000000001", "person1", null)]
+    [InlineData("0000000001", "person1", "")]
+    [InlineData("0000000001", "person1", "   ")]
+    public async Task Member_search_excludes_people_missing_required_details(string? iamId, string? kerberos, string? email)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        db.Teams.Add(new Team { Name = "Team A", Slug = "team-a" });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        _people.Add(new DirectoryPerson
+        {
+            IamId = iamId!, Name = "Incomplete Person", Kerberos = kerberos, Email = email,
+        });
+
+        var query = string.IsNullOrWhiteSpace(email) ? "person1" : "directory@example.test";
+        var result = await CreateMembersController(db).SearchPeople("team-a", query);
+
+        ReadValue(result).Should().BeEmpty();
+        db.ChangeTracker.Entries().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null, "existingkerb")]
+    [InlineData("   ", "existingkerb")]
+    [InlineData("existing@example.test", null)]
+    [InlineData("existing@example.test", "   ")]
+    public async Task Member_search_uses_complete_directory_details_when_the_saved_user_is_incomplete(string? email, string? kerberos)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        _people.Add(CreatePerson());
+        db.Teams.Add(new Team { Name = "Team A", Slug = "team-a" });
+        db.Users.Add(new User
+        {
+            IamId = "0000000001", Name = "Existing User", Email = email, Kerberos = kerberos,
+        });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await CreateMembersController(db).SearchPeople("team-a", "0000000001");
+
+        var match = ReadValue(result).Should().ContainSingle().Which;
+        match.IamId.Should().Be("0000000001");
+        match.Name.Should().Be("Directory Person");
+        match.Email.Should().Be("directory@example.test");
+        match.Kerberos.Should().Be("person1");
+        db.ChangeTracker.Entries().Should().BeEmpty();
+    }
+
+    [Theory]
     [InlineData(TeamRole.Admin)]
     [InlineData(TeamRole.Editor)]
-    public async Task Add_member_creates_user_from_active_directory_data_and_assigns_only_the_requested_team(TeamRole role)
+    public async Task Add_member_creates_user_from_complete_directory_data_and_assigns_only_the_requested_team(TeamRole role)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         db.Teams.Add(new Team { Name = "Team A", Slug = "team-a" });
@@ -278,16 +330,19 @@ public class TeamsControllerTests
     }
 
     [Theory]
-    [InlineData(null, "person1")]
-    [InlineData("existingkerb", "existingkerb")]
-    public async Task Add_existing_user_populates_missing_kerberos_and_preserves_profile_global_admin_and_other_team_role(
-        string? existingKerberos, string expectedKerberos)
+    [InlineData(null, "existing@example.test")]
+    [InlineData("existingkerb", "existing@example.test")]
+    [InlineData("existingkerb", null)]
+    [InlineData("existingkerb", "")]
+    [InlineData("   ", "   ")]
+    public async Task Add_existing_user_populates_missing_required_details_and_preserves_profile_global_admin_and_other_team_role(
+        string? existingKerberos, string? existingEmail)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var originalTime = DateTimeOffset.UtcNow.AddDays(-1);
         var user = new User
         {
-            IamId = "0000000001", Name = "Existing Name", Email = "existing@example.test", IsAdmin = true,
+            IamId = "0000000001", Name = "Existing Name", Email = existingEmail, IsAdmin = true,
             Kerberos = existingKerberos,
             CreatedAt = originalTime, UpdatedAt = originalTime, LastLoginAt = originalTime,
         };
@@ -302,12 +357,16 @@ public class TeamsControllerTests
         var member = ReadValue(await CreateMembersController(db).AddMember("team-a",
             new AddTeamMemberRequest { IamId = user.IamId, Role = TeamRole.Editor }));
 
+        var expectedEmail = string.IsNullOrWhiteSpace(existingEmail) ? "directory@example.test" : existingEmail;
+        var expectedKerberos = string.IsNullOrWhiteSpace(existingKerberos) ? "person1" : existingKerberos;
         member.Name.Should().Be("Existing Name");
-        member.Email.Should().Be("existing@example.test");
+        member.Email.Should().Be(expectedEmail);
         user.IsAdmin.Should().BeTrue();
         user.Kerberos.Should().Be(expectedKerberos);
-        (await db.Users.AsNoTracking().SingleAsync()).Kerberos.Should().Be(expectedKerberos);
-        if (existingKerberos == null)
+        var savedUser = await db.Users.AsNoTracking().SingleAsync();
+        savedUser.Email.Should().Be(expectedEmail);
+        savedUser.Kerberos.Should().Be(expectedKerberos);
+        if (string.IsNullOrWhiteSpace(existingKerberos) || string.IsNullOrWhiteSpace(existingEmail))
         {
             user.UpdatedAt.Should().BeAfter(originalTime);
         }
@@ -323,19 +382,21 @@ public class TeamsControllerTests
         (await db.TeamPermissions.SingleAsync(permission => permission.Team.Slug == "team-a")).Role.Should().Be(TeamRole.Editor);
     }
 
-    [Theory]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    public async Task Add_member_rechecks_inactive_directory_and_application_users(bool activeInIam, bool activeUser)
+    [Fact]
+    public async Task Add_member_rechecks_application_activity_after_search()
     {
         using var db = TestDbContextFactory.CreateInMemory();
         db.Teams.Add(new Team { Name = "Team A", Slug = "team-a" });
         var person = CreatePerson();
         _people.Add(person);
-        db.Users.Add(new User { IamId = person.IamId, Name = "Existing", IsActive = activeUser });
+        var user = new User
+        {
+            IamId = person.IamId, Name = "Existing", Email = person.Email, Kerberos = person.Kerberos,
+        };
+        db.Users.Add(user);
         await db.SaveChangesAsync();
-        await CreateMembersController(db).SearchPeople("team-a", person.IamId);
-        person.IsActiveInIam = activeInIam;
+        ReadValue(await CreateMembersController(db).SearchPeople("team-a", person.IamId)).Should().ContainSingle();
+        user.IsActive = false;
         await db.SaveChangesAsync();
 
         var result = await CreateMembersController(db).AddMember("team-a",
@@ -343,39 +404,72 @@ public class TeamsControllerTests
 
         result.Result.Should().BeOfType<ConflictObjectResult>();
         db.TeamPermissions.Should().BeEmpty();
-        (await db.Users.SingleAsync()).IsActive.Should().Be(activeUser);
+        (await db.Users.SingleAsync()).IsActive.Should().BeFalse();
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Add_member_rejects_unverified_IAM_activity_for_new_and_existing_users(bool hasExistingUser)
+    [Fact]
+    public async Task Add_member_rechecks_required_directory_details_after_search()
     {
         using var db = TestDbContextFactory.CreateInMemory();
         db.Teams.Add(new Team { Name = "Team A", Slug = "team-a" });
-        var person = CreatePerson();
-        person.IsActiveInIam = null;
-        _people.Add(person);
-        if (hasExistingUser)
-        {
-            db.Users.Add(new User { IamId = person.IamId, Name = "Existing User" });
-        }
         await db.SaveChangesAsync();
-        var rosetta = new FakeRosettaService(db);
-        var controller = CreateMembersController(db, rosetta: rosetta);
-        await controller.SearchPeople("team-a", person.IamId);
+        var person = CreatePerson();
+        _people.Add(person);
+        var controller = CreateMembersController(db);
+        var match = ReadValue(await controller.SearchPeople("team-a", "person1")).Should().ContainSingle().Which;
+        person.Email = null;
 
         var result = await controller.AddMember("team-a", new AddTeamMemberRequest
         {
-            IamId = person.IamId, Role = TeamRole.Admin,
+            IamId = match.IamId, Role = TeamRole.Admin,
         });
 
-        result.Result.Should().BeOfType<ConflictObjectResult>().Which.Value.Should()
-            .Be("This person's IAM activity could not be verified. Search again before adding a team member.");
-        rosetta.LookupCalls.Should().Equal(person.IamId);
+        result.Result.Should().BeOfType<NotFoundObjectResult>();
+        db.Users.Should().BeEmpty();
         db.TeamPermissions.Should().BeEmpty();
-        (await db.Users.CountAsync()).Should().Be(hasExistingUser ? 1 : 0);
         db.ChangeTracker.HasChanges().Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(null, "person1", "directory@example.test")]
+    [InlineData("", "person1", "directory@example.test")]
+    [InlineData("   ", "person1", "directory@example.test")]
+    [InlineData("0000000001", null, "directory@example.test")]
+    [InlineData("0000000001", "", "directory@example.test")]
+    [InlineData("0000000001", "   ", "directory@example.test")]
+    [InlineData("0000000001", "person1", null)]
+    [InlineData("0000000001", "person1", "")]
+    [InlineData("0000000001", "person1", "   ")]
+    public async Task Add_member_rejects_incomplete_directory_details_for_new_and_existing_users(
+        string? iamId, string? kerberos, string? email)
+    {
+        _people.Add(new DirectoryPerson
+        {
+            IamId = iamId!, Name = "Incomplete Person", Kerberos = kerberos, Email = email,
+        });
+        foreach (var hasExistingUser in new[] { false, true })
+        {
+            using var db = TestDbContextFactory.CreateInMemory();
+            db.Teams.Add(new Team { Name = "Team A", Slug = "team-a" });
+            if (hasExistingUser)
+            {
+                db.Users.Add(new User { IamId = "0000000001", Name = "Existing User" });
+            }
+            await db.SaveChangesAsync();
+            var rosetta = new FakeRosettaService(db);
+            var controller = CreateMembersController(db, rosetta: rosetta);
+
+            var result = await controller.AddMember("team-a", new AddTeamMemberRequest
+            {
+                IamId = "0000000001", Role = TeamRole.Admin,
+            });
+
+            result.Result.Should().BeOfType<NotFoundObjectResult>();
+            rosetta.LookupCalls.Should().Equal("0000000001");
+            db.TeamPermissions.Should().BeEmpty();
+            (await db.Users.CountAsync()).Should().Be(hasExistingUser ? 1 : 0);
+            db.ChangeTracker.HasChanges().Should().BeFalse();
+        }
     }
 
     [Fact]
@@ -533,18 +627,20 @@ public class TeamsControllerTests
     }
 
     [Theory]
-    [InlineData(true, false, null)]
-    [InlineData(true, false, "existingkerb")]
-    [InlineData(false, false, null)]
-    [InlineData(true, true, null)]
+    [InlineData(true, false, null, "login@example.test")]
+    [InlineData(true, false, "existingkerb", "login@example.test")]
+    [InlineData(true, false, "existingkerb", null)]
+    [InlineData(true, false, "   ", "   ")]
+    [InlineData(false, false, null, null)]
+    [InlineData(true, true, null, null)]
     public async Task Concurrent_first_login_or_add_preserves_the_winning_user_and_membership(
-        bool activeUser, bool addMembership, string? existingKerberos)
+        bool activeUser, bool addMembership, string? existingKerberos, string? existingEmail)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase($"TeamMemberRace_{Guid.NewGuid():N}").Options;
         using var db = new MemberInsertRaceDbContext(options)
         {
             InsertConcurrentUser = true, ConcurrentUserActive = activeUser, InsertConcurrentMembership = addMembership,
-            ConcurrentUserKerberos = existingKerberos,
+            ConcurrentUserKerberos = existingKerberos, ConcurrentUserEmail = existingEmail,
         };
         db.Teams.Add(new Team { Name = "Team A", Slug = "team-a" });
         _people.Add(CreatePerson());
@@ -557,11 +653,13 @@ public class TeamsControllerTests
         db.ChangeTracker.Clear();
         var user = await db.Users.SingleAsync();
         user.Name.Should().Be("Concurrent Login");
-        user.Email.Should().Be("login@example.test");
+        user.Email.Should().Be(activeUser && !addMembership && string.IsNullOrWhiteSpace(existingEmail)
+            ? "directory@example.test" : existingEmail);
         user.IsAdmin.Should().BeTrue();
         user.IsActive.Should().Be(activeUser);
         user.LastLoginAt.Should().NotBeNull();
-        user.Kerberos.Should().Be(activeUser && !addMembership ? existingKerberos ?? "person1" : existingKerberos);
+        user.Kerberos.Should().Be(activeUser && !addMembership && string.IsNullOrWhiteSpace(existingKerberos)
+            ? "person1" : existingKerberos);
         if (activeUser && !addMembership)
         {
             ReadValue(result).Id.Should().Be(user.Id);
@@ -646,7 +744,7 @@ public class TeamsControllerTests
 
     private static DirectoryPerson CreatePerson() => new()
     {
-        IamId = "0000000001", Name = "Directory Person", Email = "directory@example.test", Kerberos = "person1", IsActiveInIam = true,
+        IamId = "0000000001", Name = "Directory Person", Email = "directory@example.test", Kerberos = "person1",
     };
 
     private static JsonSerializerOptions TeamJsonOptions()
@@ -682,6 +780,7 @@ public class TeamsControllerTests
         public bool InsertConcurrentMembership { get; init; }
         public bool ConcurrentUserActive { get; init; } = true;
         public string? ConcurrentUserKerberos { get; init; }
+        public string? ConcurrentUserEmail { get; init; } = "login@example.test";
 
         public MemberInsertRaceDbContext(DbContextOptions<AppDbContext> options) : base(options) => _options = options;
 
@@ -697,7 +796,7 @@ public class TeamsControllerTests
                 {
                     concurrentUser = new User
                     {
-                        IamId = permission.User.IamId, Name = "Concurrent Login", Email = "login@example.test",
+                        IamId = permission.User.IamId, Name = "Concurrent Login", Email = ConcurrentUserEmail,
                         IsActive = ConcurrentUserActive, IsAdmin = true, LastLoginAt = DateTimeOffset.UtcNow,
                         Kerberos = ConcurrentUserKerberos,
                     };

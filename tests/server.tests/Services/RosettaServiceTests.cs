@@ -43,7 +43,6 @@ public class RosettaServiceTests
         match.Name.Should().Be("Stored Name");
         match.Email.Should().Be("stored@example.test");
         match.Kerberos.Should().Be("stored-kerb");
-        match.IsActiveInIam.Should().BeNull();
         http.ClientNames.Should().BeEmpty();
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
@@ -52,11 +51,13 @@ public class RosettaServiceTests
     public async Task Search_orders_and_limits_existing_accounts_without_mutating_them()
     {
         using var db = TestDbContextFactory.CreateInMemory();
+        db.Users.Add(new User { IamId = "incomplete", Name = "A missing login", Email = "shared@example.test" });
         for (var index = 11; index >= 0; index--)
         {
             db.Users.Add(new User
             {
                 IamId = $"{index:D10}", Name = $"Name {index:D2}", Email = "shared@example.test",
+                Kerberos = $"person{index}",
             });
         }
         await db.SaveChangesAsync();
@@ -68,6 +69,29 @@ public class RosettaServiceTests
         matches.Select(person => person.Name).Should().Equal(
             Enumerable.Range(0, 10).Select(index => $"Name {index:D2}"));
         http.ClientNames.Should().BeEmpty();
+        db.ChangeTracker.Entries().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null, "storedkerb")]
+    [InlineData("", "storedkerb")]
+    [InlineData(" ", "storedkerb")]
+    [InlineData("stored@ucdavis.edu", null)]
+    [InlineData("stored@ucdavis.edu", "")]
+    [InlineData("stored@ucdavis.edu", " ")]
+    public async Task Search_falls_back_to_directory_when_stored_details_are_incomplete(string? email, string? kerberos)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        db.Users.Add(new User { IamId = "1000000001", Name = "Stored Name", Email = email, Kerberos = kerberos });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        using var http = new TestHttpFactory(Person("1000000001"));
+
+        var match = (await Service(db, http).SearchPeopleAsync("1000000001")).Should().ContainSingle().Subject;
+
+        match.Email.Should().Be("person1@ucdavis.edu");
+        match.Kerberos.Should().Be("person1");
+        http.Requests.Should().ContainSingle();
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
 
@@ -160,7 +184,7 @@ public class RosettaServiceTests
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var email = new string('a', 129) + "@example.test";
-        db.Users.Add(new User { IamId = "legacy%identifier", Name = "Stored Account", Email = email });
+        db.Users.Add(new User { IamId = "legacy%identifier", Name = "Stored Account", Email = email, Kerberos = "legacy" });
         await db.SaveChangesAsync();
         using var http = new TestHttpFactory();
         var service = Service(db, http, new RosettaClientOptions());
@@ -204,6 +228,7 @@ public class RosettaServiceTests
         health.Email.Health = " MATCH@ucdavis.edu ";
         var healthOnly = Person("1000000005", "Health Only");
         healthOnly.Id.Login_id = "health2";
+        healthOnly.Email.Campus = null;
         healthOnly.Email.Health = "match@ucdavis.edu";
         var personal = Person("1000000003", "Personal Match");
         personal.Email.Personal = "match@ucdavis.edu";
@@ -215,11 +240,10 @@ public class RosettaServiceTests
 
         var matches = await Service(db, http).SearchPeopleAsync("match@ucdavis.edu");
 
-        matches.Select(person => person.IamId).Should().Equal("1000000001", "1000000002", "1000000005");
+        matches.Select(person => person.IamId).Should().Equal("1000000001", "1000000002");
         matches[0].Email.Should().Be("match@ucdavis.edu");
         matches[1].Email.Should().Be("preferred@example.test");
-        matches[2].Email.Should().BeNull();
-        matches.Should().OnlyContain(person => person.IsActiveInIam == true);
+        matches.Should().OnlyContain(person => person.HasRequiredDetails());
     }
 
     [Theory]
@@ -242,14 +266,21 @@ public class RosettaServiceTests
         var emulation = new EmulationService(db, users, configuration, environment,
             new EphemeralDataProtectionProvider(), NullLogger<EmulationService>.Instance, rosetta);
 
-        var candidate = (await emulation.SearchAsync(person.Email.Health, default)).Should().ContainSingle().Which;
+        var candidates = await emulation.SearchAsync(person.Email.Health, default);
+        if (campusEmail == null)
+        {
+            candidates.Should().BeEmpty();
+            (await emulation.FindOrCreateTargetAsync(person.Iam_id, default)).User.Should().BeNull();
+            db.Users.Should().BeEmpty();
+            return;
+        }
+        var candidate = candidates.Should().ContainSingle().Which;
 
         candidate.IamId.Should().Be(person.Iam_id);
         candidate.Name.Should().Be("Directory Person");
         candidate.Kerberos.Should().Be("person1");
         candidate.Email.Should().Be(campusEmail);
         candidate.HasUserAccount.Should().BeFalse();
-        candidate.IsActiveInIam.Should().BeTrue();
 
         var result = await emulation.FindOrCreateTargetAsync(candidate.IamId, default);
 
@@ -269,7 +300,7 @@ public class RosettaServiceTests
         var principal = await emulation.CreatePrincipalAsync(activeTarget);
         principal.Identity!.Name.Should().Be("Directory Person");
         (principal.FindFirst("preferred_username")?.Value).Should().Be(campusEmail);
-        http.Requests.Should().HaveCount(3);
+        http.Requests.Should().HaveCount(2);
     }
 
     [Fact]
@@ -281,7 +312,7 @@ public class RosettaServiceTests
         person.Id.Login_id = " person1 ";
         person.Name.Lived_first_name = " First ";
         person.Name.Lived_last_name = " Last ";
-        person.Email.Campus = " ******* ";
+        person.Email.Campus = " campus@ucdavis.edu ";
         person.Email.Health = " health@example.test ";
         person.Email.Personal = "personal@example.test";
         using var http = new TestHttpFactory(person);
@@ -291,9 +322,8 @@ public class RosettaServiceTests
         var match = matches.Should().ContainSingle().Subject;
         match.IamId.Should().Be("1000000001");
         match.Name.Should().Be("First Last");
-        match.Email.Should().BeNull();
+        match.Email.Should().Be("campus@ucdavis.edu");
         match.Kerberos.Should().Be("person1");
-        match.IsActiveInIam.Should().BeTrue();
         db.Users.Should().BeEmpty();
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
@@ -311,17 +341,12 @@ public class RosettaServiceTests
         var person = Person("1000000001", displayName!);
         person.Name.Lived_first_name = livedName;
         person.Name.Legal_first_name = legalName;
-        person.Id.Login_id = "prefix*******suffix";
-        person.Email.Campus = "*******";
         using var http = new TestHttpFactory(person);
 
         var result = await Service(db, http).FindByIamIdAsync("1000000001");
 
         result.Should().NotBeNull();
         result!.Name.Should().Be(expectedName);
-        result.Email.Should().BeNull();
-        result.Kerberos.Should().BeNull();
-        result.IsActiveInIam.Should().BeFalse();
     }
 
     [Theory]
@@ -355,21 +380,21 @@ public class RosettaServiceTests
         var result = await Service(db, http).FindByIamIdAsync("1000000001");
 
         result.Should().NotBeNull();
-        result!.IsActiveInIam.Should().BeTrue();
+        result!.HasRequiredDetails().Should().BeTrue();
     }
 
     [Theory]
     [InlineData(" person1 ", " campus@ucdavis.edu ", null, true, "campus@ucdavis.edu")]
-    [InlineData("person1", null, "health@ucdavis.edu", true, null)]
-    [InlineData("person1", "*******", " health@ucdavis.edu ", true, null)]
+    [InlineData("person1", null, "health@ucdavis.edu", false, null)]
+    [InlineData("person1", "*******", " health@ucdavis.edu ", false, null)]
     [InlineData(null, "campus@ucdavis.edu", null, false, "campus@ucdavis.edu")]
     [InlineData(" ", null, "health@ucdavis.edu", false, null)]
     [InlineData("prefix*******suffix", "campus@ucdavis.edu", null, false, "campus@ucdavis.edu")]
     [InlineData("person1", null, null, false, null)]
     [InlineData("person1", " ", " ", false, null)]
     [InlineData("person1", "*******", "*******", false, null)]
-    public async Task Lookup_requires_kerberos_and_campus_or_health_email_and_never_maps_personal_email(
-        string? kerberos, string? campusEmail, string? healthEmail, bool expectedActive, string? expectedEmail)
+    public async Task Lookup_and_search_require_kerberos_and_campus_email_and_never_map_personal_email(
+        string? kerberos, string? campusEmail, string? healthEmail, bool expectedMatch, string? expectedEmail)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var person = Person("1000000001", " Retained Name ");
@@ -381,10 +406,17 @@ public class RosettaServiceTests
         using var http = new TestHttpFactory(person);
 
         var result = await Service(db, http).FindByIamIdAsync("1000000001");
+        var matches = await Service(db, http).SearchPeopleAsync("1000000001");
 
+        if (!expectedMatch)
+        {
+            result.Should().BeNull();
+            matches.Should().BeEmpty();
+            return;
+        }
+        matches.Should().ContainSingle();
         result.Should().NotBeNull();
-        result!.IsActiveInIam.Should().Be(expectedActive);
-        result.Email.Should().Be(expectedEmail);
+        result!.Email.Should().Be(expectedEmail);
         result.Name.Should().Be("Retained Name");
     }
 
@@ -445,7 +477,6 @@ public class RosettaServiceTests
 
         result.Should().NotBeNull();
         result!.Name.Should().Be("Current Person");
-        result.IsActiveInIam.Should().BeTrue();
         var query = QueryHelpers.ParseQuery(http.Requests.Should().ContainSingle().Subject.Query);
         query["iamid"].ToString().Should().Be("1000000001");
         query["limit"].ToString().Should().Be("2");
@@ -588,6 +619,8 @@ public class RosettaServiceTests
     {
         Iam_id = iamId,
         Displayname = name,
+        Id = new() { Login_id = "person1" },
+        Email = new() { Campus = "person1@ucdavis.edu" },
     };
 
     private sealed class TestHttpFactory : IHttpClientFactory, IDisposable
