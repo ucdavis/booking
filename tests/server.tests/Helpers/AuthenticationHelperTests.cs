@@ -882,8 +882,48 @@ public class AuthenticationHelperTests : IDisposable
         ticket.Should().NotBeNull();
         ticket!.Principal.IsInRole("User").Should().BeTrue();
         ticket.Principal.IsInRole("SampleRole").Should().Be(hasSampleRole);
+        using var nextScope = provider.CreateScope();
+        var nextRequest = new DefaultHttpContext { RequestServices = nextScope.ServiceProvider };
+        nextRequest.Request.Headers.Cookie = $"{options.Cookie.Name}={cookieValue}";
+        var authenticated = await nextRequest.AuthenticateAsync();
+        authenticated.Succeeded.Should().BeTrue();
+        authenticated.Principal!.Identity!.AuthenticationType.Should().Be(LocalAuthentication.Scheme);
+        authenticated.Principal.IsInRole("SampleRole").Should().Be(hasSampleRole);
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         (await db.Users.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Entra_identity_in_the_local_cookie_is_saved_and_has_its_roles_refreshed_on_the_next_request()
+    {
+        using var provider = CreateProvider(local: true);
+        using var scope = provider.CreateScope();
+        var services = scope.ServiceProvider;
+        var principal = CreatePrincipal();
+        ((ClaimsIdentity)principal.Identity!).AddClaim(new Claim(ClaimTypes.Role, "StaleRole"));
+        var context = new DefaultHttpContext { RequestServices = services };
+
+        await context.SignInAsync(LocalAuthentication.Scheme, principal);
+
+        var options = services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
+            .Get(LocalAuthentication.Scheme);
+        var cookie = context.Response.Headers.SetCookie
+            .Single(value => value!.StartsWith(options.Cookie.Name + "=", StringComparison.Ordinal))!
+            .Split(';')[0];
+        using var nextScope = provider.CreateScope();
+        var nextRequest = new DefaultHttpContext { RequestServices = nextScope.ServiceProvider };
+        nextRequest.Request.Headers.Cookie = cookie;
+
+        var authenticated = await nextRequest.AuthenticateAsync();
+
+        authenticated.Succeeded.Should().BeTrue();
+        authenticated.Principal!.Identity!.AuthenticationType.Should().Be("OpenIdConnect");
+        authenticated.Principal.IsInRole("User").Should().BeTrue();
+        authenticated.Principal.IsInRole("SampleRole").Should().BeTrue();
+        authenticated.Principal.IsInRole("StaleRole").Should().BeFalse();
+        authenticated.Properties!.Items[EmulationService.SessionPropertyKey].Should().NotBeNullOrWhiteSpace();
+        var db = services.GetRequiredService<AppDbContext>();
+        (await db.Users.SingleAsync()).IamId.Should().Be("sandbox-10001");
     }
 
     [Theory]

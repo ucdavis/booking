@@ -24,7 +24,7 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
         var safeReturnUrl = Url.IsLocalUrl(returnUrl) ? returnUrl! : "/";
         if (LocalAuthentication.IsEnabled(configuration, environment))
         {
-            return View("LocalLogin", safeReturnUrl);
+            return LocalLoginView(safeReturnUrl);
         }
 
         if (User.Identity?.IsAuthenticated == true)
@@ -33,6 +33,21 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
         }
 
         return Challenge(new AuthenticationProperties { RedirectUri = safeReturnUrl },
+            OpenIdConnectDefaults.AuthenticationScheme);
+    }
+
+    [HttpGet("login/entra")]
+    public IActionResult NormalLogin(string? returnUrl)
+    {
+        if (LocalAuthentication.IsEnabled(configuration, environment) && !AuthenticationHelper.IsEntraConfigured(configuration))
+        {
+            ModelState.AddModelError(string.Empty, "Normal login is not configured for this development environment.");
+            var view = LocalLoginView(returnUrl);
+            view.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            return view;
+        }
+
+        return Challenge(new AuthenticationProperties { RedirectUri = Url.IsLocalUrl(returnUrl) ? returnUrl! : "/" },
             OpenIdConnectDefaults.AuthenticationScheme);
     }
 
@@ -67,6 +82,14 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
     {
         if (LocalAuthentication.IsEnabled(configuration, environment))
         {
+            var actor = EmulationService.GetActor(HttpContext);
+            if (actor.Identity?.IsAuthenticated == true && actor.Identity.AuthenticationType != LocalAuthentication.Scheme &&
+                AuthenticationHelper.IsEntraConfigured(configuration))
+            {
+                return SignOut(new AuthenticationProperties { RedirectUri = "/login" },
+                    LocalAuthentication.Scheme, OpenIdConnectDefaults.AuthenticationScheme);
+            }
+
             return SignOut(new AuthenticationProperties { RedirectUri = "/login" }, LocalAuthentication.Scheme);
         }
 
@@ -75,15 +98,14 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
     }
 
     [HttpPost("logout/local")]
-    public async Task<IActionResult> LocalLogout()
+    public Task<IActionResult> LocalLogout()
     {
         if (!LocalAuthentication.IsEnabled(configuration, environment))
         {
-            return NotFound();
+            return Task.FromResult<IActionResult>(NotFound());
         }
 
-        await HttpContext.SignOutAsync(LocalAuthentication.Scheme);
-        return LocalRedirect("/login");
+        return Task.FromResult(Logout());
     }
 
     [HttpPost("login/local/person")]
@@ -145,8 +167,14 @@ public class AccountController(IConfiguration configuration, IHostEnvironment en
     {
         ViewData["PeopleQuery"] = query;
         ModelState.AddModelError("query", message);
-        var view = View("LocalLogin", Url.IsLocalUrl(returnUrl) ? returnUrl! : "/");
+        var view = LocalLoginView(returnUrl);
         view.StatusCode = StatusCodes.Status400BadRequest;
         return view;
+    }
+
+    private ViewResult LocalLoginView(string? returnUrl)
+    {
+        ViewData["NormalLoginAvailable"] = AuthenticationHelper.IsEntraConfigured(configuration);
+        return View("LocalLogin", Url.IsLocalUrl(returnUrl) ? returnUrl! : "/");
     }
 }
