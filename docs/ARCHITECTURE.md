@@ -135,7 +135,7 @@ Responsibilities:
 
 - `infrastructure/azure/deployment-settings.json` is the app-facing overlay for setting overrides, additions, and disabled built-ins
 - `infrastructure/azure/deployment-settings-defaults.json` is the template-owned catalog for built-in direct runtime setting metadata
-- `scripts/sync-deployment-settings.mts` resolves the overlay with defaults and rewrites generated regions in the Configure Azure workflow and local deploy script
+- `scripts/sync-deployment-settings.mts` resolves the overlay with defaults and rewrites generated regions in both Azure workflows and the local deploy script
 
 ### `infrastructure/azure/github-oidc.bicep`
 
@@ -153,16 +153,18 @@ Responsibilities:
 - Checks deployment-setting generated regions for drift
 - Deploys pushes to `main` to the `test` GitHub Environment
 - Supports manual deployments to `test` or `prod`
+- Uses the reusable deployment workflow to validate and apply generated runtime settings before each package deployment; changing GitHub Environment variables or secrets alone does not trigger a run
 
 ### `.github/workflows/deploy-azure-appservice.yml`
 
 Responsibilities:
 
 - Provides the reusable App Service deployment job
+- Validates required runtime settings from the selected GitHub Environment
 - Builds, tests, publishes, and packages the app
 - Logs in to Azure with GitHub OIDC
 - Resolves the existing App Service by environment tags or an explicit name
-- Checks SCM readiness, deploys the app package without changing configuration, and verifies application health
+- Applies generated runtime App Service settings, checks SCM readiness, deploys the app package, and verifies application health
 
 ### `.github/workflows/configure-azure.yml`
 
@@ -170,6 +172,7 @@ Responsibilities:
 
 - Provides the manual `Configure Azure` workflow for `test` and `prod`
 - Applies Bicep-managed infrastructure and generated runtime App Service settings
+- Handles initial infrastructure provisioning and infrastructure changes, and can apply runtime settings without deploying a package
 - Waits for the App Service SCM endpoint to recover after configuration
 - Uses the same environment-specific FIFO concurrency queue as package deployment, preserving up to 100 pending operations without canceling running work
 - Keeps the `test` and `prod` operation queues independent
