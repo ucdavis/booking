@@ -171,17 +171,22 @@ function mockTemplateStore(initial: ResourceTemplate[] = [makeTemplate()]) {
         JSON.parse(previous.formJson),
         JSON.parse(body.formJson)
       );
-      const savedId = formChanged ? Math.max(...templates.keys()) + 1 : id;
+      const resourceDefaultsJson =
+        body.resourceDefaultsJson === undefined
+          ? previous.resourceDefaultsJson
+          : body.resourceDefaultsJson?.trim()
+            ? body.resourceDefaultsJson
+            : null;
+      const revisionChanged =
+        formChanged || resourceDefaultsJson !== previous.resourceDefaultsJson;
+      const savedId = revisionChanged ? Math.max(...templates.keys()) + 1 : id;
       const template = makeTemplate({
         ...body,
         formJson: formChanged ? body.formJson : previous.formJson,
-        formSchemaVersion: previous.formSchemaVersion + (formChanged ? 1 : 0),
+        formSchemaVersion: previous.formSchemaVersion + (revisionChanged ? 1 : 0),
         id: savedId,
-        isActive: formChanged || body.isActive,
-        resourceDefaultsJson:
-          body.resourceDefaultsJson === undefined
-            ? previous.resourceDefaultsJson
-            : body.resourceDefaultsJson,
+        isActive: revisionChanged || body.isActive,
+        resourceDefaultsJson,
         updatedAt,
       });
       saves.push({
@@ -189,7 +194,7 @@ function mockTemplateStore(initial: ResourceTemplate[] = [makeTemplate()]) {
         id,
         token: request.headers.get('RequestVerificationToken'),
       });
-      if (formChanged) {
+      if (revisionChanged) {
         templates.set(id, { ...previous, isActive: false, updatedAt });
       }
       templates.set(savedId, template);
@@ -677,6 +682,7 @@ describe('site admin resource templates', () => {
     const original = makeTemplate({
       formJson: JSON.stringify(definition, null, 2),
       formSchemaVersion: 3,
+      resourceDefaultsJson: JSON.stringify(resourceDefaults, null, 2),
     });
     const { saves, templates } = mockTemplateStore([original]);
     const rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
@@ -716,9 +722,10 @@ describe('site admin resource templates', () => {
     expect(templates.size).toBe(1);
   });
 
-  it('edits, reloads, and clears resource defaults without changing the form version', async () => {
+  it('creates successive versions when editing and clearing resource defaults', async () => {
     mockAdminAccess();
     const original = makeTemplate({
+      formJson: JSON.stringify(definition, null, 2),
       formSchemaVersion: 3,
       resourceDefaultsJson: JSON.stringify(resourceDefaults),
     });
@@ -757,21 +764,33 @@ describe('site admin resource templates', () => {
       '40.00'
     );
     fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
-    expect(await screen.findByText('Template saved.')).toBeInTheDocument();
-    expect(templates.size).toBe(1);
-    expect(templates.get(1)).toMatchObject({
-      formJson: original.formJson,
-      formSchemaVersion: 3,
+    await waitFor(() =>
+      expect(rendered.router.state.location.pathname).toBe(
+        '/admin/resource-templates/2'
+      )
+    );
+    expect(await screen.findByText('Version 4')).toBeInTheDocument();
+    expect(templates.size).toBe(2);
+    expect(templates.get(1)).toEqual({
+      ...original,
+      isActive: false,
+      updatedAt: expect.any(String),
     });
+    const archivedOriginal = templates.get(1);
+    expect(templates.get(2)).toMatchObject({
+      formJson: original.formJson,
+      formSchemaVersion: 4,
+      isActive: true,
+    });
+    expect(saves[0]).toMatchObject({ body: { formSchemaVersion: 3 }, id: 1 });
     expect(JSON.parse(saves[0].body.resourceDefaultsJson!)).toEqual(
       changedDefaults
     );
-    expect(rendered.router.state.location.pathname).toBe(
-      '/admin/resource-templates/1'
-    );
+    const changedDefaultsJson = templates.get(2)!.resourceDefaultsJson;
+    expect(JSON.parse(changedDefaultsJson!)).toEqual(changedDefaults);
 
     cleanup?.();
-    rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
+    rendered = renderRoute({ initialPath: '/admin/resource-templates/2' });
     cleanup = rendered.cleanup;
     fireEvent.click(
       await screen.findByRole('button', { name: 'Resource defaults' })
@@ -788,7 +807,13 @@ describe('site admin resource templates', () => {
       screen.getByRole('checkbox', { name: 'Include default billing rates' })
     );
     fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
-    expect(await screen.findByText('Template saved.')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(rendered.router.state.location.pathname).toBe(
+        '/admin/resource-templates/3'
+      )
+    );
+    expect(await screen.findByText('Version 5')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
     expect(
       screen.getByRole('checkbox', { name: 'Include default opening hours' })
     ).not.toBeChecked();
@@ -796,10 +821,19 @@ describe('site admin resource templates', () => {
       screen.getByRole('checkbox', { name: 'Include default billing rates' })
     ).not.toBeChecked();
     expect(saves[1].body.resourceDefaultsJson).toBeNull();
-    expect(templates.size).toBe(1);
-    expect(templates.get(1)).toMatchObject({
+    expect(saves[1]).toMatchObject({ body: { formSchemaVersion: 4 }, id: 2 });
+    expect(templates.size).toBe(3);
+    expect(templates.get(1)).toEqual(archivedOriginal);
+    expect(templates.get(2)).toMatchObject({
       formJson: original.formJson,
-      formSchemaVersion: 3,
+      formSchemaVersion: 4,
+      isActive: false,
+      resourceDefaultsJson: changedDefaultsJson,
+    });
+    expect(templates.get(3)).toMatchObject({
+      formJson: original.formJson,
+      formSchemaVersion: 5,
+      isActive: true,
       resourceDefaultsJson: null,
     });
   });
@@ -1007,10 +1041,11 @@ describe('site admin resource templates', () => {
         timeZone: 'America/Los_Angeles',
       },
     };
-    const { saves } = mockTemplateStore([
+    const { saves, templates } = mockTemplateStore([
       makeTemplate({ resourceDefaultsJson: JSON.stringify(originalDefaults) }),
     ]);
-    ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
+    const rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
+    cleanup = rendered.cleanup;
     fireEvent.click(
       await screen.findByRole('button', { name: 'Resource defaults' })
     );
@@ -1022,7 +1057,21 @@ describe('site admin resource templates', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
 
-    expect(await screen.findByText('Template saved.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(rendered.router.state.location.pathname).toBe(
+        '/admin/resource-templates/2'
+      );
+      expect(screen.getByText('Version 2')).toBeInTheDocument();
+    });
+    expect(templates.get(1)).toMatchObject({
+      formSchemaVersion: 1,
+      isActive: false,
+      resourceDefaultsJson: JSON.stringify(originalDefaults),
+    });
+    expect(templates.get(2)).toMatchObject({
+      formSchemaVersion: 2,
+      isActive: true,
+    });
     expect(JSON.parse(saves[0].body.resourceDefaultsJson!)).toEqual({
       ...originalDefaults,
       billingRates: [{ ...originalDefaults.billingRates[0], amount: '30.00' }],

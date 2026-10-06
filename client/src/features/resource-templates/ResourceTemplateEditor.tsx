@@ -148,7 +148,7 @@ export function ResourceTemplateEditor({
             </div>
           ) : (
             <p className="max-w-2xl text-sm text-base-content/65">
-              Saving form changes creates a new active version and archives this one. Previous forms keep their original ID and contents. Changing the name, description, or resource defaults, or archiving, keeps the same version.
+              Saving changes to the form or resource defaults creates a new active version and archives this one. Previous templates keep their original ID and contents. Changing only the name or description, or archiving, keeps the same version.
             </p>
           )}
         </div>
@@ -228,7 +228,7 @@ export function ResourceTemplateEditor({
                 </form.Field>
               </fieldset>
               {!isReadOnly && (
-                <p className="text-sm text-base-content/65">Clear Active template and save to archive it. Form changes always create an active version; save that version before archiving.</p>
+                <p className="text-sm text-base-content/65">Clear Active template and save to archive it. Changes to the form or resource defaults always create an active version; save that version before archiving.</p>
               )}
               <div aria-label="Editor view" className="flex flex-wrap gap-2" role="group">
                 {!isReadOnly && <button aria-pressed={activeView === 'build'} className={`btn btn-sm ${activeView === 'build' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setEditorView('build')} type="button">Build form</button>}
