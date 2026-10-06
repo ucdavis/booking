@@ -41,6 +41,11 @@ jobs:
       OTEL_EXPORTER_OTLP_PROTOCOL: ${{ vars.OTEL_EXPORTER_OTLP_PROTOCOL || 'http/protobuf' }}
       OTEL_RESOURCE_ATTRIBUTES: ${{ vars.OTEL_RESOURCE_ATTRIBUTES }}
       OTEL_SERVICE_NAME: ${{ vars.OTEL_SERVICE_NAME }}
+      ROSETTACLIENT__BASEURL: ${{ vars.ROSETTACLIENT__BASEURL }}
+      ROSETTACLIENT__CLIENTID: ${{ vars.ROSETTACLIENT__CLIENTID }}
+      ROSETTACLIENT__CLIENTSECRET: ${{ secrets.ROSETTACLIENT__CLIENTSECRET }}
+      ROSETTACLIENT__SCOPE: ${{ vars.ROSETTACLIENT__SCOPE }}
+      ROSETTACLIENT__TOKENURL: ${{ vars.ROSETTACLIENT__TOKENURL }}
       SMTP_BCC_EMAIL: ${{ vars.SMTP_BCC_EMAIL }}
       SMTP_FROM_EMAIL: ${{ vars.SMTP_FROM_EMAIL }}
       SMTP_FROM_NAME: ${{ vars.SMTP_FROM_NAME }}
@@ -96,7 +101,25 @@ jobs:
           fi
 
           # <deployment-settings:workflow-required-checks>
-          # No generated required deployment setting checks.
+          if [[ -z "$ROSETTACLIENT__BASEURL" ]]; then
+            echo "ROSETTACLIENT__BASEURL must be configured as a GitHub Environment variable."
+            exit 1
+          fi
+
+          if [[ -z "$ROSETTACLIENT__CLIENTID" ]]; then
+            echo "ROSETTACLIENT__CLIENTID must be configured as a GitHub Environment variable."
+            exit 1
+          fi
+
+          if [[ -z "$ROSETTACLIENT__CLIENTSECRET" ]]; then
+            echo "ROSETTACLIENT__CLIENTSECRET must be configured as a GitHub Environment secret."
+            exit 1
+          fi
+
+          if [[ -z "$ROSETTACLIENT__TOKENURL" ]]; then
+            echo "ROSETTACLIENT__TOKENURL must be configured as a GitHub Environment variable."
+            exit 1
+          fi
           # </deployment-settings:workflow-required-checks>
 
           if [[ -n "$WEB_PLAN_NAME" && -z "$WEB_PLAN_RESOURCE_GROUP" ]] ||
@@ -222,6 +245,11 @@ jobs:
           add_setting "OTEL_EXPORTER_OTLP_PROTOCOL" "$OTEL_EXPORTER_OTLP_PROTOCOL"
           add_setting "OTEL_RESOURCE_ATTRIBUTES" "$OTEL_RESOURCE_ATTRIBUTES"
           add_setting "OTEL_SERVICE_NAME" "$OTEL_SERVICE_NAME"
+          add_setting "RosettaClient__BaseUrl" "$ROSETTACLIENT__BASEURL"
+          add_setting "RosettaClient__ClientId" "$ROSETTACLIENT__CLIENTID"
+          add_setting "RosettaClient__ClientSecret" "$ROSETTACLIENT__CLIENTSECRET"
+          add_setting "RosettaClient__Scope" "$ROSETTACLIENT__SCOPE"
+          add_setting "RosettaClient__TokenUrl" "$ROSETTACLIENT__TOKENURL"
           add_setting "Smtp__BccEmail" "$SMTP_BCC_EMAIL"
           add_setting "Smtp__FromEmail" "$SMTP_FROM_EMAIL"
           add_setting "Smtp__FromName" "$SMTP_FROM_NAME"

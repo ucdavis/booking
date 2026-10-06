@@ -1,13 +1,19 @@
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useBlocker } from '@tanstack/react-router';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { FormBuilder } from './FormBuilder.tsx';
 import { FormPreview } from './FormPreview.tsx';
 import { validateFormDefinition } from './formDefinition.ts';
 import type { FormDefinition } from './models/FormDefinition.ts';
 import type { ResourceTemplate } from './models/ResourceTemplate.ts';
 import type { SaveResourceTemplateRequest } from './models/SaveResourceTemplateRequest.ts';
+import { ResourceDefaultsEditor } from '@/features/resource-defaults/ResourceDefaultsEditor.tsx';
+import {
+  parseResourceDefaultsJson,
+  serializeResourceDefaults,
+  validateResourceDefaults,
+} from '@/features/resource-defaults/resourceDefaults.ts';
 import {
   createResourceTemplate,
   resourceTemplateErrorMessage,
@@ -28,8 +34,13 @@ export function ResourceTemplateEditor({
   const queryClient = useQueryClient();
   const [baseline, setBaseline] = useState({ definition, template });
   const currentTemplate = baseline.template;
+  const defaultsSource = useMemo(
+    () => parseResourceDefaultsJson(currentTemplate?.resourceDefaultsJson),
+    [currentTemplate?.resourceDefaultsJson]
+  );
   const isReadOnly = currentTemplate?.isActive === false;
-  const [showPreview, setShowPreview] = useState(false);
+  const [editorView, setEditorView] = useState<'build' | 'preview' | 'defaults'>('build');
+  const activeView = isReadOnly && editorView === 'build' ? 'preview' : editorView;
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const saveFlowRef = useRef(false);
@@ -45,6 +56,7 @@ export function ResourceTemplateEditor({
       description: currentTemplate?.description ?? '',
       isActive: currentTemplate?.isActive ?? true,
       name: currentTemplate?.name ?? '',
+      resourceDefaults: defaultsSource.defaults,
     },
     onSubmit: async ({ value }) => {
       if (isReadOnly || saveFlowRef.current) {
@@ -60,6 +72,9 @@ export function ResourceTemplateEditor({
           formSchemaVersion: currentTemplate?.formSchemaVersion ?? 1,
           isActive: value.isActive,
           name: value.name.trim(),
+          ...(defaultsSource.unavailableReason ? {} : {
+            resourceDefaultsJson: serializeResourceDefaults(value.resourceDefaults, currentTemplate?.resourceDefaultsJson),
+          }),
           updatedAt: currentTemplate?.updatedAt,
         });
         setBaseline({ definition: value.definition, template: result });
@@ -68,6 +83,7 @@ export function ResourceTemplateEditor({
           description: result.description ?? '',
           isActive: result.isActive,
           name: result.name,
+          resourceDefaults: parseResourceDefaultsJson(result.resourceDefaultsJson).defaults,
         });
         queryClient.setQueryData(resourceTemplateQueryOptions(result.id).queryKey, result);
         await queryClient.invalidateQueries({ queryKey: resourceTemplatesQueryKey });
@@ -87,6 +103,10 @@ export function ResourceTemplateEditor({
         }
         if (value.description.trim().length > 2000) {
           return 'Enter a description of 2,000 characters or fewer.';
+        }
+        const defaultsErrors = validateResourceDefaults(value.resourceDefaults);
+        if (defaultsErrors.length) {
+          return defaultsErrors.join(' ');
         }
         if (value.definition.fields.length === 0) {
           return 'Add at least one form field before saving the template.';
@@ -128,7 +148,7 @@ export function ResourceTemplateEditor({
             </div>
           ) : (
             <p className="max-w-2xl text-sm text-base-content/65">
-              Saving form changes creates a new active version and archives this one. Previous forms keep their original ID and contents. Changing the name or description, or archiving, keeps the same version.
+              Saving changes to the form or resource defaults creates a new active version and archives this one. Previous templates keep their original ID and contents. Changing only the name or description, or archiving, keeps the same version.
             </p>
           )}
         </div>
@@ -154,6 +174,9 @@ export function ResourceTemplateEditor({
         onSubmit={(event) => {
           event.preventDefault();
           if (!isReadOnly && !saveFlowRef.current && !form.state.isSubmitting) {
+            if (validateResourceDefaults(form.state.values.resourceDefaults).length) {
+              setEditorView('defaults');
+            }
             void form.handleSubmit();
           }
         }}
@@ -205,18 +228,31 @@ export function ResourceTemplateEditor({
                 </form.Field>
               </fieldset>
               {!isReadOnly && (
-                <>
-                  <p className="text-sm text-base-content/65">Clear Active template and save to archive it. Form changes always create an active version; save that version before archiving.</p>
-                  <div aria-label="Editor view" className="flex gap-2">
-                    <button aria-pressed={!showPreview} className={`btn btn-sm ${!showPreview ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setShowPreview(false)} type="button">Build form</button>
-                    <button aria-pressed={showPreview} className={`btn btn-sm ${showPreview ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setShowPreview(true)} type="button">Preview form</button>
-                  </div>
-                  {!showPreview && (
-                    <form.Field name="definition">
-                      {(field) => <FormBuilder disabled={isSaving || isSubmitting} onChange={(value) => { field.handleChange(value); setSaved(false); saveMutation.reset(); }} value={field.state.value} />}
-                    </form.Field>
+                <p className="text-sm text-base-content/65">Clear Active template and save to archive it. Changes to the form or resource defaults always create an active version; save that version before archiving.</p>
+              )}
+              <div aria-label="Editor view" className="flex flex-wrap gap-2" role="group">
+                {!isReadOnly && <button aria-pressed={activeView === 'build'} className={`btn btn-sm ${activeView === 'build' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setEditorView('build')} type="button">Build form</button>}
+                <button aria-pressed={activeView === 'preview'} className={`btn btn-sm ${activeView === 'preview' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setEditorView('preview')} type="button">Preview form</button>
+                <button aria-pressed={activeView === 'defaults'} className={`btn btn-sm ${activeView === 'defaults' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setEditorView('defaults')} type="button">Resource defaults</button>
+              </div>
+              {activeView === 'build' && (
+                <form.Field name="definition">
+                  {(field) => <FormBuilder disabled={isSaving || isSubmitting} onChange={(value) => { field.handleChange(value); setSaved(false); saveMutation.reset(); }} value={field.state.value} />}
+                </form.Field>
+              )}
+              {activeView === 'defaults' && (
+                <form.Field name="resourceDefaults" validators={{ onChange: ({ value }) => validateResourceDefaults(value).join(' ') || undefined }}>
+                  {(field) => (
+                    <ResourceDefaultsEditor
+                      disabled={isSaving || isSubmitting}
+                      errors={field.state.meta.errors.map(String)}
+                      onChange={(value) => { field.handleChange(value); setSaved(false); saveMutation.reset(); }}
+                      readOnly={isReadOnly}
+                      unavailableReason={defaultsSource.unavailableReason}
+                      value={field.state.value}
+                    />
                   )}
-                </>
+                </form.Field>
               )}
             </fieldset>
           )}
@@ -232,7 +268,7 @@ export function ResourceTemplateEditor({
           )}
         </form.Subscribe>
       </form>
-      {(showPreview || isReadOnly) && (
+      {activeView === 'preview' && (
         <form.Subscribe selector={(state) => state.values.definition}>
           {(currentDefinition) => <div className="mt-6"><FormPreview definition={currentDefinition} /></div>}
         </form.Subscribe>

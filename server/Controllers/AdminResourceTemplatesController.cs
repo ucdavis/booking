@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +31,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
                 Description = template.Description,
                 FormSchemaVersion = template.FormSchemaVersion,
                 FormJson = template.FormJson,
+                ResourceDefaultsJson = template.ResourceDefaultsJson,
                 IsActive = template.IsActive,
                 CreatedAt = template.CreatedAt,
                 UpdatedAt = template.UpdatedAt,
@@ -56,7 +58,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
     public async Task<ActionResult<ResourceTemplateResponse>> CreateTemplate(
         [FromBody] SaveResourceTemplateRequest request, CancellationToken cancellationToken = default)
     {
-        var error = ValidateRequest(request, out _);
+        var error = ValidateRequest(request, out _, out var resourceDefaultsJson);
         if (error != null)
         {
             return BadRequest(error);
@@ -79,6 +81,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
             FormSchemaVersion = 1,
             FormJson = request.FormJson,
+            ResourceDefaultsJson = resourceDefaultsJson,
             IsActive = request.IsActive,
             CreatedAt = now,
             UpdatedAt = now,
@@ -94,7 +97,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
     public async Task<ActionResult<ResourceTemplateResponse>> UpdateTemplate(
         int id, [FromBody] SaveResourceTemplateRequest request, CancellationToken cancellationToken = default)
     {
-        var error = ValidateRequest(request, out var requestedForm);
+        var error = ValidateRequest(request, out var requestedForm, out var requestedDefaultsJson);
         if (error != null)
         {
             return BadRequest(error);
@@ -129,8 +132,14 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             return BadRequest(error);
         }
 
+        if (!request.HasResourceDefaultsJson)
+        {
+            requestedDefaultsJson = template.ResourceDefaultsJson;
+        }
         var formChanged = !FormDefinitionValidator.AreEquivalent(savedForm!, requestedForm!);
-        if (formChanged && template.FormSchemaVersion == int.MaxValue)
+        var defaultsChanged = !string.Equals(template.ResourceDefaultsJson, requestedDefaultsJson, StringComparison.Ordinal);
+        var revisionChanged = formChanged || defaultsChanged;
+        if (revisionChanged && template.FormSchemaVersion == int.MaxValue)
         {
             return Conflict("This template has reached the maximum supported version and cannot create another revision.");
         }
@@ -143,10 +152,11 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             }
             now = template.UpdatedAt.AddTicks(1);
         }
-        var name = formChanged ? template.Name : request.Name.Trim();
+        var name = revisionChanged ? template.Name : request.Name.Trim();
         var requestedDescription = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
-        var description = formChanged ? template.Description : requestedDescription;
-        var isActive = !formChanged && request.IsActive;
+        var description = revisionChanged ? template.Description : requestedDescription;
+        var resourceDefaultsJson = template.ResourceDefaultsJson;
+        var isActive = !revisionChanged && request.IsActive;
         var isRelational = dbContext.Database.IsRelational();
         await using var transaction = isRelational
             ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
@@ -161,6 +171,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             var updated = await original.ExecuteUpdateAsync(setters => setters
                 .SetProperty(current => current.Name, name)
                 .SetProperty(current => current.Description, description)
+                .SetProperty(current => current.ResourceDefaultsJson, resourceDefaultsJson)
                 .SetProperty(current => current.IsActive, isActive)
                 .SetProperty(current => current.UpdatedAt, now)
                 .SetProperty(current => current.UpdatedByUserId, userId.Value), cancellationToken);
@@ -178,13 +189,14 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             }
             tracked.Name = name;
             tracked.Description = description;
+            tracked.ResourceDefaultsJson = resourceDefaultsJson;
             tracked.IsActive = isActive;
             tracked.UpdatedAt = now;
             tracked.UpdatedByUserId = userId.Value;
         }
 
         ResourceTemplate result;
-        if (formChanged)
+        if (revisionChanged)
         {
             result = new ResourceTemplate
             {
@@ -192,8 +204,8 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
                 Name = request.Name.Trim(),
                 Description = requestedDescription,
                 FormSchemaVersion = template.FormSchemaVersion + 1,
-                FormJson = request.FormJson,
-                ResourceDefaultsJson = template.ResourceDefaultsJson,
+                FormJson = formChanged ? request.FormJson : template.FormJson,
+                ResourceDefaultsJson = requestedDefaultsJson,
                 IsActive = true,
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -203,9 +215,10 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
         }
         else
         {
-            // Preserve the exact original JSON when only presentation or metadata changed.
+            // Preserve the exact original form JSON when only presentation or metadata changed.
             template.Name = name;
             template.Description = description;
+            template.ResourceDefaultsJson = resourceDefaultsJson;
             template.IsActive = isActive;
             template.UpdatedAt = now;
             template.UpdatedByUserId = userId.Value;
@@ -218,7 +231,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             await transaction.CommitAsync(cancellationToken);
         }
 
-        if (formChanged)
+        if (revisionChanged)
         {
             return CreatedAtAction(nameof(GetTemplate), new { id = result.Id }, ToResponse(result));
         }
@@ -282,9 +295,11 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    private static string? ValidateRequest(SaveResourceTemplateRequest? request, out FormDefinition? definition)
+    private static string? ValidateRequest(SaveResourceTemplateRequest? request, out FormDefinition? definition,
+        out string? resourceDefaultsJson)
     {
         definition = null;
+        resourceDefaultsJson = null;
         if (request == null || string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 200)
         {
             return "Enter a template name of no more than 200 characters.";
@@ -292,6 +307,26 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
         if (request.Description?.Length > 2000)
         {
             return "Enter a template description of no more than 2,000 characters.";
+        }
+        if (request.ResourceDefaultsJson?.Length > SaveResourceTemplateRequest.MaxResourceDefaultsJsonLength)
+        {
+            return "Resource defaults cannot exceed 1,048,576 characters.";
+        }
+        if (!string.IsNullOrWhiteSpace(request.ResourceDefaultsJson))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(request.ResourceDefaultsJson);
+                if (document.RootElement.ValueKind != JsonValueKind.Object && document.RootElement.ValueKind != JsonValueKind.Array)
+                {
+                    return "Resource defaults must be a valid JSON object or array.";
+                }
+            }
+            catch (JsonException)
+            {
+                return "Resource defaults must be a valid JSON object or array.";
+            }
+            resourceDefaultsJson = request.ResourceDefaultsJson;
         }
 
         return ValidateFormForSave(request.FormSchemaVersion, request.FormJson, out definition);
@@ -316,6 +351,7 @@ public class AdminResourceTemplatesController(AppDbContext dbContext) : Controll
         Description = template.Description,
         FormSchemaVersion = template.FormSchemaVersion,
         FormJson = template.FormJson,
+        ResourceDefaultsJson = template.ResourceDefaultsJson,
         IsActive = template.IsActive,
         CreatedAt = template.CreatedAt,
         UpdatedAt = template.UpdatedAt,

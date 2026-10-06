@@ -39,9 +39,11 @@ USAGE
     '  NOTIFICATION_BASE_URL, NOTIFICATION_DEFAULT_APP_NAME' \
     '  NOTIFICATION_DEFAULT_BUTTON_TEXT, OTEL_EXPORTER_OTLP_ENDPOINT' \
     '  OTEL_EXPORTER_OTLP_HEADERS, OTEL_EXPORTER_OTLP_PROTOCOL' \
-    '  OTEL_RESOURCE_ATTRIBUTES, OTEL_SERVICE_NAME, SMTP_BCC_EMAIL, SMTP_FROM_EMAIL' \
-    '  SMTP_FROM_NAME, SMTP_HOST, SMTP_PASSWORD, SMTP_PORT, SMTP_REPLY_TO_EMAIL' \
-    '  SMTP_TIMEOUT, SMTP_USE_SSL, SMTP_USERNAME'
+    '  OTEL_RESOURCE_ATTRIBUTES, OTEL_SERVICE_NAME, ROSETTACLIENT__BASEURL' \
+    '  ROSETTACLIENT__CLIENTID, ROSETTACLIENT__CLIENTSECRET, ROSETTACLIENT__SCOPE' \
+    '  ROSETTACLIENT__TOKENURL, SMTP_BCC_EMAIL, SMTP_FROM_EMAIL, SMTP_FROM_NAME' \
+    '  SMTP_HOST, SMTP_PASSWORD, SMTP_PORT, SMTP_REPLY_TO_EMAIL, SMTP_TIMEOUT' \
+    '  SMTP_USE_SSL, SMTP_USERNAME'
   # </deployment-settings:deploy-sh-help>
 }
 
@@ -128,7 +130,10 @@ fi
 require_command az
 
 # <deployment-settings:deploy-sh-required-checks>
-# No generated required deployment setting checks.
+[[ -n "${ROSETTACLIENT__BASEURL:-}" ]] || die "ROSETTACLIENT__BASEURL is required."
+[[ -n "${ROSETTACLIENT__CLIENTID:-}" ]] || die "ROSETTACLIENT__CLIENTID is required."
+[[ -n "${ROSETTACLIENT__CLIENTSECRET:-}" ]] || die "ROSETTACLIENT__CLIENTSECRET is required."
+[[ -n "${ROSETTACLIENT__TOKENURL:-}" ]] || die "ROSETTACLIENT__TOKENURL is required."
 # </deployment-settings:deploy-sh-required-checks>
 
 if is_true "$DEPLOY_INFRA"; then
@@ -277,6 +282,11 @@ add_setting "OTEL_EXPORTER_OTLP_HEADERS" "${OTEL_EXPORTER_OTLP_HEADERS:-}"
 add_setting "OTEL_EXPORTER_OTLP_PROTOCOL" "${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}"
 add_setting "OTEL_RESOURCE_ATTRIBUTES" "${OTEL_RESOURCE_ATTRIBUTES:-}"
 add_setting "OTEL_SERVICE_NAME" "${OTEL_SERVICE_NAME:-}"
+add_setting "RosettaClient__BaseUrl" "${ROSETTACLIENT__BASEURL:-}"
+add_setting "RosettaClient__ClientId" "${ROSETTACLIENT__CLIENTID:-}"
+add_setting "RosettaClient__ClientSecret" "${ROSETTACLIENT__CLIENTSECRET:-}"
+add_setting "RosettaClient__Scope" "${ROSETTACLIENT__SCOPE:-}"
+add_setting "RosettaClient__TokenUrl" "${ROSETTACLIENT__TOKENURL:-}"
 add_setting "Smtp__BccEmail" "${SMTP_BCC_EMAIL:-}"
 add_setting "Smtp__FromEmail" "${SMTP_FROM_EMAIL:-}"
 add_setting "Smtp__FromName" "${SMTP_FROM_NAME:-}"
