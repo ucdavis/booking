@@ -181,7 +181,7 @@ Add a runtime App Service setting:
 }
 ```
 
-Secrets use `"classification": "secret"` and are read from the selected GitHub Environment by both the manual Configure Azure workflow and the reusable App Service deployment workflow. Each package deployment validates required runtime settings and applies the generated settings before deploying the app.
+Secrets use `"classification": "secret"`. Both CI/CD deployment calls use `secrets: inherit` so the reusable App Service deployment workflow can access repository and organization secrets available to the caller. Secrets in the selected GitHub Environment take precedence over inherited secrets with the same name. The manual Configure Azure workflow also supports repository, organization, and environment secrets. Each package deployment validates required runtime settings and applies the generated settings before deploying the app.
 
 `DB_CONNECTION`, App Insights settings, `ASPNETCORE_ENVIRONMENT`, and `WEBSITE_RUN_FROM_PACKAGE` remain hand-authored or platform-derived settings rather than overlay entries. `NOTIFICATION_BASE_URL` is a direct runtime setting; set it explicitly when notification links should use a stable hostname or custom domain.
 
