@@ -14,6 +14,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Server.Controllers;
 using Server.Core.Domain;
 using Server.Helpers;
@@ -75,6 +76,25 @@ public class LocalAuthenticationTests
     }
 
     [Fact]
+    public async Task Configured_Entra_uses_the_local_cookie_without_changing_the_local_defaults()
+    {
+        var configuration = Configuration("true", "11111111-1111-1111-1111-111111111111");
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IConfiguration>(configuration);
+        services.AddAuthenticationServices(configuration, new TestEnvironment("Development"));
+        await using var provider = services.BuildServiceProvider();
+        var schemes = provider.GetRequiredService<IAuthenticationSchemeProvider>();
+
+        (await schemes.GetDefaultAuthenticateSchemeAsync())!.Name.Should().Be(LocalAuthentication.Scheme);
+        (await schemes.GetDefaultChallengeSchemeAsync())!.Name.Should().Be(LocalAuthentication.Scheme);
+        (await schemes.GetSchemeAsync(OpenIdConnectDefaults.AuthenticationScheme)).Should().NotBeNull();
+        (await schemes.GetSchemeAsync(CookieAuthenticationDefaults.AuthenticationScheme)).Should().BeNull();
+        provider.GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>()
+            .Get(OpenIdConnectDefaults.AuthenticationScheme).SignInScheme.Should().Be(LocalAuthentication.Scheme);
+    }
+
+    [Fact]
     public void Personas_exercise_the_existing_role_boundary()
     {
         var sample = LocalAuthentication.CreatePrincipal("sample")!;
@@ -118,6 +138,55 @@ public class LocalAuthenticationTests
 
         challenge.AuthenticationSchemes.Should().ContainSingle().Which.Should().Be(OpenIdConnectDefaults.AuthenticationScheme);
         challenge.Properties!.RedirectUri.Should().Be("/fetch?example=1");
+    }
+
+    [Theory]
+    [InlineData(null, "/")]
+    [InlineData("", "/")]
+    [InlineData("https://example.test/phishing", "/")]
+    [InlineData("//example.test/phishing", "/")]
+    [InlineData("/\\example.test/phishing", "/")]
+    [InlineData("/teams/demo?view=all", "/teams/demo?view=all")]
+    public void Normal_login_bypasses_the_local_chooser_and_only_accepts_local_return_urls(
+        string? returnUrl, string expectedUrl)
+    {
+        var controller = Controller("true", clientId: "11111111-1111-1111-1111-111111111111");
+        controller.HttpContext.User = LocalAuthentication.CreatePrincipal("basic")!;
+
+        var challenge = controller.NormalLogin(returnUrl).Should().BeOfType<ChallengeResult>().Subject;
+
+        challenge.AuthenticationSchemes.Should().Equal(OpenIdConnectDefaults.AuthenticationScheme);
+        challenge.Properties!.RedirectUri.Should().Be(expectedUrl);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("<client-guid>")]
+    [InlineData(" <CLIENT-GUID> ")]
+    public void Unconfigured_normal_login_keeps_the_local_chooser_available(string clientId)
+    {
+        var controller = Controller("true", clientId: clientId);
+
+        var view = controller.NormalLogin("https://example.test/phishing").Should().BeOfType<ViewResult>().Subject;
+
+        view.ViewName.Should().Be("LocalLogin");
+        view.Model.Should().Be("/");
+        view.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
+        view.ViewData["NormalLoginAvailable"].Should().Be(false);
+        controller.ModelState.IsValid.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("<client-guid>", false)]
+    [InlineData("11111111-1111-1111-1111-111111111111", true)]
+    public void Local_chooser_reports_whether_normal_login_is_available(string clientId, bool available)
+    {
+        var controller = Controller("true", clientId: clientId);
+
+        var view = controller.Login("/teams/demo").Should().BeOfType<ViewResult>().Subject;
+
+        view.ViewData["NormalLoginAvailable"].Should().Be(available);
     }
 
     [Fact]
@@ -420,13 +489,15 @@ public class LocalAuthenticationTests
         view.Model.Should().Be(returnUrl);
         (view.StatusCode ?? controller.Response.StatusCode).Should().Be(StatusCodes.Status400BadRequest);
         controller.ModelState["query"]!.Errors.Should().NotBeEmpty();
+        view.ViewData["NormalLoginAvailable"].Should().Be(false);
         authentication.SignInCount.Should().Be(0);
         controller.Response.Headers.SetCookie.Should().BeEmpty();
     }
 
-    private static AccountController Controller(string? local = null, IServiceProvider? services = null)
+    private static AccountController Controller(string? local = null, IServiceProvider? services = null,
+        string clientId = "<client-guid>")
     {
-        var controller = new AccountController(Configuration(local), new TestEnvironment("Development"))
+        var controller = new AccountController(Configuration(local, clientId), new TestEnvironment("Development"))
         {
             ControllerContext = new ControllerContext
             {
@@ -448,6 +519,8 @@ public class LocalAuthenticationTests
         {
             ["Auth:UseLocal"] = local,
             ["Auth:ClientId"] = clientId,
+            ["Auth:Instance"] = "https://login.microsoftonline.com/",
+            ["Auth:TenantId"] = "11111111-1111-1111-1111-111111111111",
         }).Build();
 
     private sealed class EmptyTempDataProvider : ITempDataProvider

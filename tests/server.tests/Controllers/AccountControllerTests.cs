@@ -18,6 +18,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Server.Controllers;
 using Server.Helpers;
+using Server.Services;
 
 namespace Server.Tests.Controllers;
 
@@ -55,7 +56,69 @@ public class AccountControllerTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Auth:UseLocal"] = "true" })
             .Build();
-        var controller = new AccountController(configuration, new TestEnvironment());
+        var controller = new AccountController(configuration, new TestEnvironment())
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
+
+        var result = controller.Logout().Should().BeOfType<SignOutResult>().Subject;
+
+        result.AuthenticationSchemes.Should().Equal(LocalAuthentication.Scheme);
+        result.Properties!.RedirectUri.Should().Be("/login");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Entra_logout_in_local_mode_uses_the_real_actor_and_signs_out_of_the_identity_provider(bool emulating)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Auth:UseLocal"] = "true",
+                ["Auth:ClientId"] = "11111111-1111-1111-1111-111111111111",
+            }).Build();
+        var actor = new ClaimsPrincipal(new ClaimsIdentity([], "OpenIdConnect"));
+        var httpContext = new DefaultHttpContext
+        {
+            User = emulating ? LocalAuthentication.CreatePrincipal("basic")! : actor,
+        };
+        if (emulating)
+        {
+            httpContext.Items[EmulationService.ActorItemKey] = actor;
+        }
+        var controller = new AccountController(configuration, new TestEnvironment())
+        {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+        };
+
+        var result = controller.Logout().Should().BeOfType<SignOutResult>().Subject;
+        var localResult = (await controller.LocalLogout()).Should().BeOfType<SignOutResult>().Subject;
+
+        result.AuthenticationSchemes.Should().Equal(LocalAuthentication.Scheme, OpenIdConnectDefaults.AuthenticationScheme);
+        result.Properties!.RedirectUri.Should().Be("/login");
+        localResult.AuthenticationSchemes.Should().Equal(result.AuthenticationSchemes);
+        localResult.Properties!.RedirectUri.Should().Be("/login");
+    }
+
+    [Fact]
+    public void Local_actor_logout_does_not_sign_out_of_Entra_while_emulating()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Auth:UseLocal"] = "true",
+                ["Auth:ClientId"] = "11111111-1111-1111-1111-111111111111",
+            }).Build();
+        var httpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity([], "Emulation")),
+        };
+        httpContext.Items[EmulationService.ActorItemKey] = LocalAuthentication.CreatePrincipal("basic")!;
+        var controller = new AccountController(configuration, new TestEnvironment())
+        {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+        };
 
         var result = controller.Logout().Should().BeOfType<SignOutResult>().Subject;
 
