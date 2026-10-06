@@ -7,7 +7,7 @@ import { SelectField } from './selectField.tsx';
 export const { fieldContext, formContext, useFieldContext, useFormContext } =
   createFormHookContexts();
 
-const { useAppForm } = createFormHook({
+const { useAppForm, withFieldGroup } = createFormHook({
   fieldComponents: {
     // text, select, checkbox, etc.
     SelectField,
@@ -21,4 +21,4 @@ const { useAppForm } = createFormHook({
   formContext,
 });
 
-export { useAppForm };
+export { useAppForm, withFieldGroup };

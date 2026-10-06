@@ -1,4 +1,3 @@
-import { useForm } from '@tanstack/react-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useBlocker } from '@tanstack/react-router';
 import { useMemo, useRef, useState } from 'react';
@@ -11,9 +10,13 @@ import type { SaveResourceTemplateRequest } from './models/SaveResourceTemplateR
 import { ResourceDefaultsEditor } from '@/features/resource-defaults/ResourceDefaultsEditor.tsx';
 import {
   parseResourceDefaultsJson,
+  resourceDefaultsFormValues,
+  resourceDefaultsFromForm,
   serializeResourceDefaults,
   validateResourceDefaults,
+  validateResourceDefaultsFields,
 } from '@/features/resource-defaults/resourceDefaults.ts';
+import { useAppForm } from '@/shared/forms/formContext.tsx';
 import {
   createResourceTemplate,
   resourceTemplateErrorMessage,
@@ -50,13 +53,45 @@ export function ResourceTemplateEditor({
         ? updateResourceTemplate(currentTemplate.id, request)
         : createResourceTemplate(request),
   });
-  const form = useForm({
-    defaultValues: {
-      definition: baseline.definition,
-      description: currentTemplate?.description ?? '',
-      isActive: currentTemplate?.isActive ?? true,
-      name: currentTemplate?.name ?? '',
-      resourceDefaults: defaultsSource.defaults,
+  const defaultValues = {
+    definition: baseline.definition,
+    description: currentTemplate?.description ?? '',
+    isActive: currentTemplate?.isActive ?? true,
+    name: currentTemplate?.name ?? '',
+    resourceDefaults: resourceDefaultsFormValues(defaultsSource.defaults),
+  };
+  const validate = ({ value }: { value: typeof defaultValues }) => {
+    const fields: Record<string, string> = {};
+    if (!value.name.trim() || value.name.trim().length > 200) {
+      fields.name = 'Enter a template name of 200 characters or fewer.';
+    }
+    if (value.description.trim().length > 2000) {
+      fields.description = 'Enter a description of 2,000 characters or fewer.';
+    }
+    const defaultsErrors = validateResourceDefaultsFields(
+      resourceDefaultsFromForm(value.resourceDefaults)
+    );
+    for (const [path, message] of Object.entries(defaultsErrors)) {
+      fields[path ? `resourceDefaults.${path}` : 'resourceDefaults'] = message;
+    }
+    const definitionErrors =
+      value.definition.fields.length === 0
+        ? ['Add at least one form field before saving the template.']
+        : validateFormDefinition(value.definition);
+    if (definitionErrors.length) {
+      fields.definition = definitionErrors.join(' ');
+    }
+    return Object.keys(fields).length
+      ? { fields, form: [...new Set(Object.values(fields))].join(' ') }
+      : undefined;
+  };
+  const form = useAppForm({
+    defaultValues,
+    listeners: {
+      onChange: () => {
+        setSaved(false);
+        saveMutation.reset();
+      },
     },
     onSubmit: async ({ value }) => {
       if (isReadOnly || saveFlowRef.current) {
@@ -73,7 +108,10 @@ export function ResourceTemplateEditor({
           isActive: value.isActive,
           name: value.name.trim(),
           ...(defaultsSource.unavailableReason ? {} : {
-            resourceDefaultsJson: serializeResourceDefaults(value.resourceDefaults, currentTemplate?.resourceDefaultsJson),
+            resourceDefaultsJson: serializeResourceDefaults(
+              resourceDefaultsFromForm(value.resourceDefaults),
+              currentTemplate?.resourceDefaultsJson
+            ),
           }),
           updatedAt: currentTemplate?.updatedAt,
         });
@@ -83,7 +121,9 @@ export function ResourceTemplateEditor({
           description: result.description ?? '',
           isActive: result.isActive,
           name: result.name,
-          resourceDefaults: parseResourceDefaultsJson(result.resourceDefaultsJson).defaults,
+          resourceDefaults: resourceDefaultsFormValues(
+            parseResourceDefaultsJson(result.resourceDefaultsJson).defaults
+          ),
         });
         queryClient.setQueryData(resourceTemplateQueryOptions(result.id).queryKey, result);
         await queryClient.invalidateQueries({ queryKey: resourceTemplatesQueryKey });
@@ -96,24 +136,13 @@ export function ResourceTemplateEditor({
         setIsSaving(false);
       }
     },
+    onSubmitInvalid: ({ formApi }) => {
+      // Refresh errors for array fields mounted after the last change validation.
+      void formApi.validate('change');
+    },
     validators: {
-      onSubmit: ({ value }) => {
-        if (!value.name.trim() || value.name.trim().length > 200) {
-          return 'Enter a template name of 200 characters or fewer.';
-        }
-        if (value.description.trim().length > 2000) {
-          return 'Enter a description of 2,000 characters or fewer.';
-        }
-        const defaultsErrors = validateResourceDefaults(value.resourceDefaults);
-        if (defaultsErrors.length) {
-          return defaultsErrors.join(' ');
-        }
-        if (value.definition.fields.length === 0) {
-          return 'Add at least one form field before saving the template.';
-        }
-        const errors = validateFormDefinition(value.definition);
-        return errors.length ? errors.join(' ') : undefined;
-      },
+      // TanStack also runs change validation on submit, including untouched values.
+      onChange: validate,
     },
   });
   const blocker = useBlocker({
@@ -170,11 +199,10 @@ export function ResourceTemplateEditor({
       <form
         className="mt-8"
         noValidate
-        onChange={() => { setSaved(false); saveMutation.reset(); }}
         onSubmit={(event) => {
           event.preventDefault();
           if (!isReadOnly && !saveFlowRef.current && !form.state.isSubmitting) {
-            if (validateResourceDefaults(form.state.values.resourceDefaults).length) {
+            if (validateResourceDefaults(resourceDefaultsFromForm(form.state.values.resourceDefaults)).length) {
               setEditorView('defaults');
             }
             void form.handleSubmit();
@@ -187,12 +215,27 @@ export function ResourceTemplateEditor({
               <fieldset className="space-y-5 rounded-xl border border-base-300 bg-base-100 p-5" disabled={isReadOnly}>
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
                   <form.Field name="name">
-                    {(field) => (
+                    {(field) => {
+                      const hasError = field.state.meta.isTouched && !field.state.meta.isValid;
+                      return (
                       <div className="grow">
                         <label className="mb-2 block text-sm font-semibold" htmlFor="template-name">Template name</label>
-                        <input className="input input-bordered w-full" id="template-name" maxLength={200} onBlur={field.handleBlur} onChange={(event) => field.handleChange(event.target.value)} required value={field.state.value} />
+                        <input
+                          aria-describedby={hasError ? 'template-name-error' : undefined}
+                          aria-invalid={hasError || undefined}
+                          className={`input input-bordered w-full ${hasError ? 'input-error' : ''}`}
+                          id="template-name"
+                          maxLength={200}
+                          name={field.name}
+                          onBlur={field.handleBlur}
+                          onChange={(event) => field.handleChange(event.target.value)}
+                          required
+                          value={field.state.value}
+                        />
+                        {hasError && <p className="mt-2 text-sm text-error" id="template-name-error" role="alert">{field.state.meta.errors.join(' ')}</p>}
                       </div>
-                    )}
+                      );
+                    }}
                   </form.Field>
                   <form.Field name="isActive">
                     {(field) => (
@@ -209,22 +252,28 @@ export function ResourceTemplateEditor({
                   )}
                 </div>
                 <form.Field name="description">
-                  {(field) => (
+                  {(field) => {
+                    const hasError = field.state.meta.isTouched && !field.state.meta.isValid;
+                    return (
                     <div>
                       <label className="mb-2 block text-sm font-semibold" htmlFor="template-description">Description</label>
                       <textarea
-                        aria-describedby="template-description-help"
-                        className="textarea textarea-bordered w-full"
+                        aria-describedby={`template-description-help${hasError ? ' template-description-error' : ''}`}
+                        aria-invalid={hasError || undefined}
+                        className={`textarea textarea-bordered w-full ${hasError ? 'textarea-error' : ''}`}
                         id="template-description"
                         maxLength={2000}
+                        name={field.name}
                         onBlur={field.handleBlur}
                         onChange={(event) => field.handleChange(event.target.value)}
                         rows={3}
                         value={field.state.value}
                       />
                       <p className="mt-2 text-sm text-base-content/65" id="template-description-help">Optional. Describe what this template is for in 2,000 characters or fewer.</p>
+                      {hasError && <p className="mt-2 text-sm text-error" id="template-description-error" role="alert">{field.state.meta.errors.join(' ')}</p>}
                     </div>
-                  )}
+                    );
+                  }}
                 </form.Field>
               </fieldset>
               {!isReadOnly && (
@@ -237,30 +286,25 @@ export function ResourceTemplateEditor({
               </div>
               {activeView === 'build' && (
                 <form.Field name="definition">
-                  {(field) => <FormBuilder disabled={isSaving || isSubmitting} onChange={(value) => { field.handleChange(value); setSaved(false); saveMutation.reset(); }} value={field.state.value} />}
+                  {(field) => <FormBuilder disabled={isSaving || isSubmitting} onChange={field.handleChange} value={field.state.value} />}
                 </form.Field>
               )}
               {activeView === 'defaults' && (
-                <form.Field name="resourceDefaults" validators={{ onChange: ({ value }) => validateResourceDefaults(value).join(' ') || undefined }}>
-                  {(field) => (
-                    <ResourceDefaultsEditor
-                      disabled={isSaving || isSubmitting}
-                      errors={field.state.meta.errors.map(String)}
-                      onChange={(value) => { field.handleChange(value); setSaved(false); saveMutation.reset(); }}
-                      readOnly={isReadOnly}
-                      unavailableReason={defaultsSource.unavailableReason}
-                      value={field.state.value}
-                    />
-                  )}
-                </form.Field>
+                <ResourceDefaultsEditor
+                  disabled={isSaving || isSubmitting}
+                  fields="resourceDefaults"
+                  form={form}
+                  readOnly={isReadOnly}
+                  unavailableReason={defaultsSource.unavailableReason}
+                />
               )}
             </fieldset>
           )}
         </form.Subscribe>
-        <form.Subscribe selector={(state) => [state.errors, state.isDirty] as const}>
-          {([errors, isDirty]) => (
+        <form.Subscribe selector={(state) => [state.errors, state.isDirty, state.submissionAttempts] as const}>
+          {([errors, isDirty, submissionAttempts]) => (
             <div aria-live="polite" className="mt-5">
-              {errors.length > 0 && <p className="text-error" role="alert">{errors.join(' ')}</p>}
+              {submissionAttempts > 0 && errors.length > 0 && <p className="text-error" role="alert">{[...new Set(errors)].join(' ')}</p>}
               {saveMutation.isError && <p className="text-error" role="alert">{resourceTemplateErrorMessage(saveMutation.error)}</p>}
               {saved && !isDirty && <p className="text-success" role="status">Template saved.</p>}
               {isDirty && <p className="mt-2 text-sm text-base-content/65">You have unsaved changes.</p>}

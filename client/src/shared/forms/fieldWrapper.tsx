@@ -31,7 +31,12 @@ export function FieldWrapper({
             id={`${controlId}-error`}
             role="alert"
           >
-            {field.state.meta.errors.map((err) => err.message).join(', ')}
+            {field.state.meta.errors
+              .map((error) =>
+                typeof error === 'string' ? error : error?.message
+              )
+              .filter(Boolean)
+              .join(', ')}
           </span>
         </div>
       )}

@@ -282,6 +282,33 @@ describe('site admin resource templates', () => {
     expect(JSON.parse(saves[0].body.formJson).fields.at(-1).type).toBe('input');
   });
 
+  it('associates template-name errors with the input and clears them after correction', async () => {
+    mockAdminAccess();
+    const { saves } = mockTemplateStore();
+    ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
+    const name = await screen.findByRole('textbox', { name: 'Template name' });
+    expect(name).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    fireEvent.change(name, { target: { value: '   ' } });
+    fireEvent.blur(name);
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+    await waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'));
+    expect(name).toHaveAccessibleDescription(
+      'Enter a template name of 200 characters or fewer.'
+    );
+    expect(saves).toHaveLength(0);
+
+    fireEvent.change(name, { target: { value: 'Camera checkout' } });
+    await waitFor(() => expect(name).not.toHaveAttribute('aria-invalid'));
+    expect(name).not.toHaveAttribute('aria-describedby');
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+    expect(await screen.findByText('Template saved.')).toBeInTheDocument();
+    expect(saves).toHaveLength(1);
+    expect(saves[0].body.name).toBe('Camera checkout');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('creates a template from the admin list and opens the saved form', async () => {
     mockAdminAccess();
     const { saves, templates } = mockTemplateStore([]);
@@ -838,6 +865,52 @@ describe('site admin resource templates', () => {
     });
   });
 
+  it('keeps an originally configured day unspecified across view changes and saving', async () => {
+    mockAdminAccess();
+    const { saves } = mockTemplateStore([
+      makeTemplate({ resourceDefaultsJson: JSON.stringify(resourceDefaults) }),
+    ]);
+    const rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
+    cleanup = rendered.cleanup;
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Resource defaults' })
+    );
+    fireEvent.change(screen.getByRole('combobox', { name: 'Monday hours' }), {
+      target: { value: 'unspecified' },
+    });
+    expect(
+      screen.queryByLabelText('Monday opening time 1')
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Preview form' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    expect(screen.getByRole('combobox', { name: 'Monday hours' })).toHaveValue(
+      'unspecified'
+    );
+    expect(
+      screen.queryByLabelText('Monday opening time 1')
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+    await waitFor(() => {
+      expect(rendered.router.state.location.pathname).toBe(
+        '/admin/resource-templates/2'
+      );
+      expect(screen.getByText('Version 2')).toBeInTheDocument();
+    });
+    expect(saves).toHaveLength(1);
+    expect(JSON.parse(saves[0].body.resourceDefaultsJson!)).toEqual({
+      ...resourceDefaults,
+      openingHours: { sunday: [] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    expect(screen.getByRole('combobox', { name: 'Monday hours' })).toHaveValue(
+      'unspecified'
+    );
+    expect(
+      screen.queryByLabelText('Monday opening time 1')
+    ).not.toBeInTheDocument();
+  });
+
   it.each(['reversed', 'overlapping'])(
     'blocks %s opening hours from another view and allows correction',
     async (invalidHours) => {
@@ -863,6 +936,9 @@ describe('site admin resource templates', () => {
         );
       }
       fireEvent.click(screen.getByRole('button', { name: 'Preview form' }));
+      expect(
+        screen.queryByLabelText('Monday closing time 1')
+      ).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
 
       expect(
@@ -871,8 +947,24 @@ describe('site admin resource templates', () => {
           pressed: true,
         })
       ).toBeInTheDocument();
-      expect(screen.getByLabelText('Monday closing time 1')).toBeEnabled();
-      expect(screen.getAllByRole('alert')[0]).toHaveTextContent(/monday|overlap/i);
+      const closingTime = screen.getByLabelText('Monday closing time 1');
+      expect(closingTime).toBeEnabled();
+      await waitFor(() =>
+        expect(closingTime).toHaveAttribute('aria-invalid', 'true')
+      );
+      expect(closingTime).toHaveAccessibleDescription(
+        invalidHours === 'reversed'
+          ? /closing time must be after/
+          : /must not overlap/
+      );
+      if (invalidHours === 'overlapping') {
+        expect(
+          screen.getByLabelText('Monday opening time 2')
+        ).toHaveAccessibleDescription(/must not overlap/);
+      }
+      expect(screen.getAllByRole('alert')[0]).toHaveTextContent(
+        /monday|overlap/i
+      );
       expect(saves).toHaveLength(0);
       if (invalidHours === 'reversed') {
         fireEvent.change(screen.getByLabelText('Monday closing time 1'), {
@@ -886,6 +978,10 @@ describe('site admin resource templates', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
       expect(await screen.findByText('Template saved.')).toBeInTheDocument();
       expect(saves).toHaveLength(1);
+      expect(
+        screen.getByLabelText('Monday closing time 1')
+      ).not.toHaveAttribute('aria-invalid');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       expect(JSON.parse(saves[0].body.resourceDefaultsJson!)).toEqual(
         resourceDefaults
       );
@@ -925,6 +1021,9 @@ describe('site admin resource templates', () => {
         target: { value },
       });
       fireEvent.click(screen.getByRole('button', { name: 'Build form' }));
+      expect(
+        screen.queryByRole('textbox', { name: field })
+      ).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
 
       expect(
@@ -936,19 +1035,146 @@ describe('site admin resource templates', () => {
       expect(screen.getAllByRole('alert')[0]).toHaveTextContent(/rate/i);
       const input = screen.getByRole('textbox', { name: field });
       expect(input).toBeEnabled();
+      await waitFor(() =>
+        expect(input).toHaveAttribute('aria-invalid', 'true')
+      );
+      expect(input).toHaveAccessibleDescription(/Billing rate 1: enter/);
       expect(saves).toHaveLength(0);
       fireEvent.change(input, { target: { value: repair } });
       fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
       expect(await screen.findByText('Template saved.')).toBeInTheDocument();
       expect(saves).toHaveLength(1);
+      expect(screen.getByRole('textbox', { name: field })).not.toHaveAttribute(
+        'aria-invalid'
+      );
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       expect(JSON.parse(saves[0].body.resourceDefaultsJson!)).toEqual(
         resourceDefaults
       );
     }
   );
 
+  it('keeps errors with the remaining rate when an earlier invalid rate is removed', async () => {
+    mockAdminAccess();
+    const retainedRate = {
+      ...resourceDefaults.billingRates[0],
+      id: 'retained-rate',
+      name: 'Retained rate',
+    };
+    const { saves } = mockTemplateStore([
+      makeTemplate({
+        resourceDefaultsJson: JSON.stringify({
+          ...resourceDefaults,
+          billingRates: [resourceDefaults.billingRates[0], retainedRate],
+        }),
+      }),
+    ]);
+    ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Resource defaults' })
+    );
+    fireEvent.change(screen.getByRole('textbox', { name: 'Rate name 1' }), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Amount (USD) 2' }), {
+      target: { value: '-1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('textbox', { name: 'Amount (USD) 2' })
+      ).toHaveAccessibleDescription(
+        /Billing rate 2: enter a nonnegative amount/
+      )
+    );
+    expect(
+      screen.getByRole('textbox', { name: 'Rate name 1' })
+    ).toHaveAccessibleDescription(/enter a name/);
+    expect(saves).toHaveLength(0);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Remove billing rate 1' })
+    );
+    const amount = screen.getByRole('textbox', { name: 'Amount (USD) 1' });
+    await waitFor(() =>
+      expect(amount).toHaveAccessibleDescription(
+        /Billing rate 1: enter a nonnegative amount/
+      )
+    );
+    expect(amount).toHaveValue('-1');
+    expect(screen.getByRole('textbox', { name: 'Rate name 1' })).toHaveValue(
+      'Retained rate'
+    );
+    expect(
+      screen.getByRole('textbox', { name: 'Rate name 1' })
+    ).not.toHaveAttribute('aria-invalid');
+    expect(
+      screen.queryByRole('textbox', { name: 'Amount (USD) 2' })
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+    expect(saves).toHaveLength(0);
+
+    fireEvent.change(amount, { target: { value: '30.00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+    await waitFor(() => expect(saves).toHaveLength(1));
+    expect(JSON.parse(saves[0].body.resourceDefaultsJson!)).toEqual({
+      ...resourceDefaults,
+      billingRates: [{ ...retainedRate, amount: '30.00' }],
+    });
+  });
+
+  it('clears errors from disabled defaults sections and allows saving their removal', async () => {
+    mockAdminAccess();
+    const { saves } = mockTemplateStore([
+      makeTemplate({ resourceDefaultsJson: JSON.stringify(resourceDefaults) }),
+    ]);
+    ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Resource defaults' })
+    );
+    fireEvent.change(screen.getByLabelText('Monday closing time 1'), {
+      target: { value: '08:00' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Amount (USD) 1' }), {
+      target: { value: '-1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+    await waitFor(() =>
+      expect(screen.getByLabelText('Monday closing time 1')).toHaveAttribute(
+        'aria-invalid',
+        'true'
+      )
+    );
+    expect(
+      screen.getByRole('textbox', { name: 'Amount (USD) 1' })
+    ).toHaveAttribute('aria-invalid', 'true');
+    expect(saves).toHaveLength(0);
+
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Include default opening hours' })
+    );
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Include default billing rates' })
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    );
+    expect(
+      screen.queryByLabelText('Monday closing time 1')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('textbox', { name: 'Amount (USD) 1' })
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
+    await waitFor(() => expect(saves).toHaveLength(1));
+    expect(saves[0].body.resourceDefaultsJson).toBeNull();
+  });
+
   it.each([
-    { kind: 'array', resourceDefaultsJson: '[\n  { "futureSetting": true }\n]' },
+    {
+      kind: 'array',
+      resourceDefaultsJson: '[\n  { "futureSetting": true }\n]',
+    },
     {
       kind: 'future schema',
       resourceDefaultsJson: '{ "schemaVersion": 2, "openingHours": { "monday": [] } }',
