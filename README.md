@@ -201,26 +201,22 @@ For local sandbox users, the IAM IDs are `sandbox-10001` (Sample User) and `sand
 each environment's resource group, grants the App Service's managed identity access
 to that vault, and sets the URL automatically.
 
-For local development, copy the team's shared test-vault credentials into your ignored
-`server/.env`:
+For local development, sign in with Azure CLI using `az login --tenant <test-tenant-id>`
+and set only the test vault URL in your ignored `server/.env`:
 
 ```dotenv
 Azure__KeyVaultUrl="https://<test-vault-name>.vault.azure.net/"
-Azure__TenantId="<test-tenant-id>"
-Azure__ClientId="<development-application-client-id>"
-Azure__ClientSecret="<development-client-secret-value>"
 ```
 
-These values select `ClientSecretCredential`; configure all three credential settings
-together. Developers do not need `az login` or individual Azure permissions. An operator
-creates the shared development service principal once and configures its test-vault
-access through Bicep; see [shared credentials setup](infrastructure/azure/README.md#shared-credentials-for-local-development).
-Keep the shared client secret out of source control and distribute it through the team's
-approved secure channel.
+An operator must grant your user or developer security group **Key Vault Secrets Officer**
+on the test vault for reads and writes. See [local development access](infrastructure/azure/README.md#local-development-access)
+for setup. Leave `Azure__TenantId`, `Azure__ClientId`, and `Azure__ClientSecret` unset;
+`DefaultAzureCredential` can use your Azure CLI login locally and managed identity in Azure.
 
-Omit all three credential settings to use `DefaultAzureCredential`, including managed
-identity in Azure. Local sign-in and unrelated features can run without Key Vault
-settings because the client is created on demand.
+Local sign-in and unrelated features, including the Docker sandbox, can run without
+Key Vault settings because the client is created on demand. The sandbox does not inherit
+your host's Azure CLI login; use the backend running on your host to test features that
+need the real test vault.
 
 Future payments integration can pass `Team.PaymentsApiKeySecretName` to
 `GetSecretAsync` or `SetSecretAsync`. The service returns the latest secret value and

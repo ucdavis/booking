@@ -64,7 +64,6 @@ jobs:
       DB_CONNECTION: ${{ secrets.DB_CONNECTION }}
       DEPLOY_ENV: ${{ inputs.environment }}
       RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
-      SHARED_DEVELOPMENT_PRINCIPAL_ID: ${{ vars.SHARED_DEVELOPMENT_PRINCIPAL_ID }}
       SQL_ADMIN_LOGIN: ${{ vars.SQL_ADMIN_LOGIN || 'sqladmin' }}
       SQL_ADMIN_PASSWORD: ${{ secrets.SQL_ADMIN_PASSWORD }}
       SQL_DATABASE_NAME: ${{ vars.SQL_DATABASE_NAME }}
@@ -87,18 +86,6 @@ jobs:
           if [[ "$DEPLOY_ENV" != "test" && "$DEPLOY_ENV" != "prod" ]]; then
             echo "environment must be either test or prod."
             exit 1
-          fi
-
-          if [[ -n "$SHARED_DEVELOPMENT_PRINCIPAL_ID" ]]; then
-            if [[ "$DEPLOY_ENV" != "test" ]]; then
-              echo "SHARED_DEVELOPMENT_PRINCIPAL_ID is supported only for test deployments."
-              exit 1
-            fi
-
-            if [[ ! "$SHARED_DEVELOPMENT_PRINCIPAL_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
-              echo "SHARED_DEVELOPMENT_PRINCIPAL_ID must be a service principal object ID in GUID format."
-              exit 1
-            fi
           fi
 
           missing=()
@@ -189,7 +176,6 @@ jobs:
           add_param "sqlSkuTier" "$SQL_SKU_TIER"
           add_param "webPlanName" "$WEB_PLAN_NAME"
           add_param "webPlanResourceGroup" "$WEB_PLAN_RESOURCE_GROUP"
-          add_param "sharedDevelopmentPrincipalId" "$SHARED_DEVELOPMENT_PRINCIPAL_ID"
 
           az deployment group create \
             --name "$deployment_name" \

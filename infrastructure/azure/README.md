@@ -20,24 +20,26 @@ Local `deploy_test.sh` and `deploy_prod.sh` are secondary operator tools. They a
 
 Before applying this infrastructure change to an existing environment, rerun the [OIDC bootstrap](../../README.customization.md#5-azure-deployment-setup) as an operator with permission to assign roles. The bootstrap adds **Key Vault Data Access Administrator** to that environment's deployment identity at the resource group scope so **Configure Azure** can assign the vault roles. Contributor alone cannot assign them. See [Key Vault RBAC roles](https://learn.microsoft.com/azure/key-vault/general/rbac-guide).
 
-### Shared credentials for local development
+### Local development access
 
-An operator performs this one-time setup in the test subscription's Microsoft Entra tenant:
+Use your own Azure CLI login to access the test vault. No additional app registration or shared client secret is needed.
 
-1. Register a dedicated single-tenant app named `booking-local-development` under **Microsoft Entra ID → App registrations**. No sign-in redirect URI is needed for this service identity. Record its **Directory (tenant) ID** and **Application (client) ID**.
-2. Open the matching entry under **Enterprise applications** and record its **Object ID**. This service principal Object ID is the value used for the Bicep role assignment; it is different from the Application (client) ID and the app registration's Object ID.
-3. Under the app registration's **Certificates & secrets**, create a client secret with an expiry. Copy its **Value** once into the team's approved secure credential-sharing channel; the value cannot be retrieved later. Use the value, not its Secret ID. See [Microsoft's app and service principal setup](https://learn.microsoft.com/entra/identity-platform/howto-create-service-principal-portal).
-4. Set the test GitHub Environment variable `SHARED_DEVELOPMENT_PRINCIPAL_ID` to the service principal Object ID, then run **Configure Azure** for test. For a local operator deployment, supply the same environment variable to `deploy_test.sh`. It maps to Bicep's optional `sharedDevelopmentPrincipalId` parameter and grants **Key Vault Secrets Officer** only on the test vault. Leave this variable unset in production; the workflow and local infrastructure deployment script reject it there, and the Bicep template never grants shared access in production.
-5. Take the test vault URL from the `keyVaultUrl` deployment output and share these settings through the same secure channel for developers to add to their ignored `server/.env`:
+1. An operator with permission to assign roles grants **Key Vault Secrets Officer** to each developer's user or an existing developer security group, scoped to the test vault. This permits secret reads and writes; Contributor alone does not grant secret access. Use **Key Vault Secrets User** for developers who only need to read secrets. See [Key Vault RBAC roles](https://learn.microsoft.com/azure/key-vault/general/rbac-guide).
+2. Sign in on the machine running the backend:
+
+   ```bash
+   az login --tenant <test-tenant-id>
+   ```
+
+3. Take the test vault URL from the `keyVaultUrl` deployment output and add it to your ignored `server/.env`:
 
    ```dotenv
    Azure__KeyVaultUrl="https://<test-vault-name>.vault.azure.net/"
-   Azure__TenantId="<test-tenant-id>"
-   Azure__ClientId="<development-application-client-id>"
-   Azure__ClientSecret="<development-client-secret-value>"
    ```
 
-New developers can copy these values and run locally without `az login` or individual Azure role assignments. The shared identity has access only to the test vault through this template. Keep the client secret out of source control, Bicep parameters/outputs, and GitHub Environment variables. Rotate it before expiry and share the replacement with developers. Azure-hosted apps continue using their own managed identities.
+Leave `Azure__TenantId`, `Azure__ClientId`, and `Azure__ClientSecret` unset so the service uses `DefaultAzureCredential`, which supports your Azure CLI login. Azure-hosted apps use their managed identities. See [developer account authentication](https://learn.microsoft.com/dotnet/azure/sdk/authentication/local-development-dev-accounts).
+
+The Docker sandbox can run without Key Vault configuration for unrelated features. It does not inherit the host's Azure CLI login. Run the backend on your host when testing features that require real test-vault access.
 
 ## Production SQL connectivity
 
