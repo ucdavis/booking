@@ -75,12 +75,18 @@ public class UserService : IUserService
             if (!isLocalLogin)
             {
                 var person = await _rosettaService.FindByIamIdAsync(iamId, cancellationToken);
-                if (person != null)
+                if (person == null || person.IamId != iamId || !person.HasRequiredDetails())
                 {
-                    name = person.Name;
-                    email = person.Email;
-                    kerberos = person.Kerberos;
+                    throw new InvalidOperationException("An IAM ID, Kerberos ID, and email are required to save a new user at login.");
                 }
+                name = person.Name;
+                email = person.Email;
+                kerberos = person.Kerberos;
+            }
+            if (string.IsNullOrWhiteSpace(email) || (isLocalLogin &&
+                iamId != "sandbox-10001" && iamId != "sandbox-10002" && string.IsNullOrWhiteSpace(kerberos)))
+            {
+                throw new InvalidOperationException("An IAM ID, Kerberos ID, and email are required to save a new user at login.");
             }
 
             user = new User
@@ -111,7 +117,8 @@ public class UserService : IUserService
                 throw;
             }
 
-            await SaveLoginDetails(existingUser, name, isLocalLogin ? email : existingUser.Email,
+            await SaveLoginDetails(existingUser, name,
+                isLocalLogin || string.IsNullOrWhiteSpace(existingUser.Email) ? email : existingUser.Email,
                 kerberos, DateTimeOffset.UtcNow, cancellationToken);
         }
     }

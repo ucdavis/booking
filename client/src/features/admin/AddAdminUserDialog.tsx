@@ -27,7 +27,6 @@ export function AddAdminUserDialog({
   const selectedPerson = people?.find(
     (person) =>
       person.isActive &&
-      person.isActiveInIam !== false &&
       !person.isAdmin &&
       (person.iamId === selectedIamId ||
         (selectedIamId === null && people.length === 1))
@@ -79,7 +78,6 @@ export function AddAdminUserDialog({
 
   const canAdd =
     selectedPerson?.isActive &&
-    selectedPerson.isActiveInIam !== false &&
     !selectedPerson.isAdmin &&
     !peopleQuery.isFetching &&
     !peopleQuery.isError &&
@@ -205,7 +203,6 @@ export function AddAdminUserDialog({
                         disabled={
                           person.isAdmin ||
                           !person.isActive ||
-                          person.isActiveInIam === false ||
                           addMutation.isPending
                         }
                         name="admin-person"
@@ -225,31 +222,12 @@ export function AddAdminUserDialog({
                           </dd>
                           <dt className="text-base-content/60">IAM ID</dt>
                           <dd>{person.iamId}</dd>
-                          <dt className="text-base-content/60">IAM status</dt>
-                          <dd>
-                            {person.isActiveInIam === null ? (
-                              <span className="badge badge-neutral badge-sm">
-                                Not checked
-                              </span>
-                            ) : (
-                              <span
-                                className={`badge badge-sm ${person.isActiveInIam ? 'badge-success' : 'badge-error'}`}
-                              >
-                                {person.isActiveInIam ? 'Active' : 'Inactive'}
-                              </span>
-                            )}
-                          </dd>
                           <dt className="text-base-content/60">Kerberos ID</dt>
                           <dd>{person.kerberos || 'Not available'}</dd>
                         </dl>
                         {person.isAdmin && (
                           <p className="mt-3 text-sm font-medium">
                             Already a site admin user
-                          </p>
-                        )}
-                        {person.isActiveInIam === false && (
-                          <p className="mt-3 text-sm text-error">
-                            This person is inactive in IAM and cannot be added.
                           </p>
                         )}
                         {!person.isActive && (
@@ -263,8 +241,7 @@ export function AddAdminUserDialog({
                 </div>
                 {selectedPerson &&
                   !selectedPerson.isAdmin &&
-                  selectedPerson.isActive &&
-                  selectedPerson.isActiveInIam !== false && (
+                  selectedPerson.isActive && (
                     <p className="mt-4 text-sm text-base-content/70">
                       Adding {selectedPerson.name} grants access to site
                       administration, including managing other site admin users.

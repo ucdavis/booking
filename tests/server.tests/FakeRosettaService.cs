@@ -21,6 +21,8 @@ internal sealed class FakeRosettaService(AppDbContext? dbContext = null) : IRose
         {
             var users = await dbContext.Users.AsNoTracking()
                 .Where(user => user.IamId == search || user.Email == search || user.Kerberos == search)
+                .Where(user => !string.IsNullOrWhiteSpace(user.IamId) &&
+                    !string.IsNullOrWhiteSpace(user.Email) && !string.IsNullOrWhiteSpace(user.Kerberos))
                 .OrderBy(user => user.Name).ThenBy(user => user.IamId)
                 .Select(user => new DirectoryPerson
                 {

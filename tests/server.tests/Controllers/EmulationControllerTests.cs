@@ -62,7 +62,7 @@ public class EmulationControllerTests
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var rosetta = new FakeRosettaService(db);
-        rosetta.People.Add(new DirectoryPerson { IamId = "1000000001", Name = "Target", IsActiveInIam = true });
+        rosetta.People.Add(new DirectoryPerson { IamId = "1000000001", Name = "Target", Email = "target@example.test", Kerberos = "target" });
         var controller = await Controller(db, rosetta);
 
         var result = await controller.Candidates(" 1000000001 ");
@@ -105,7 +105,7 @@ public class EmulationControllerTests
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var rosetta = new FakeRosettaService(db);
-        rosetta.People.Add(new DirectoryPerson { IamId = "1000000001", Name = "Target", IsActiveInIam = true });
+        rosetta.People.Add(new DirectoryPerson { IamId = "1000000001", Name = "Target", Email = "target@example.test", Kerberos = "target" });
         var controller = await Controller(db, rosetta);
         controller.HttpContext.Items.Remove(EmulationService.SessionItemKey);
 

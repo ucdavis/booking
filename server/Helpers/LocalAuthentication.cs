@@ -46,14 +46,14 @@ public static class LocalAuthentication
         return new ClaimsPrincipal(new ClaimsIdentity(claims, Scheme));
     }
 
-    public static ClaimsPrincipal? CreatePersonPrincipal(DirectoryPerson person, bool hasActiveAccount = false)
+    public static ClaimsPrincipal? CreatePersonPrincipal(DirectoryPerson person)
     {
-        var iamId = person.IamId.Trim();
-        if ((!hasActiveAccount && person.IsActiveInIam != true) || string.IsNullOrWhiteSpace(iamId))
+        if (!person.HasRequiredDetails())
         {
             return null;
         }
 
+        var iamId = person.IamId.Trim();
         var name = string.IsNullOrWhiteSpace(person.Name) ? iamId : person.Name.Trim();
 
         var claims = new List<Claim>

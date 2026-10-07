@@ -59,7 +59,15 @@ public class AuthenticationHelperTests : IDisposable
         services.AddSingleton<IHostEnvironment>(environment);
         services.AddScoped(_ => createDbContext?.Invoke() ?? TestDbContextFactory.CreateInMemory());
         services.AddScoped<IUserService, UserService>();
-        services.AddSingleton<IRosettaService>(rosetta ?? new FakeRosettaService());
+        if (rosetta == null)
+        {
+            rosetta = new FakeRosettaService();
+            rosetta.People.Add(new Server.Models.Directory.DirectoryPerson
+            {
+                IamId = "sandbox-10001", Name = "Sample User", Email = "sample@ucdavis.edu", Kerberos = "samplekerb",
+            });
+        }
+        services.AddSingleton<IRosettaService>(rosetta);
         services.AddAuthenticationServices(configuration, environment);
         return services.BuildServiceProvider();
     }
@@ -294,8 +302,8 @@ public class AuthenticationHelperTests : IDisposable
         var user = await db.Users.SingleAsync();
         user.IamId.Should().Be("sandbox-10001");
         user.Name.Should().Be("Sample User");
-        user.Email.Should().Be(local ? "sample@example.test" : null);
-        user.Kerberos.Should().BeNull();
+        user.Email.Should().Be(local ? "sample@example.test" : "sample@ucdavis.edu");
+        user.Kerberos.Should().Be(local ? null : "samplekerb");
         user.IsAdmin.Should().BeFalse();
         user.IsActive.Should().BeTrue();
         user.CreatedAt.Should().BeOnOrAfter(startedAt).And.BeOnOrBefore(DateTimeOffset.UtcNow);
@@ -347,14 +355,14 @@ public class AuthenticationHelperTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Entra_login_without_a_campus_email_never_saves_the_health_login_address(bool foundInRosetta)
+    public async Task Entra_login_without_a_campus_email_does_not_save_a_user_or_issue_a_cookie(bool foundInRosetta)
     {
         var rosetta = new FakeRosettaService();
         if (foundInRosetta)
         {
             rosetta.People.Add(new Server.Models.Directory.DirectoryPerson
             {
-                IamId = "sandbox-10001", Name = "Directory Name", Kerberos = "kerb1", IsActiveInIam = true,
+                IamId = "sandbox-10001", Name = "Directory Name", Kerberos = "kerb1",
             });
         }
         using var provider = CreateProvider(rosetta: rosetta);
@@ -362,13 +370,65 @@ public class AuthenticationHelperTests : IDisposable
         var principal = CreatePrincipal();
         ((ClaimsIdentity)principal.Identity!).AddClaim(new Claim("preferred_username", "person@health.ucdavis.edu"));
 
-        await SignIn(scope.ServiceProvider, principal);
+        var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+        var signIn = () => context.SignInAsync(GetCookieScheme(false), principal);
+
+        await signIn.Should().ThrowAsync<InvalidOperationException>();
 
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var user = await db.Users.SingleAsync();
-        user.Email.Should().BeNull();
-        user.Name.Should().Be(foundInRosetta ? "Directory Name" : "Sample User");
-        user.Kerberos.Should().Be(foundInRosetta ? "kerb1" : null);
+        (await db.Users.AnyAsync()).Should().BeFalse();
+        db.ChangeTracker.Entries().Should().BeEmpty();
+        context.Response.Headers.SetCookie.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(" ")]
+    public async Task First_Entra_login_requires_a_directory_kerberos_id(string? kerberos)
+    {
+        var rosetta = new FakeRosettaService();
+        rosetta.People.Add(new Server.Models.Directory.DirectoryPerson
+        {
+            IamId = "sandbox-10001", Name = "Directory Name", Email = "directory@ucdavis.edu", Kerberos = kerberos,
+        });
+        using var provider = CreateProvider(rosetta: rosetta);
+        using var scope = provider.CreateScope();
+        var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+        var signIn = () => context.SignInAsync(GetCookieScheme(false), CreatePrincipal());
+
+        await signIn.Should().ThrowAsync<InvalidOperationException>();
+
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        (await db.Users.AnyAsync()).Should().BeFalse();
+        db.ChangeTracker.Entries().Should().BeEmpty();
+        context.Response.Headers.SetCookie.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null, "person")]
+    [InlineData(" ", "person")]
+    [InlineData("person@example.test", null)]
+    [InlineData("person@example.test", " ")]
+    public async Task First_local_person_login_requires_email_and_kerberos_before_saving(string? email, string? kerberos)
+    {
+        using var provider = CreateProvider(local: true);
+        using var scope = provider.CreateScope();
+        var claims = new List<Claim>
+        {
+            new("ucdPersonIAMID", "10010001"), new("name", "Directory Person"),
+        };
+        if (email != null) claims.Add(new Claim("preferred_username", email));
+        if (kerberos != null) claims.Add(new Claim(LocalAuthentication.KerberosClaimType, kerberos));
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, LocalAuthentication.Scheme));
+        var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+        var signIn = () => context.SignInAsync(LocalAuthentication.Scheme, principal);
+
+        await signIn.Should().ThrowAsync<InvalidOperationException>();
+
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        (await db.Users.AnyAsync()).Should().BeFalse();
+        db.ChangeTracker.Entries().Should().BeEmpty();
+        context.Response.Headers.SetCookie.Should().BeEmpty();
     }
 
     [Fact]
@@ -732,10 +792,12 @@ public class AuthenticationHelperTests : IDisposable
     }
 
     [Theory]
-    [InlineData(null, "directory-kerb")]
-    [InlineData("existing-kerb", "existing-kerb")]
-    public async Task Concurrent_first_Entra_login_fills_missing_kerberos_without_overwriting_the_winning_account(
-        string? existingKerberos, string expectedKerberos)
+    [InlineData(null, "directory-kerb", "saved@ucdavis.edu")]
+    [InlineData("existing-kerb", "existing-kerb", "saved@ucdavis.edu")]
+    [InlineData(null, "directory-kerb", null)]
+    [InlineData("existing-kerb", "existing-kerb", " ")]
+    public async Task Concurrent_first_Entra_login_fills_missing_details_without_overwriting_the_winning_account(
+        string? existingKerberos, string expectedKerberos, string? existingEmail)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase($"KerberosCollision_{Guid.NewGuid():N}", new InMemoryDatabaseRoot()).Options;
@@ -749,7 +811,7 @@ public class AuthenticationHelperTests : IDisposable
             await using var competingDb = new AppDbContext(options);
             competingDb.Users.Add(new User
             {
-                IamId = "sandbox-10001", Name = "Existing Name", Email = "saved@ucdavis.edu",
+                IamId = "sandbox-10001", Name = "Existing Name", Email = existingEmail,
                 Kerberos = existingKerberos, IsAdmin = true,
             });
             await competingDb.SaveChangesAsync();
@@ -762,7 +824,7 @@ public class AuthenticationHelperTests : IDisposable
         db.ChangeTracker.Clear();
         var user = await db.Users.SingleAsync();
         user.Kerberos.Should().Be(expectedKerberos);
-        user.Email.Should().Be("saved@ucdavis.edu");
+        user.Email.Should().Be(string.IsNullOrWhiteSpace(existingEmail) ? "directory@ucdavis.edu" : existingEmail);
         user.IsAdmin.Should().BeTrue();
         rosetta.LookupCalls.Should().ContainSingle();
     }
@@ -858,8 +920,8 @@ public class AuthenticationHelperTests : IDisposable
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         db.ChangeTracker.Clear();
         var user = await db.Users.SingleAsync();
-        user.Name.Should().Be("Alternate User");
-        user.Email.Should().Be(local ? "alternate@example.test" : null);
+        user.Name.Should().Be(local ? "Alternate User" : "Sample User");
+        user.Email.Should().Be(local ? "alternate@example.test" : "sample@ucdavis.edu");
     }
 
     [Theory]
@@ -939,7 +1001,7 @@ public class AuthenticationHelperTests : IDisposable
         var db = services.GetRequiredService<AppDbContext>();
         var person = new Server.Models.Directory.DirectoryPerson
         {
-            IamId = "10010001", Name = "Jordan Demo", Email = "jordan@example.test", Kerberos = "jdemo", IsActiveInIam = true,
+            IamId = "10010001", Name = "Jordan Demo", Email = "jordan@example.test", Kerberos = "jdemo",
         };
         rosetta.People.Add(person);
         var createdAt = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -1166,6 +1228,7 @@ public class AuthenticationHelperTests : IDisposable
         {
             new("name", "Sample User"),
             new("ucdPersonIAMID", "sandbox-10001"),
+            new("email", "sample@example.test"),
         };
         if (userId != null)
         {

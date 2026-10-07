@@ -8,5 +8,4 @@ public sealed class EmulationCandidateResponse
     public string? Kerberos { get; init; }
     public bool HasUserAccount { get; init; }
     public bool IsActive { get; init; }
-    public bool? IsActiveInIam { get; init; }
 }

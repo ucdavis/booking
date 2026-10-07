@@ -60,7 +60,8 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
             return NotFound("That team could not be found.");
         }
 
-        var people = (await rosettaService.SearchPeopleAsync(search, cancellationToken)).Take(10).ToList();
+        var people = (await rosettaService.SearchPeopleAsync(search, cancellationToken))
+            .Where(person => person.HasRequiredDetails()).Take(10).ToList();
         var iamIds = people.Select(person => person.IamId).ToList();
         var users = await (
             from user in dbContext.Users.AsNoTracking()
@@ -85,7 +86,6 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
                 Email = person.Email,
                 Kerberos = person.Kerberos,
                 IsActive = user == null || user.IsActive,
-                IsActiveInIam = person.IsActiveInIam,
                 Role = user?.Role,
             };
         }).ToList();
@@ -124,19 +124,12 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
             return Conflict("This user already belongs to the team. Change their role from the member list.");
         }
 
-        // Recheck IAM before granting access, including when the search matched an existing user.
+        // Recheck required directory details before granting access to an existing or new user.
         var person = await rosettaService.FindByIamIdAsync(iamId, cancellationToken);
-        if (person == null)
+        if (person == null || !person.HasRequiredDetails() || person.IamId != iamId)
         {
             return NotFound("That person could not be found. Search again before adding a team member.");
         }
-        if (person.IsActiveInIam != true)
-        {
-            return Conflict(person.IsActiveInIam == false
-                ? "This person is inactive in IAM and cannot be added to the team."
-                : "This person's IAM activity could not be verified. Search again before adding a team member.");
-        }
-
         if (user == null)
         {
             var now = DateTimeOffset.UtcNow;
@@ -152,7 +145,7 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
             dbContext.Users.Add(user);
         }
 
-        PopulateKerberosIfMissing(user, person.Kerberos);
+        PopulateMissingDetails(user, person.Email!, person.Kerberos!);
         var permission = new TeamPermission { TeamId = teamId.Value, User = user, Role = request.Role!.Value };
         dbContext.TeamPermissions.Add(permission);
         try
@@ -186,7 +179,7 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
                 throw;
             }
 
-            PopulateKerberosIfMissing(user, person.Kerberos);
+            PopulateMissingDetails(user, person.Email!, person.Kerberos!);
             permission = new TeamPermission { TeamId = teamId.Value, User = user, Role = request.Role.Value };
             dbContext.TeamPermissions.Add(permission);
             try
@@ -278,9 +271,14 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
 
     private static bool CanAssignRole(TeamRole? role) => role == TeamRole.Admin || role == TeamRole.Editor;
 
-    private static void PopulateKerberosIfMissing(User user, string? kerberos)
+    private static void PopulateMissingDetails(User user, string email, string kerberos)
     {
-        if (string.IsNullOrWhiteSpace(user.Kerberos) && !string.IsNullOrWhiteSpace(kerberos))
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            user.Email = email;
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        if (string.IsNullOrWhiteSpace(user.Kerberos))
         {
             user.Kerberos = kerberos;
             user.UpdatedAt = DateTimeOffset.UtcNow;

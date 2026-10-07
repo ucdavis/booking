@@ -57,7 +57,6 @@ const person = {
   email: 'sam@example.com',
   iamId: '100003',
   isActive: true,
-  isActiveInIam: true,
   kerberos: 'samsmith',
   name: 'Sam Smith',
   role: null,
@@ -200,12 +199,6 @@ describe('team members', () => {
           isActive: false,
           name: 'Inactive Account',
         },
-        {
-          ...person,
-          iamId: '100006',
-          isActiveInIam: false,
-          name: 'Inactive Directory Person',
-        },
       ]);
     });
     server.use(
@@ -232,11 +225,7 @@ describe('team members', () => {
     expect(
       dialog.getByRole('radio', { name: 'Inactive Account' })
     ).toBeDisabled();
-    expect(
-      dialog.getByRole('radio', { name: 'Inactive Directory Person' })
-    ).toBeDisabled();
-    expect(dialog.getByText('Inactive')).toBeInTheDocument();
-    expect(dialog.getAllByText('Active')).toHaveLength(3);
+    expect(dialog.queryByText('IAM status')).not.toBeInTheDocument();
     expect(dialog.getByText(/Already a team member/)).toBeInTheDocument();
     expect(searchRequests).toHaveBeenCalledTimes(1);
     fireEvent.click(dialog.getByRole('radio', { name: 'Sam Smith' }));
@@ -249,11 +238,11 @@ describe('team members', () => {
     expect(dialog.queryByRole('radio')).not.toBeInTheDocument();
   });
 
-  it('allows a local user with unchecked IAM status to be selected for addition', async () => {
+  it('automatically selects the only eligible user for addition', async () => {
     mockAccess();
     server.use(
       http.get('/api/teams/plant-sciences/members/people', () =>
-        HttpResponse.json([{ ...person, isActiveInIam: null }])
+        HttpResponse.json([person])
       )
     );
     ({ cleanup } = renderRoute({
@@ -269,11 +258,7 @@ describe('team members', () => {
     const match = await dialog.findByRole('radio', { name: 'Sam Smith' });
     expect(match).toBeEnabled();
     expect(match).toBeChecked();
-    expect(dialog.getByText('Not checked')).toHaveClass('badge-neutral');
-    expect(dialog.queryByText('Inactive')).not.toBeInTheDocument();
-    expect(
-      dialog.queryByText('This person is inactive in IAM and cannot be added.')
-    ).not.toBeInTheDocument();
+    expect(dialog.queryByText('IAM status')).not.toBeInTheDocument();
     expect(dialog.getByRole('button', { name: 'Add member' })).toBeEnabled();
   });
 

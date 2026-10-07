@@ -136,10 +136,6 @@ public class EmulationMiddlewareTests
     [Theory]
     [InlineData("inactive-target")]
     [InlineData("missing-target")]
-    [InlineData("inactive-person")]
-    [InlineData("unknown-person")]
-    [InlineData("directory-failure")]
-    [InlineData("ambiguous-person")]
     [InlineData("revoked-admin")]
     [InlineData("inactive-admin")]
     public async Task Revocation_and_unavailable_targets_block_the_existing_selection(string change)
@@ -156,24 +152,6 @@ public class EmulationMiddlewareTests
             {
                 case "inactive-target": target.IsActive = false; break;
                 case "missing-target": db.Users.Remove(target); break;
-                case "inactive-person":
-                    fixture.Rosetta.People.Add(new Server.Models.Directory.DirectoryPerson
-                    {
-                        IamId = Fixture.TargetIamId, Name = "Target", IsActiveInIam = false,
-                    });
-                    break;
-                case "unknown-person":
-                    fixture.Rosetta.People.Add(new Server.Models.Directory.DirectoryPerson
-                    {
-                        IamId = Fixture.TargetIamId, Name = "Target", IsActiveInIam = null,
-                    });
-                    break;
-                case "directory-failure":
-                    fixture.Rosetta.Failure = new HttpRequestException("Directory unavailable");
-                    break;
-                case "ambiguous-person":
-                    fixture.Rosetta.Failure = new InvalidOperationException("Ambiguous directory identity");
-                    break;
                 case "revoked-admin": actor.IsAdmin = false; break;
                 case "inactive-admin": actor.IsActive = false; break;
             }
@@ -186,7 +164,7 @@ public class EmulationMiddlewareTests
     [InlineData("/api/user/me")]
     [InlineData("/api/antiforgery")]
     [InlineData("/api/emulation/stop")]
-    public async Task Directory_failure_keeps_recovery_available_without_restoring_admin_permissions(string path)
+    public async Task Directory_failure_does_not_interrupt_an_active_emulation_selection(string path)
     {
         using var fixture = new Fixture();
         await fixture.SeedAsync();
@@ -198,8 +176,9 @@ public class EmulationMiddlewareTests
 
         result.ReachedEndpoint.Should().BeTrue();
         EmulationService.IsEmulating(result.Context).Should().BeTrue();
-        result.Context.User.FindFirst("ucdPersonIAMID").Should().BeNull();
-        result.Context.User.FindAll(ClaimTypes.Role).Should().BeEmpty();
+        result.Context.User.FindFirst("ucdPersonIAMID")!.Value.Should().Be(Fixture.TargetIamId);
+        result.Context.User.IsInRole("ActorOnlyRole").Should().BeFalse();
+        fixture.Rosetta.LookupCalls.Should().BeEmpty();
         EmulationService.GetActor(result.Context).FindFirst("ucdPersonIAMID")!.Value.Should().Be(Fixture.ActorIamId);
     }
 

@@ -104,7 +104,8 @@ public class AdminController(AppDbContext dbContext, IRosettaService rosettaServ
             return BadRequest("Enter an email, IAM ID, or Kerb of no more than 128 characters.");
         }
 
-        var people = (await rosettaService.SearchPeopleAsync(search, cancellationToken)).Take(10).ToList();
+        var people = (await rosettaService.SearchPeopleAsync(search, cancellationToken))
+            .Where(person => person.HasRequiredDetails()).Take(10).ToList();
         var iamIds = people.Select(person => person.IamId).ToList();
         var users = await dbContext.Users.AsNoTracking()
             .Where(user => iamIds.Contains(user.IamId))
@@ -120,7 +121,6 @@ public class AdminController(AppDbContext dbContext, IRosettaService rosettaServ
                 Kerberos = person.Kerberos,
                 IsAdmin = user != null && user.IsAdmin,
                 IsActive = user == null || user.IsActive,
-                IsActiveInIam = person.IsActiveInIam,
             };
         }).ToList();
 
@@ -148,18 +148,11 @@ public class AdminController(AppDbContext dbContext, IRosettaService rosettaServ
             return Ok(ToResponse(user));
         }
 
-        // Recheck IAM before granting access, including when the search matched an existing user.
+        // Recheck required directory details before granting access to an existing or new user.
         var person = await rosettaService.FindByIamIdAsync(iamId, cancellationToken);
-        if (person == null)
+        if (person == null || !person.HasRequiredDetails() || person.IamId != iamId)
         {
             return NotFound("That person could not be found. Search again before adding an admin.");
-        }
-
-        if (person.IsActiveInIam != true)
-        {
-            return Conflict(person.IsActiveInIam == false
-                ? "This person is inactive in IAM and cannot be added as a site admin."
-                : "This person's IAM activity could not be verified. Search again before adding a site admin.");
         }
 
         if (user == null)
@@ -177,7 +170,7 @@ public class AdminController(AppDbContext dbContext, IRosettaService rosettaServ
 
         try
         {
-            await GrantAdmin(user, person.Kerberos, cancellationToken);
+            await GrantAdmin(user, person.Email!, person.Kerberos!, cancellationToken);
         }
         catch (DbUpdateException) when (isNewUser)
         {
@@ -194,7 +187,7 @@ public class AdminController(AppDbContext dbContext, IRosettaService rosettaServ
                 return Conflict("This user is inactive and cannot be added as a site admin.");
             }
 
-            await GrantAdmin(user, person.Kerberos, cancellationToken);
+            await GrantAdmin(user, person.Email!, person.Kerberos!, cancellationToken);
         }
 
         return Ok(ToResponse(user));
@@ -230,14 +223,19 @@ public class AdminController(AppDbContext dbContext, IRosettaService rosettaServ
         return NoContent();
     }
 
-    private async Task GrantAdmin(User user, string? kerberos, CancellationToken cancellationToken)
+    private async Task GrantAdmin(User user, string email, string kerberos, CancellationToken cancellationToken)
     {
-        var populateKerberos = string.IsNullOrWhiteSpace(user.Kerberos) && !string.IsNullOrWhiteSpace(kerberos);
-        if (user.IsAdmin && !populateKerberos)
+        var populateEmail = string.IsNullOrWhiteSpace(user.Email);
+        var populateKerberos = string.IsNullOrWhiteSpace(user.Kerberos);
+        if (user.IsAdmin && !populateEmail && !populateKerberos)
         {
             return;
         }
 
+        if (populateEmail)
+        {
+            user.Email = email;
+        }
         if (populateKerberos)
         {
             user.Kerberos = kerberos;

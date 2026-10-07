@@ -41,7 +41,6 @@ export function AddTeamMemberDialog({
     people?.find(
       (person) =>
         person.isActive &&
-        person.isActiveInIam !== false &&
         person.role === null &&
         (person.iamId === iamId || (iamId === null && people.length === 1))
     );
@@ -178,7 +177,7 @@ export function AddTeamMemberDialog({
           className="mt-2 text-base-content/70"
           id="add-team-member-description"
         >
-          Find a person, review their status, and choose their role on this
+          Find a person, review their details, and choose their role on this
           team.
         </p>
 
@@ -271,7 +270,6 @@ export function AddTeamMemberDialog({
                         disabled={
                           person.role !== null ||
                           !person.isActive ||
-                          person.isActiveInIam === false ||
                           isPending
                         }
                         form="add-team-member-form"
@@ -292,20 +290,6 @@ export function AddTeamMemberDialog({
                           </dd>
                           <dt className="text-base-content/60">IAM ID</dt>
                           <dd>{person.iamId}</dd>
-                          <dt className="text-base-content/60">IAM status</dt>
-                          <dd>
-                            {person.isActiveInIam === null ? (
-                              <span className="badge badge-neutral badge-sm">
-                                Not checked
-                              </span>
-                            ) : (
-                              <span
-                                className={`badge badge-sm ${person.isActiveInIam ? 'badge-success' : 'badge-error'}`}
-                              >
-                                {person.isActiveInIam ? 'Active' : 'Inactive'}
-                              </span>
-                            )}
-                          </dd>
                           <dt className="text-base-content/60">Kerberos ID</dt>
                           <dd>{person.kerberos || 'Not available'}</dd>
                         </dl>
@@ -313,11 +297,6 @@ export function AddTeamMemberDialog({
                           <p className="mt-3 text-sm font-medium">
                             Already a team member ({teamRoleLabels[person.role]}
                             )
-                          </p>
-                        )}
-                        {person.isActiveInIam === false && (
-                          <p className="mt-3 text-sm text-error">
-                            This person is inactive in IAM and cannot be added.
                           </p>
                         )}
                         {!person.isActive && (
