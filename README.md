@@ -201,7 +201,7 @@ For local sandbox users, the IAM IDs are `sandbox-10001` (Sample User) and `sand
 each environment's resource group, grants the App Service's managed identity access
 to that vault, and sets the URL automatically.
 
-For local development, sign in with Azure CLI using `az login --tenant <test-tenant-id>`
+For local development, sign in with Azure CLI using `az login`
 and set only the test vault URL in your ignored `server/.env`:
 
 ```dotenv

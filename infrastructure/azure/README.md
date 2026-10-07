@@ -28,7 +28,7 @@ Use your own Azure CLI login to access the test vault. No additional app registr
 2. Sign in on the machine running the backend:
 
    ```bash
-   az login --tenant <test-tenant-id>
+   az login
    ```
 
 3. Take the test vault URL from the `keyVaultUrl` deployment output and add it to your ignored `server/.env`:
