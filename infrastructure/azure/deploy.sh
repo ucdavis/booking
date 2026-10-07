@@ -13,9 +13,6 @@ Usage:
 Required for infrastructure deployments:
   SQL_ADMIN_PASSWORD     SQL admin password used by Azure SQL.
 
-Optional infrastructure configuration:
-  SHARED_DEVELOPMENT_PRINCIPAL_ID  Service principal object ID for shared test-vault access (test only).
-
 Common configuration:
   APP_NAME               Base Azure resource name. Default: booking
   AZURE_SUBSCRIPTION_ID  Expected subscription. Default: current az account
@@ -130,14 +127,6 @@ if [[ "$resource_group_lower" != *"$expected_suffix" ]]; then
   die "RESOURCE_GROUP must end with '$expected_suffix' for '$DEPLOY_ENV' deployments."
 fi
 
-if is_true "$DEPLOY_INFRA" && [[ -n "${SHARED_DEVELOPMENT_PRINCIPAL_ID:-}" ]]; then
-  [[ "$DEPLOY_ENV" == "test" ]] || die "SHARED_DEVELOPMENT_PRINCIPAL_ID is supported only for test deployments."
-
-  if [[ ! "$SHARED_DEVELOPMENT_PRINCIPAL_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
-    die "SHARED_DEVELOPMENT_PRINCIPAL_ID must be a service principal object ID in GUID format."
-  fi
-fi
-
 require_command az
 
 # <deployment-settings:deploy-sh-required-checks>
@@ -231,7 +220,6 @@ if is_true "$DEPLOY_INFRA"; then
   add_param "sqlSkuTier" "${SQL_SKU_TIER:-}"
   add_param "webPlanName" "${WEB_PLAN_NAME:-}"
   add_param "webPlanResourceGroup" "${WEB_PLAN_RESOURCE_GROUP:-}"
-  add_param "sharedDevelopmentPrincipalId" "${SHARED_DEVELOPMENT_PRINCIPAL_ID:-}"
 
   printf 'Deploying infrastructure to %s...\n' "$RESOURCE_GROUP"
   az deployment group create \

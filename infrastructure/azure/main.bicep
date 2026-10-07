@@ -16,9 +16,6 @@ param expectedSubscriptionId string
 @description('Exact resource group expected for this deployment. Its name must also end with the environment suffix.')
 param expectedResourceGroupName string = 'rg-${appName}-${env}'
 
-@description('Optional service principal object ID for shared local development access to the test vault. Never assigned access to the production vault.')
-param sharedDevelopmentPrincipalId string = ''
-
 @description('Azure region for regional resources other than the web app, which uses the existing App Service plan location.')
 param location string = resourceGroup().location
 
@@ -174,17 +171,6 @@ module appVaultAccess 'modules/key-vault-role-assignment.bicep' = if (deployment
   params: {
     keyVaultName: keyVaultName
     principalId: compute!.outputs.principalId
-  }
-}
-
-module sharedDevelopmentVaultAccess 'modules/key-vault-role-assignment.bicep' = if (deploymentGuardPassed && env == 'test' && !empty(sharedDevelopmentPrincipalId)) {
-  name: 'shared-development-vault-access-${env}'
-  dependsOn: [
-    keyVault
-  ]
-  params: {
-    keyVaultName: keyVaultName
-    principalId: sharedDevelopmentPrincipalId
   }
 }
 
