@@ -26,7 +26,14 @@ param appInsightsConnectionString string
 @description('Application Insights instrumentation key for platform telemetry.')
 param appInsightsInstrumentationKey string
 
+@description('Key Vault URL used by the app managed identity to read and write secrets.')
+param keyVaultUrl string
+
 var baseAppSettings = [
+  {
+    name: 'Azure__KeyVaultUrl'
+    value: keyVaultUrl
+  }
   {
     name: 'ASPNETCORE_ENVIRONMENT'
     value: environmentName

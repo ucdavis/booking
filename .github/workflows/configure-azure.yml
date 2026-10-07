@@ -156,6 +156,7 @@ jobs:
             "appName=$APP_NAME"
             "env=$DEPLOY_ENV"
             "expectedSubscriptionId=$AZURE_SUBSCRIPTION_ID"
+            "expectedResourceGroupName=$RESOURCE_GROUP"
             "sqlAdminLogin=$SQL_ADMIN_LOGIN"
             "sqlAdminPassword=$SQL_ADMIN_PASSWORD"
           )
@@ -186,7 +187,7 @@ jobs:
 
           deployment_guard_passed="$(jq -r '.deploymentGuardPassed.value // false' deployment-outputs.json)"
           if [[ "$deployment_guard_passed" != "true" ]]; then
-            echo "Azure deployment guard did not pass. Check subscription ID, resource group suffix, and environment values."
+            echo "Azure deployment guard did not pass. Check subscription ID, expected resource group, and environment values."
             exit 1
           fi
 

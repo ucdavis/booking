@@ -209,6 +209,7 @@ if is_true "$DEPLOY_INFRA"; then
     "appName=$APP_NAME"
     "env=$DEPLOY_ENV"
     "expectedSubscriptionId=$AZURE_SUBSCRIPTION_ID"
+    "expectedResourceGroupName=$RESOURCE_GROUP"
   )
 
   add_param "location" "$AZURE_LOCATION"
@@ -237,7 +238,7 @@ if is_true "$DEPLOY_INFRA"; then
   )"
 
   if [[ "$deployment_guard_passed" != "true" ]]; then
-    die "Azure deployment guard did not pass. Check subscription ID, resource group suffix, and environment values."
+    die "Azure deployment guard did not pass. Check subscription ID, expected resource group, and environment values."
   fi
 
   WEB_APP_NAME="$(

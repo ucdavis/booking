@@ -41,6 +41,7 @@ var githubIssuer = 'https://token.actions.githubusercontent.com'
 var azureTokenExchangeAudience = 'api://AzureADTokenExchange'
 var contributorRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')
 var websiteContributorRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'de139f84-1756-47ae-9be6-808fbbe84772')
+var keyVaultDataAccessAdministratorRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8b54135c-b56d-4d72-a534-26097cfdc8d8')
 var appNameSafe = toLower(replace(replace(appName, ' ', ''), '_', ''))
 var webPlanRoleAssignmentDeploymentToken = substring(uniqueString(repository, deploymentIdentityName), 0, 8)
 var webPlanRoleAssignmentDeploymentName = '${take(appNameSafe, 32)}-${env}-web-plan-${webPlanRoleAssignmentDeploymentToken}'
@@ -91,6 +92,15 @@ module webPlanRoleAssignment 'modules/web-plan-role-assignment.bicep' = if (depl
   }
 }
 
+module keyVaultAccessAssignment 'modules/role-assignment.bicep' = if (deploymentGuardPassed && assignRbac) {
+  name: '${env}-key-vault-access-assignment'
+  scope: environmentResourceGroup
+  params: {
+    principalId: deploymentIdentity!.outputs.principalId
+    roleDefinitionId: keyVaultDataAccessAdministratorRoleDefinitionId
+  }
+}
+
 output clientId string = deploymentGuardPassed ? deploymentIdentity!.outputs.clientId : ''
 output deploymentIdentityName string = deploymentGuardPassed ? deploymentIdentity!.outputs.deploymentIdentityName : ''
 output deploymentGuardPassed bool = deploymentGuardPassed
@@ -98,6 +108,7 @@ output federatedCredentialSubject string = deploymentGuardPassed ? federatedCred
 output principalId string = deploymentGuardPassed ? deploymentIdentity!.outputs.principalId : ''
 output resourceGroupName string = deploymentGuardPassed ? environmentResourceGroup!.name : ''
 output roleAssignmentId string = deploymentGuardPassed && assignRbac ? contributorAssignment!.outputs.roleAssignmentId : ''
+output keyVaultAccessRoleAssignmentId string = deploymentGuardPassed && assignRbac ? keyVaultAccessAssignment!.outputs.roleAssignmentId : ''
 output subscriptionId string = deploymentGuardPassed ? subscription().subscriptionId : ''
 output tenantId string = deploymentGuardPassed ? tenant().tenantId : ''
 output webPlanRoleAssignmentId string = deploymentGuardPassed && assignRbac ? webPlanRoleAssignment!.outputs.roleAssignmentId : ''
