@@ -56,6 +56,7 @@ try
     builder.Services.AddScoped<IUserService, UserService>();
     builder.Services.AddRosettaClientWithFactory(options => builder.Configuration.GetSection("RosettaClient").Bind(options));
     builder.Services.AddScoped<IRosettaService, RosettaService>();
+    builder.Services.AddSecretsService(builder.Configuration);
     // add auth policies here
 
     // add db context (check secrets first, then config, then default)

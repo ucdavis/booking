@@ -194,6 +194,29 @@ Restart the backend and sign in again. In the `Development` environment, a match
 
 For local sandbox users, the IAM IDs are `sandbox-10001` (Sample User) and `sandbox-10002` (Basic User). This setting updates the database admin flag; the template's fixed `User` and `SampleRole` claims stay unchanged. The Docker sandbox excludes host `.env` files, so pass `DevelopmentData__AdminIamIds` to the app container's environment when using Docker.
 
+### Key Vault secrets
+
+`ISecretsService` provides asynchronous reads and writes by secret name. Configure
+`Azure__KeyVaultUrl="https://<vault-name>.vault.azure.net/"` in the server environment
+when the service is needed. For service principal authentication, also configure
+`Azure__TenantId`, `Azure__ClientId`, and `Azure__ClientSecret` together in the server
+environment. These select `ClientSecretCredential`; incomplete credentials are rejected.
+Omit all three to use `DefaultAzureCredential` with managed identity or your local Azure
+developer sign-in. Grant the selected identity permission to get and set secrets in the
+vault. Local sign-in and unrelated features can run without these settings because the
+client is created on demand.
+
+Future payments integration can pass `Team.PaymentsApiKeySecretName` to
+`GetSecretAsync` or `SetSecretAsync`. The service returns the latest secret value and
+creates a new version on each write. Keep only the secret name in the team record;
+never return the credential to the browser or log it. Missing secrets and Azure
+authentication or permission failures propagate to the caller. No payments API calls
+or credential-management endpoints are included yet.
+
+For example, a future server-side payments caller can resolve the API key with
+`var apiKey = await secretsService.GetSecretAsync(team.PaymentsApiKeySecretName!, cancellationToken);`
+after checking that the team has a secret name configured.
+
 ### Rosetta directory lookup
 
 Configure the installed Rosetta client in `server/.env` using the placeholders in `server/.env.example`:
