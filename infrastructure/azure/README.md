@@ -14,6 +14,12 @@ Changing GitHub Environment variables or secrets alone does not trigger a deploy
 
 Local `deploy_test.sh` and `deploy_prod.sh` are secondary operator tools. They apply runtime settings as part of deployment and do not perform the GitHub workflow's explicit application health check. Verify `/health` and sign-in after using them.
 
+## Payments base URL
+
+Manually set `PAYMENTS_BASE_URL` as a variable in each GitHub Environment (`test` and `prod`) to the payments service URL for that environment. **Configure Azure** and **CI/CD** apply nonempty values to the Azure App Service setting `Payments__BaseUrl`, which ASP.NET Core reads as `Payments:BaseUrl`.
+
+The setting is optional while the payments integration is inactive. Merges into `main` apply the test environment's value through automatic deployment when `AZURE_TEST_READY` is `true`; deploy production manually through **CI/CD**.
+
 ## Key Vault secrets
 
 `main.bicep` creates a separate Key Vault in each environment's resource group, using Azure RBAC, soft delete, and purge protection. It sets the App Service's `Azure__KeyVaultUrl` and grants its system-assigned managed identity **Key Vault Secrets Officer** at that vault's scope for secret management, including reads and writes. The template outputs `keyVaultName` and `keyVaultUrl`; it does not create or output secret values.
