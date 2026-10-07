@@ -210,8 +210,8 @@ Azure__KeyVaultUrl="https://<test-vault-name>.vault.azure.net/"
 
 An operator must grant your user or developer security group **Key Vault Secrets Officer**
 on the test vault for reads and writes. See [local development access](infrastructure/azure/README.md#local-development-access)
-for setup. Leave `Azure__TenantId`, `Azure__ClientId`, and `Azure__ClientSecret` unset;
-`DefaultAzureCredential` can use your Azure CLI login locally and managed identity in Azure.
+for setup. The service uses `DefaultAzureCredential` to authenticate with your Azure CLI
+login locally and managed identity in Azure.
 
 Local sign-in and unrelated features, including the Docker sandbox, can run without
 Key Vault settings because the client is created on demand. The sandbox does not inherit

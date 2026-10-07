@@ -16,7 +16,7 @@ Local `deploy_test.sh` and `deploy_prod.sh` are secondary operator tools. They a
 
 ## Key Vault secrets
 
-`main.bicep` creates a separate Key Vault in each environment's resource group, using Azure RBAC, soft delete, and purge protection. It sets the App Service's `Azure__KeyVaultUrl` and grants its system-assigned managed identity **Key Vault Secrets Officer** at that vault's scope for secret management, including reads and writes. Hosted apps omit `Azure__TenantId`, `Azure__ClientId`, and `Azure__ClientSecret` and use managed identity. The template outputs `keyVaultName` and `keyVaultUrl`; it does not create or output secret values.
+`main.bicep` creates a separate Key Vault in each environment's resource group, using Azure RBAC, soft delete, and purge protection. It sets the App Service's `Azure__KeyVaultUrl` and grants its system-assigned managed identity **Key Vault Secrets Officer** at that vault's scope for secret management, including reads and writes. The template outputs `keyVaultName` and `keyVaultUrl`; it does not create or output secret values.
 
 Before applying this infrastructure change to an existing environment, rerun the [OIDC bootstrap](../../README.customization.md#5-azure-deployment-setup) as an operator with permission to assign roles. The bootstrap adds **Key Vault Data Access Administrator** to that environment's deployment identity at the resource group scope so **Configure Azure** can assign the vault roles. Contributor alone cannot assign them. See [Key Vault RBAC roles](https://learn.microsoft.com/azure/key-vault/general/rbac-guide).
 
@@ -37,7 +37,7 @@ Use your own Azure CLI login to access the test vault. No additional app registr
    Azure__KeyVaultUrl="https://<test-vault-name>.vault.azure.net/"
    ```
 
-Leave `Azure__TenantId`, `Azure__ClientId`, and `Azure__ClientSecret` unset so the service uses `DefaultAzureCredential`, which supports your Azure CLI login. Azure-hosted apps use their managed identities. See [developer account authentication](https://learn.microsoft.com/dotnet/azure/sdk/authentication/local-development-dev-accounts).
+The service uses `DefaultAzureCredential` to authenticate with your Azure CLI login. Azure-hosted apps use their managed identities. See [developer account authentication](https://learn.microsoft.com/dotnet/azure/sdk/authentication/local-development-dev-accounts).
 
 The Docker sandbox can run without Key Vault configuration for unrelated features. It does not inherit the host's Azure CLI login. Run the backend on your host when testing features that require real test-vault access.
 
