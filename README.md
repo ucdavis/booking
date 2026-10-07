@@ -197,14 +197,30 @@ For local sandbox users, the IAM IDs are `sandbox-10001` (Sample User) and `sand
 ### Key Vault secrets
 
 `ISecretsService` provides asynchronous reads and writes by secret name. Configure
-`Azure__KeyVaultUrl="https://<vault-name>.vault.azure.net/"` in the server environment
-when the service is needed. For service principal authentication, also configure
-`Azure__TenantId`, `Azure__ClientId`, and `Azure__ClientSecret` together in the server
-environment. These select `ClientSecretCredential`; incomplete credentials are rejected.
-Omit all three to use `DefaultAzureCredential` with managed identity or your local Azure
-developer sign-in. Grant the selected identity permission to get and set secrets in the
-vault. Local sign-in and unrelated features can run without these settings because the
-client is created on demand.
+`Azure__KeyVaultUrl` when the service is needed. Azure deployment creates a vault in
+each environment's resource group, grants the App Service's managed identity access
+to that vault, and sets the URL automatically.
+
+For local development, copy the team's shared test-vault credentials into your ignored
+`server/.env`:
+
+```dotenv
+Azure__KeyVaultUrl="https://<test-vault-name>.vault.azure.net/"
+Azure__TenantId="<test-tenant-id>"
+Azure__ClientId="<development-application-client-id>"
+Azure__ClientSecret="<development-client-secret-value>"
+```
+
+These values select `ClientSecretCredential`; configure all three credential settings
+together. Developers do not need `az login` or individual Azure permissions. An operator
+creates the shared development service principal once and configures its test-vault
+access through Bicep; see [shared credentials setup](infrastructure/azure/README.md#shared-credentials-for-local-development).
+Keep the shared client secret out of source control and distribute it through the team's
+approved secure channel.
+
+Omit all three credential settings to use `DefaultAzureCredential`, including managed
+identity in Azure. Local sign-in and unrelated features can run without Key Vault
+settings because the client is created on demand.
 
 Future payments integration can pass `Team.PaymentsApiKeySecretName` to
 `GetSecretAsync` or `SetSecretAsync`. The service returns the latest secret value and

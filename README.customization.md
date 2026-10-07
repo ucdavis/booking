@@ -191,9 +191,9 @@ Run `infrastructure/azure/github-oidc.bicep` once per environment before the fir
 
 Why OIDC is used: GitHub Actions receives short-lived Azure tokens scoped to this repository and GitHub Environment. That removes the need to store long-lived Azure client secrets in GitHub.
 
-This bootstrap is only for deployment authentication from GitHub Actions to Azure. It does not create or configure the Microsoft Identity Web app registration used for end-user sign-in in section 3. It creates a user-assigned managed identity in the application resource group, adds the environment-scoped GitHub federated credential, and grants the identity Contributor on the application resource group and Website Contributor on the exact shared App Service plan by default.
+This bootstrap is only for deployment authentication from GitHub Actions to Azure. It does not create or configure the Microsoft Identity Web app registration used for end-user sign-in in section 3. It creates a user-assigned managed identity in the application resource group, adds the environment-scoped GitHub federated credential, and grants the identity Contributor and Key Vault Data Access Administrator on the application resource group and Website Contributor on the exact shared App Service plan by default.
 
-The managed identity lives in the resource group where it receives Contributor, matching the KOI deployment pattern. It can therefore manage its own managed-identity resource and federated credentials, but Contributor does not allow it to create, change, or delete Azure RBAC assignments.
+The managed identity lives in the resource group where it receives Contributor, matching the KOI deployment pattern. It can therefore manage its own managed-identity resource and federated credentials. Key Vault Data Access Administrator permits it to assign supported Key Vault data roles, including Secrets Officer, within that environment resource group; Contributor alone cannot manage Azure RBAC assignments. Reapply this bootstrap before running Configure Azure for an existing installation that has only Contributor, so the workflow can grant the app and optional shared development principal access to the vault.
 
 Validate the bootstrap for `test` before applying it:
 
@@ -236,7 +236,7 @@ az deployment sub create \
     webPlanResourceGroup="$web_plan_resource_group"
 ```
 
-For example, with the default `APP_NAME=booking`, use `deployment_name="github-oidc-booking"`. For production, repeat with `env="prod"`, a production deployment name such as `deployment_name="github-oidc-<app-name>-prod"`, a `-prod` resource group, `webPlanName="Nibbler"`, and `webPlanResourceGroup="service-plans-linux"`. The bootstrap output should include `deploymentGuardPassed=true`, `deploymentIdentityName`, `clientId`, `tenantId`, `subscriptionId`, `principalId`, `resourceGroupName`, `federatedCredentialSubject`, and `webPlanRoleAssignmentId`.
+For example, with the default `APP_NAME=booking`, use `deployment_name="github-oidc-booking"`. For production, repeat with `env="prod"`, a production deployment name such as `deployment_name="github-oidc-<app-name>-prod"`, a `-prod` resource group, `webPlanName="Nibbler"`, and `webPlanResourceGroup="service-plans-linux"`. The bootstrap output should include `deploymentGuardPassed=true`, `deploymentIdentityName`, `clientId`, `tenantId`, `subscriptionId`, `principalId`, `resourceGroupName`, `federatedCredentialSubject`, `keyVaultAccessRoleAssignmentId`, and `webPlanRoleAssignmentId`.
 
 If you did not set `--name`, Azure CLI usually names the deployment after the template file, for example `github-oidc`. Find recent subscription deployments with:
 
@@ -277,7 +277,7 @@ Then add the SQL admin password as a GitHub Environment secret:
 gh secret set SQL_ADMIN_PASSWORD --env test
 ```
 
-The operator needs permission to create the application resource group and user-assigned managed identity. With the default `assignRbac=true`, the operator also needs permission to create role assignments at both the application resource group and shared App Service plan scopes. Owner at subscription scope is sufficient; equivalent narrower permissions can combine resource-group and managed-identity creation rights with User Access Administrator or Role Based Access Control Administrator at the required role-assignment scopes. If those permissions are unavailable, run with `assignRbac=false`, then have an Azure owner assign Contributor to the emitted `principalId` on the application resource group and Website Contributor on the exact shared App Service plan.
+The operator needs permission to create the application resource group and user-assigned managed identity. With the default `assignRbac=true`, the operator also needs permission to create role assignments at both the application resource group and shared App Service plan scopes. Owner at subscription scope is sufficient; equivalent narrower permissions can combine resource-group and managed-identity creation rights with User Access Administrator or Role Based Access Control Administrator at the required role-assignment scopes. If those permissions are unavailable, run with `assignRbac=false`, then have an Azure owner assign Contributor and Key Vault Data Access Administrator to the emitted `principalId` on the application resource group and Website Contributor on the exact shared App Service plan.
 
 For an existing installation that used the previous deployment app registration, apply this bootstrap to create parallel RBAC assignments for the new managed identity. Then replace the GitHub Environment's `AZURE_CLIENT_ID` with the new `clientId`, run Configure Azure, and run a normal package deployment. The bootstrap does not delete the previous app registration, service principal, or RBAC assignments.
 
