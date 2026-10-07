@@ -194,6 +194,41 @@ Restart the backend and sign in again. In the `Development` environment, a match
 
 For local sandbox users, the IAM IDs are `sandbox-10001` (Sample User) and `sandbox-10002` (Basic User). This setting updates the database admin flag; the template's fixed `User` and `SampleRole` claims stay unchanged. The Docker sandbox excludes host `.env` files, so pass `DevelopmentData__AdminIamIds` to the app container's environment when using Docker.
 
+### Key Vault secrets
+
+`ISecretsService` provides asynchronous reads and writes by secret name. Configure
+`Azure__KeyVaultUrl` when the service is needed. Azure deployment creates a vault in
+each environment's resource group, grants the App Service's managed identity access
+to that vault, and sets the URL automatically.
+
+For local development, sign in with Azure CLI using `az login`
+and set only the test vault URL in your ignored `server/.env`:
+
+```dotenv
+Azure__KeyVaultUrl="https://<test-vault-name>.vault.azure.net/"
+```
+
+An operator must grant your user or developer security group **Key Vault Secrets Officer**
+on the test vault for reads and writes. See [local development access](infrastructure/azure/README.md#local-development-access)
+for setup. The service uses `DefaultAzureCredential` to authenticate with your Azure CLI
+login locally and managed identity in Azure.
+
+Local sign-in and unrelated features, including the Docker sandbox, can run without
+Key Vault settings because the client is created on demand. The sandbox does not inherit
+your host's Azure CLI login; use the backend running on your host to test features that
+need the real test vault.
+
+Future payments integration can pass `Team.PaymentsApiKeySecretName` to
+`GetSecretAsync` or `SetSecretAsync`. The service returns the latest secret value and
+creates a new version on each write. Keep only the secret name in the team record;
+never return the credential to the browser or log it. Missing secrets and Azure
+authentication or permission failures propagate to the caller. No payments API calls
+or credential-management endpoints are included yet.
+
+For example, a future server-side payments caller can resolve the API key with
+`var apiKey = await secretsService.GetSecretAsync(team.PaymentsApiKeySecretName!, cancellationToken);`
+after checking that the team has a secret name configured.
+
 ### Rosetta directory lookup
 
 Configure the installed Rosetta client in `server/.env` using the placeholders in `server/.env.example`:

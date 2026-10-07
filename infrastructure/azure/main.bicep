@@ -10,8 +10,11 @@ param appName string = 'booking'
 @description('Deployment environment. Only test and prod are supported by this template.')
 param env string
 
-@description('Expected Azure subscription ID. Resources are created only when this matches the current subscription and the resource group name ends with the environment suffix.')
+@description('Expected Azure subscription ID. Resources are created only in this subscription and the expected environment resource group.')
 param expectedSubscriptionId string
+
+@description('Exact resource group expected for this deployment. Its name must also end with the environment suffix.')
+param expectedResourceGroupName string = 'rg-${appName}-${env}'
 
 @description('Azure region for regional resources other than the web app, which uses the existing App Service plan location.')
 param location string = resourceGroup().location
@@ -64,12 +67,13 @@ var nameToken = substring(uniqueString(resourceGroup().id, appName, env), 0, 6)
 var normalizedExpectedSubscriptionId = toLower(expectedSubscriptionId)
 var normalizedCurrentSubscriptionId = toLower(subscription().subscriptionId)
 var expectedResourceGroupSuffix = '-${env}'
-var deploymentGuardPassed = !empty(expectedSubscriptionId) && normalizedCurrentSubscriptionId == normalizedExpectedSubscriptionId && endsWith(toLower(resourceGroup().name), expectedResourceGroupSuffix)
+var deploymentGuardPassed = !empty(expectedSubscriptionId) && normalizedCurrentSubscriptionId == normalizedExpectedSubscriptionId && toLower(resourceGroup().name) == toLower(expectedResourceGroupName) && endsWith(toLower(resourceGroup().name), expectedResourceGroupSuffix)
 
 var sqlServerName = toLower('sql-${appNameSafe}-${env}-${nameToken}')
 var webAppName = toLower('web-${appNameSafe}-${env}-${nameToken}')
 var appInsightsName = toLower('appi-${appNameSafe}-${env}-${nameToken}')
 var logAnalyticsWorkspaceName = toLower('log-${appNameSafe}-${env}-${nameToken}')
+var keyVaultName = 'kv-${env}-${uniqueString(resourceGroup().id, appName, env)}'
 
 var resourceTags = union(tags, {
   application: appName
@@ -79,6 +83,25 @@ var resourceTags = union(tags, {
 resource webPlan 'Microsoft.Web/serverfarms@2023-12-01' existing = {
   name: webPlanName
   scope: resourceGroup(webPlanResourceGroup)
+}
+
+resource keyVault 'Microsoft.KeyVault/vaults@2026-02-01' = if (deploymentGuardPassed) {
+  name: keyVaultName
+  location: location
+  tags: resourceTags
+  properties: {
+    tenantId: tenant().tenantId
+    sku: {
+      family: 'A'
+      name: 'standard'
+    }
+    enableRbacAuthorization: true
+    accessPolicies: []
+    enableSoftDelete: true
+    softDeleteRetentionInDays: 90
+    enablePurgeProtection: true
+    publicNetworkAccess: 'Enabled'
+  }
 }
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = if (deploymentGuardPassed) {
@@ -139,6 +162,15 @@ module compute 'modules/compute.bicep' = if (deploymentGuardPassed) {
     environmentName: env
     appInsightsConnectionString: appInsights!.properties.ConnectionString
     appInsightsInstrumentationKey: appInsights!.properties.InstrumentationKey
+    keyVaultUrl: keyVault!.properties.vaultUri
+  }
+}
+
+module appVaultAccess 'modules/key-vault-role-assignment.bicep' = if (deploymentGuardPassed) {
+  name: 'app-vault-access-${env}'
+  params: {
+    keyVaultName: keyVaultName
+    principalId: compute!.outputs.principalId
   }
 }
 
@@ -147,6 +179,8 @@ output appInsightsName string = deploymentGuardPassed ? appInsights!.name : ''
 output appServiceDefaultHostName string = deploymentGuardPassed ? compute!.outputs.defaultHostName : ''
 output appServicePrincipalId string = deploymentGuardPassed ? compute!.outputs.principalId : ''
 output deploymentGuardPassed bool = deploymentGuardPassed
+output keyVaultName string = deploymentGuardPassed ? keyVault!.name : ''
+output keyVaultUrl string = deploymentGuardPassed ? keyVault!.properties.vaultUri : ''
 output logAnalyticsWorkspaceName string = deploymentGuardPassed ? logAnalyticsWorkspace!.name : ''
 output sqlDatabaseName string = sqlDatabaseName
 output sqlServerName string = deploymentGuardPassed ? sql!.outputs.serverName : ''
