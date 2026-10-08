@@ -218,16 +218,40 @@ Key Vault settings because the client is created on demand. The sandbox does not
 your host's Azure CLI login; use the backend running on your host to test features that
 need the real test vault.
 
-Future payments integration can pass `Team.PaymentsApiKeySecretName` to
-`GetSecretAsync` or `SetSecretAsync`. The service returns the latest secret value and
-creates a new version on each write. Keep only the secret name in the team record;
-never return the credential to the browser or log it. Missing secrets and Azure
-authentication or permission failures propagate to the caller. No payments API calls
-or credential-management endpoints are included yet.
+The secrets service returns the latest secret value and creates a new version on each
+write. Keep only the secret name in the team record; never return the saved credential
+to the browser or log it. Missing secrets and Azure authentication or permission
+failures propagate to the caller.
 
-For example, a future server-side payments caller can resolve the API key with
-`var apiKey = await secretsService.GetSecretAsync(team.PaymentsApiKeySecretName!, cancellationToken);`
-after checking that the team has a secret name configured.
+### Team payments connection
+
+Set `Payments__BaseUrl` in `server/.env` to the HTTPS Payments service root, such as
+`https://payments-test.ucdavis.edu`. Azure deployments use the GitHub Environment
+variable `PAYMENTS_BASE_URL`; see [payments deployment settings](infrastructure/azure/README.md#payments-base-url).
+Configure Key Vault access as described above. Teams without a payments connection
+can still be viewed without either service configured.
+
+Site administrators and team administrators can set or replace a Payments API key
+from the team's **Overview** page. Booking validates the submitted key with
+`GET /api/team/` before saving it, then stores it under a generated Key Vault secret
+name and saves that reference and the returned `PaymentsTeamSlug` together. Each save
+uses a new secret name so concurrent replacements cannot mix credentials and slugs.
+Previous secrets are retained; a failed database save can leave an unused new secret.
+
+The overview checks the current stored key on load and through **Check connection**.
+It shows the Payments team name when verification succeeds, distinguishes rejected
+or disabled keys from temporary connection failures, and retains the saved slug when
+verification fails. Only administrators receive a masked saved key: its first and
+last three characters with `*` between them (keys of six or fewer characters are
+fully masked). The saved raw key is never returned to the browser.
+
+`IPaymentsService.GetTeamForApiKeyAsync` verifies a candidate without saving it.
+`GetTeamAsync` accepts a team's `PaymentsApiKeySecretName` and reads its latest value
+for each call. Both return `null` for a rejected key and throw on connection failures.
+The service takes explicit credentials or vault references and cancellation tokens,
+with no dependency on the current user or HTTP request, so jobs and workers can reuse
+it. Web endpoints enforce team authorization before invoking it. Only team lookup is
+implemented; other Payments operations can be added to this service later.
 
 ### Rosetta directory lookup
 

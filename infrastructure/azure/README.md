@@ -18,7 +18,7 @@ Local `deploy_test.sh` and `deploy_prod.sh` are secondary operator tools. They a
 
 Manually set `PAYMENTS_BASE_URL` as a variable in each GitHub Environment (`test` and `prod`) to the payments service URL for that environment. **Configure Azure** and **CI/CD** apply nonempty values to the Azure App Service setting `Payments__BaseUrl`, which ASP.NET Core reads as `Payments:BaseUrl`.
 
-The setting is optional while the payments integration is inactive. Merges into `main` apply the test environment's value through automatic deployment when `AZURE_TEST_READY` is `true`; deploy production manually through **CI/CD**.
+The setting is required when connecting a team to Payments; use the HTTPS service root, such as `https://payments-test.ucdavis.edu`, without `/api/team/`. Deployments remain possible when Payments is not configured. Merges into `main` apply the test environment's value through automatic deployment when `AZURE_TEST_READY` is `true`; deploy production manually through **CI/CD**.
 
 ## Key Vault secrets
 
