@@ -4,7 +4,16 @@ import { afterAll, afterEach, beforeAll } from 'vitest';
 
 // Create a shared MSW server instance that can be used across all tests
 export const testServer = setupServer(
-  http.get('/api/teams', () => HttpResponse.json([]))
+  http.get('/api/teams', () => HttpResponse.json([])),
+  http.get('/api/teams/:teamSlug/payments', () =>
+    HttpResponse.json({
+      maskedApiKey: null,
+      message: null,
+      paymentsTeamName: null,
+      paymentsTeamSlug: null,
+      status: 'unconfigured',
+    })
+  )
 );
 
 // Global setup for MSW server

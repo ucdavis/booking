@@ -159,6 +159,7 @@ describe('site admin teams', () => {
     const rendered = renderRoute({ initialPath: '/admin/teams' });
     cleanup = rendered.cleanup;
     const dialog = await openCreateDialog();
+    expect(dialog.queryByLabelText('Payments API key')).not.toBeInTheDocument();
     expect(
       dialog.getByText(/name and URL slug cannot be changed after creation/)
     ).toBeInTheDocument();

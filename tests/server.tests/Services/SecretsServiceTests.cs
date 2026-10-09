@@ -22,6 +22,7 @@ public class SecretsServiceTests
         services.AddSecretsService(new ConfigurationBuilder().Build());
 
         using var provider = BuildProvider(services);
+        provider.GetRequiredService<ISecretsService>().Should().BeOfType<SecretsService>();
     }
 
     [Fact]
@@ -47,7 +48,7 @@ public class SecretsServiceTests
     [InlineData("http://test-vault.vault.azure.net/")]
     [InlineData("test-invalid-vault-url")]
     [InlineData("https://[test-invalid-vault-url")]
-    public void Invalid_vault_urls_are_rejected_on_resolution_without_exposing_the_value(string? vaultUrl)
+    public async Task Invalid_vault_urls_are_rejected_on_use_without_exposing_the_value(string? vaultUrl)
     {
         var services = new ServiceCollection();
         services.AddSecretsService(Configuration(new Dictionary<string, string?>
@@ -55,9 +56,10 @@ public class SecretsServiceTests
             ["Azure:KeyVaultUrl"] = vaultUrl,
         }));
         using var provider = BuildProvider(services);
-        var resolve = () => provider.GetRequiredService<ISecretsService>();
+        var service = provider.GetRequiredService<ISecretsService>();
+        var read = () => service.GetSecretAsync("test-team-payments-api-key");
 
-        var error = (resolve.Should().Throw<InvalidOperationException>()).Which;
+        var error = (await read.Should().ThrowAsync<InvalidOperationException>()).Which;
 
         error.Message.Should().Contain("Azure:KeyVaultUrl");
         error.InnerException.Should().BeNull();
