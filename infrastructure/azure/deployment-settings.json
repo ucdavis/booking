@@ -5,6 +5,48 @@
   "overrides": {},
   "additions": [
     {
+      "githubName": "AGGIEENTERPRISE__GRAPHQLURL",
+      "appServiceName": "AggieEnterprise__GraphQlUrl",
+      "classification": "variable",
+      "valueType": "string",
+      "description": "Aggie Enterprise HTTPS GraphQL endpoint."
+    },
+    {
+      "githubName": "AGGIEENTERPRISE__CONSUMERKEY",
+      "appServiceName": "AggieEnterprise__ConsumerKey",
+      "classification": "variable",
+      "valueType": "string",
+      "description": "Aggie Enterprise OAuth client identifier (consumer key)."
+    },
+    {
+      "githubName": "AGGIEENTERPRISE__CONSUMERSECRET",
+      "appServiceName": "AggieEnterprise__ConsumerSecret",
+      "classification": "secret",
+      "valueType": "string",
+      "description": "Aggie Enterprise OAuth client secret."
+    },
+    {
+      "githubName": "AGGIEENTERPRISE__TOKENENDPOINT",
+      "appServiceName": "AggieEnterprise__TokenEndpoint",
+      "classification": "variable",
+      "valueType": "string",
+      "description": "Aggie Enterprise HTTPS OAuth token endpoint."
+    },
+    {
+      "githubName": "AGGIEENTERPRISE__SCOPEAPP",
+      "appServiceName": "AggieEnterprise__ScopeApp",
+      "classification": "variable",
+      "valueType": "string",
+      "description": "Application portion of the Aggie Enterprise OAuth scope."
+    },
+    {
+      "githubName": "AGGIEENTERPRISE__SCOPEENV",
+      "appServiceName": "AggieEnterprise__ScopeEnv",
+      "classification": "variable",
+      "valueType": "string",
+      "description": "Environment portion of the Aggie Enterprise OAuth scope."
+    },
+    {
       "githubName": "PAYMENTS_BASE_URL",
       "appServiceName": "Payments__BaseUrl",
       "classification": "variable",

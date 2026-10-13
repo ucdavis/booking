@@ -14,6 +14,30 @@ Changing GitHub Environment variables or secrets alone does not trigger a deploy
 
 Local `deploy_test.sh` and `deploy_prod.sh` are secondary operator tools. They apply runtime settings as part of deployment and do not perform the GitHub workflow's explicit application health check. Verify `/health` and sign-in after using them.
 
+## Aggie Enterprise chart string validation
+
+Add these settings to each GitHub Environment (`test` and `prod`) using the values
+for that environment:
+
+| GitHub Environment name | Type | App Service setting |
+| --- | --- | --- |
+| `AGGIEENTERPRISE__GRAPHQLURL` | Variable | `AggieEnterprise__GraphQlUrl` |
+| `AGGIEENTERPRISE__CONSUMERKEY` | Variable | `AggieEnterprise__ConsumerKey` |
+| `AGGIEENTERPRISE__CONSUMERSECRET` | Secret | `AggieEnterprise__ConsumerSecret` |
+| `AGGIEENTERPRISE__TOKENENDPOINT` | Variable | `AggieEnterprise__TokenEndpoint` |
+| `AGGIEENTERPRISE__SCOPEAPP` | Variable | `AggieEnterprise__ScopeApp` |
+| `AGGIEENTERPRISE__SCOPEENV` | Variable | `AggieEnterprise__ScopeEnv` |
+
+`ConsumerKey` identifies the OAuth client and can be stored as a variable.
+`ConsumerSecret` authenticates the client and must be stored as a secret. Both
+endpoints must use HTTPS; the service combines the scope values as `ScopeApp-ScopeEnv`.
+
+**Configure Azure**, **CI/CD**, and the local deploy scripts apply nonempty values
+to the App Service settings above. Deployments remain possible before these values
+are configured, but chart string validation requires all six. Adding the values in
+GitHub does not trigger a deployment; run **CI/CD** or **Configure Azure** to apply
+them. Empty or removed GitHub settings leave existing App Service values unchanged.
+
 ## Payments base URL
 
 Manually set `PAYMENTS_BASE_URL` as a variable in each GitHub Environment (`test` and `prod`) to the payments service URL for that environment. **Configure Azure** and **CI/CD** apply nonempty values to the Azure App Service setting `Payments__BaseUrl`, which ASP.NET Core reads as `Payments:BaseUrl`.

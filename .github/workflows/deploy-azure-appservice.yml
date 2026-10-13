@@ -207,6 +207,12 @@ jobs:
           WEB_APP_NAME: ${{ steps.resolve_app.outputs.web_app_name }}
           DB_CONNECTION: ${{ secrets.DB_CONNECTION }}
           # <deployment-settings:workflow-env>
+          AGGIEENTERPRISE__CONSUMERKEY: ${{ vars.AGGIEENTERPRISE__CONSUMERKEY }}
+          AGGIEENTERPRISE__CONSUMERSECRET: ${{ secrets.AGGIEENTERPRISE__CONSUMERSECRET }}
+          AGGIEENTERPRISE__GRAPHQLURL: ${{ vars.AGGIEENTERPRISE__GRAPHQLURL }}
+          AGGIEENTERPRISE__SCOPEAPP: ${{ vars.AGGIEENTERPRISE__SCOPEAPP }}
+          AGGIEENTERPRISE__SCOPEENV: ${{ vars.AGGIEENTERPRISE__SCOPEENV }}
+          AGGIEENTERPRISE__TOKENENDPOINT: ${{ vars.AGGIEENTERPRISE__TOKENENDPOINT }}
           AUTH_CALLBACK_PATH: ${{ vars.AUTH_CALLBACK_PATH || '/signin-oidc' }}
           AUTH_CLIENT_ID: ${{ vars.AUTH_CLIENT_ID }}
           AUTH_DOMAIN: ${{ vars.AUTH_DOMAIN }}
@@ -267,6 +273,12 @@ jobs:
               --output none
           fi
 
+          add_setting "AggieEnterprise__ConsumerKey" "$AGGIEENTERPRISE__CONSUMERKEY"
+          add_setting "AggieEnterprise__ConsumerSecret" "$AGGIEENTERPRISE__CONSUMERSECRET"
+          add_setting "AggieEnterprise__GraphQlUrl" "$AGGIEENTERPRISE__GRAPHQLURL"
+          add_setting "AggieEnterprise__ScopeApp" "$AGGIEENTERPRISE__SCOPEAPP"
+          add_setting "AggieEnterprise__ScopeEnv" "$AGGIEENTERPRISE__SCOPEENV"
+          add_setting "AggieEnterprise__TokenEndpoint" "$AGGIEENTERPRISE__TOKENENDPOINT"
           add_setting "Auth__CallbackPath" "$AUTH_CALLBACK_PATH"
           add_setting "Auth__ClientId" "$AUTH_CLIENT_ID"
           add_setting "Auth__Domain" "$AUTH_DOMAIN"
