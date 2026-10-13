@@ -253,6 +253,24 @@ with no dependency on the current user or HTTP request, so jobs and workers can 
 it. Web endpoints enforce team authorization before invoking it. Only team lookup is
 implemented; other Payments operations can be added to this service later.
 
+### Aggie Enterprise chart string validation
+
+Configure the six `AggieEnterprise__` settings in `server/.env.example` in your local
+`server/.env` or deployment environment: `GraphQlUrl`, `ConsumerKey`, `ConsumerSecret`,
+`TokenEndpoint`, `ScopeApp`, and `ScopeEnv`. Both endpoints must use HTTPS. The service
+combines the scope settings as `ScopeApp-ScopeEnv`. Configuration is required only
+when chart string validation is used.
+
+Inject `IAggieEnterpriseService` and call `ValidateChartStringAsync(chartString, cancellationToken)`
+for basic GL or PPM validation through `AggieEnterpriseApi`. The result preserves the
+input in `ChartString`, reports `IsValid`, and sets `ChartType` to `GL`, `PPM`, or `null`
+when the format is unrecognized. Validation and API errors appear in `Messages`,
+and segment warnings appear in `Warnings`. `Message` and `Warning` join their
+respective arrays with spaces. Warnings alone do not make a chart string invalid.
+Connection or configuration failures return an invalid result with a safe message;
+caller cancellation is propagated. The service performs no account conversion or
+transaction-specific checks, and GL cross-validation rules are disabled for this basic check.
+
 ### Rosetta directory lookup
 
 Configure the installed Rosetta client in `server/.env` using the placeholders in `server/.env.example`:

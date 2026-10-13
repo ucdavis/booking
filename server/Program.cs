@@ -58,6 +58,7 @@ try
     builder.Services.AddScoped<IRosettaService, RosettaService>();
     builder.Services.AddSecretsService(builder.Configuration);
     builder.Services.AddPaymentsService(builder.Configuration);
+    builder.Services.AddAggieEnterpriseService(builder.Configuration);
     // add auth policies here
 
     // add db context (check secrets first, then config, then default)
