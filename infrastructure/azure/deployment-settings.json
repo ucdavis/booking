@@ -5,6 +5,13 @@
   "overrides": {},
   "additions": [
     {
+      "githubName": "PAYMENTS_BASE_URL",
+      "appServiceName": "Payments__BaseUrl",
+      "classification": "variable",
+      "valueType": "string",
+      "description": "Payments API base URL."
+    },
+    {
       "githubName": "ROSETTACLIENT__BASEURL",
       "appServiceName": "RosettaClient__BaseUrl",
       "classification": "variable",

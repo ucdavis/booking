@@ -1,6 +1,7 @@
 import { queryOptions, type QueryClient } from '@tanstack/react-query';
 import type { TeamAccess } from '@/features/teams/models/TeamAccess.ts';
 import type { TeamMember } from '@/features/teams/models/TeamMember.ts';
+import type { TeamPaymentsSettings } from '@/features/teams/models/TeamPaymentsSettings.ts';
 import type { TeamPerson } from '@/features/teams/models/TeamPerson.ts';
 import type { TeamRole } from '@/features/teams/models/TeamRole.ts';
 import type { TeamSummary } from '@/features/teams/models/TeamSummary.ts';
@@ -34,6 +35,43 @@ export const teamAccessQueryOptions = (teamSlug: string) =>
     retry: false,
     staleTime: 0,
   });
+
+const teamPaymentsUrl = (teamSlug: string) =>
+  `/api/teams/${encodeURIComponent(teamSlug)}/payments`;
+
+export const teamPaymentsQueryOptions = (teamSlug: string, userId: string) =>
+  queryOptions({
+    gcTime: 0,
+    queryFn: ({ signal }) =>
+      fetchJson<TeamPaymentsSettings>(
+        teamPaymentsUrl(teamSlug),
+        { cache: 'no-store' },
+        signal
+      ),
+    queryKey: ['teams', 'payments', teamSlug, userId] as const,
+    retry: false,
+    staleTime: 0,
+  });
+
+export async function saveTeamPaymentsSettings(
+  teamSlug: string,
+  apiKey: string,
+  signal?: AbortSignal
+) {
+  try {
+    return await fetchJson<TeamPaymentsSettings>(
+      teamPaymentsUrl(teamSlug),
+      { body: JSON.stringify({ apiKey }), method: 'PUT' },
+      signal
+    );
+  } catch (error) {
+    // Do not retain response bodies from a credential submission in caches.
+    if (error instanceof HttpError) {
+      throw new HttpError(error.status, error.url);
+    }
+    throw error;
+  }
+}
 
 const teamMembersUrl = (teamSlug: string) =>
   `/api/teams/${encodeURIComponent(teamSlug)}/members`;

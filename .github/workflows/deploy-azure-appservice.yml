@@ -220,6 +220,7 @@ jobs:
           OTEL_EXPORTER_OTLP_PROTOCOL: ${{ vars.OTEL_EXPORTER_OTLP_PROTOCOL || 'http/protobuf' }}
           OTEL_RESOURCE_ATTRIBUTES: ${{ vars.OTEL_RESOURCE_ATTRIBUTES }}
           OTEL_SERVICE_NAME: ${{ vars.OTEL_SERVICE_NAME }}
+          PAYMENTS_BASE_URL: ${{ vars.PAYMENTS_BASE_URL }}
           ROSETTACLIENT__BASEURL: ${{ vars.ROSETTACLIENT__BASEURL }}
           ROSETTACLIENT__CLIENTID: ${{ vars.ROSETTACLIENT__CLIENTID }}
           ROSETTACLIENT__CLIENTSECRET: ${{ secrets.ROSETTACLIENT__CLIENTSECRET }}
@@ -279,6 +280,7 @@ jobs:
           add_setting "OTEL_EXPORTER_OTLP_PROTOCOL" "$OTEL_EXPORTER_OTLP_PROTOCOL"
           add_setting "OTEL_RESOURCE_ATTRIBUTES" "$OTEL_RESOURCE_ATTRIBUTES"
           add_setting "OTEL_SERVICE_NAME" "$OTEL_SERVICE_NAME"
+          add_setting "Payments__BaseUrl" "$PAYMENTS_BASE_URL"
           add_setting "RosettaClient__BaseUrl" "$ROSETTACLIENT__BASEURL"
           add_setting "RosettaClient__ClientId" "$ROSETTACLIENT__CLIENTID"
           add_setting "RosettaClient__ClientSecret" "$ROSETTACLIENT__CLIENTSECRET"

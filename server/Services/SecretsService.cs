@@ -10,13 +10,22 @@ public interface ISecretsService
     Task SetSecretAsync(string secretName, string value, CancellationToken cancellationToken = default);
 }
 
-public sealed class SecretsService(SecretClient client) : ISecretsService
+public sealed class SecretsService : ISecretsService
 {
+    private readonly Lazy<SecretClient> _client;
+
+    public SecretsService(SecretClient client) : this(() => client) { }
+
+    public SecretsService(Func<SecretClient> createClient)
+    {
+        _client = new Lazy<SecretClient>(createClient);
+    }
+
     public async Task<string> GetSecretAsync(string secretName, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(secretName);
 
-        var secret = await client.GetSecretAsync(secretName, cancellationToken: cancellationToken);
+        var secret = await _client.Value.GetSecretAsync(secretName, cancellationToken: cancellationToken);
         return secret.Value.Value;
     }
 
@@ -25,7 +34,7 @@ public sealed class SecretsService(SecretClient client) : ISecretsService
         ArgumentException.ThrowIfNullOrWhiteSpace(secretName);
         ArgumentException.ThrowIfNullOrEmpty(value);
 
-        await client.SetSecretAsync(secretName, value, cancellationToken);
+        await _client.Value.SetSecretAsync(secretName, value, cancellationToken);
     }
 }
 
@@ -64,7 +73,7 @@ public static class SecretsServiceCollectionExtensions
 
             return new SecretClient(vaultUri, credential);
         });
-        services.AddSingleton<ISecretsService, SecretsService>();
+        services.AddSingleton<ISecretsService>(provider => new SecretsService(() => provider.GetRequiredService<SecretClient>()));
         return services;
     }
 }

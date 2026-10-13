@@ -7,13 +7,23 @@ import {
   within,
 } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import type { TeamPaymentsSettings } from '@/features/teams/models/TeamPaymentsSettings.ts';
 import { TeamRole, teamRoleLabels } from '@/features/teams/models/TeamRole.ts';
 import {
   myTeamsQueryOptions,
   teamAccessQueryOptions,
+  teamPaymentsQueryOptions,
 } from '@/queries/teams.ts';
-import type { User } from '@/queries/user.ts';
+import { meQueryOptions, type User } from '@/queries/user.ts';
 import { server } from '@/test/mswUtils.ts';
 import { renderRoute } from '@/test/routerUtils.tsx';
 
@@ -29,11 +39,430 @@ const user: User = {
 const firstTeam = { id: 1, name: 'Plant Sciences', slug: 'plant-sciences' };
 const secondTeam = { id: 2, name: 'Animal Science', slug: 'animal-science' };
 let cleanup: (() => void) | undefined;
+const originalShowModal = Object.getOwnPropertyDescriptor(
+  HTMLDialogElement.prototype,
+  'showModal'
+);
+const originalClose = Object.getOwnPropertyDescriptor(
+  HTMLDialogElement.prototype,
+  'close'
+);
+
+beforeAll(() => {
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+    configurable: true,
+    value(this: HTMLDialogElement) {
+      this.setAttribute('open', '');
+    },
+  });
+  Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+    configurable: true,
+    value(this: HTMLDialogElement) {
+      this.removeAttribute('open');
+    },
+  });
+});
+
+afterAll(() => {
+  for (const [method, descriptor] of [
+    ['showModal', originalShowModal],
+    ['close', originalClose],
+  ] as const) {
+    if (descriptor) {
+      Object.defineProperty(HTMLDialogElement.prototype, method, descriptor);
+    } else {
+      Reflect.deleteProperty(HTMLDialogElement.prototype, method);
+    }
+  }
+});
 
 afterEach(() => {
   cleanup?.();
   cleanup = undefined;
   vi.restoreAllMocks();
+});
+
+const connectedPayments: TeamPaymentsSettings = {
+  maskedApiKey: 'abc*********xyz',
+  message: null,
+  paymentsTeamName: 'Plant Sciences Payments',
+  paymentsTeamSlug: 'plant-sciences-payments',
+  status: 'valid',
+};
+
+function mockPayments(settings: TeamPaymentsSettings = connectedPayments) {
+  server.use(
+    http.get('/api/teams/:teamSlug/payments', () =>
+      HttpResponse.json(settings)
+    ),
+    http.get('/api/antiforgery', () =>
+      HttpResponse.json({ requestToken: 'payments-test-token' })
+    )
+  );
+}
+
+async function openPaymentsDialog(buttonName = 'Replace API key') {
+  fireEvent.click(await screen.findByRole('button', { name: buttonName }));
+  return within(screen.getByRole('dialog'));
+}
+
+describe('team payments settings', () => {
+  it.each([false, true])(
+    'allows a team admin or site admin without membership to save a key (%s)',
+    async (isSiteAdmin) => {
+      mockUser(isSiteAdmin);
+      mockTeamAccess(isSiteAdmin ? null : 'admin');
+      const newKey = 'new-payment-test-key-123';
+      const settings: TeamPaymentsSettings = {
+        ...connectedPayments,
+        maskedApiKey: 'new*****************123',
+        paymentsTeamName: 'New Payments Team',
+        paymentsTeamSlug: 'new-payments-team',
+      };
+      let payments: TeamPaymentsSettings = {
+        maskedApiKey: null,
+        message: null,
+        paymentsTeamName: null,
+        paymentsTeamSlug: null,
+        status: 'unconfigured',
+      };
+      const { promise, resolve } = Promise.withResolvers<void>();
+      let postedKey: unknown;
+      let token: string | null = null;
+      mockPayments();
+      server.use(
+        http.get('/api/teams/:teamSlug/payments', () =>
+          HttpResponse.json(payments)
+        ),
+        http.put('/api/teams/:teamSlug/payments', async ({ request }) => {
+          postedKey = await request.json();
+          token = request.headers.get('RequestVerificationToken');
+          await promise;
+          payments = settings;
+          return HttpResponse.json(settings);
+        })
+      );
+      const rendered = renderRoute({ initialPath: '/teams/plant-sciences' });
+      cleanup = rendered.cleanup;
+      await screen.findByText('Not configured');
+      const dialog = await openPaymentsDialog('Set API key');
+      const input = dialog.getByLabelText('Payments API key');
+      expect(input).toHaveAttribute('type', 'password');
+      expect(input).toHaveValue('');
+      fireEvent.change(input, { target: { value: newKey } });
+      fireEvent.click(dialog.getByRole('button', { name: 'Verify and save' }));
+      await waitFor(() => expect(postedKey).toEqual({ apiKey: newKey }));
+      expect(token).toBe('payments-test-token');
+      expect(
+        dialog.getByRole('button', { name: 'Verifying and saving…' })
+      ).toBeDisabled();
+      expect(
+        rendered.queryClient
+          .getMutationCache()
+          .getAll()
+          .map((mutation) => mutation.state.variables)
+      ).toEqual([undefined]);
+      expect(
+        JSON.stringify(
+          rendered.queryClient
+            .getMutationCache()
+            .getAll()
+            .map((mutation) => mutation.state)
+        )
+      ).not.toContain(newKey);
+      resolve();
+      expect(
+        await screen.findByText('Payments API key verified and saved.')
+      ).toBeInTheDocument();
+      expect(screen.getByText(settings.paymentsTeamName!)).toBeInTheDocument();
+      expect(screen.getByText(settings.paymentsTeamSlug!)).toBeInTheDocument();
+      expect(screen.getByText(settings.maskedApiKey!)).toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(
+        JSON.stringify(
+          rendered.queryClient
+            .getQueryCache()
+            .getAll()
+            .map((query) => query.state.data)
+        )
+      ).not.toContain(newKey);
+      await waitFor(() =>
+        expect(rendered.queryClient.getMutationCache().getAll()).toHaveLength(0)
+      );
+      const reopened = await openPaymentsDialog();
+      expect(reopened.getByLabelText('Payments API key')).toHaveValue('');
+    }
+  );
+
+  it.each(['editor', 'viewer'] as const)(
+    'shows connection details without editing or the masked key for %s',
+    async (role) => {
+      mockUser();
+      mockTeamAccess(role);
+      mockPayments({ ...connectedPayments, maskedApiKey: null });
+      ({ cleanup } = renderRoute({ initialPath: '/teams/plant-sciences' }));
+      expect(await screen.findByText('Connected')).toBeInTheDocument();
+      expect(
+        screen.getByText(connectedPayments.paymentsTeamName!)
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /(?:Set|Replace) API key/ })
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText('Saved API key')).not.toBeInTheDocument();
+    }
+  );
+
+  it.each([400, 503])(
+    'keeps the saved settings and candidate after failure, without caching the candidate (%s)',
+    async (status) => {
+      mockUser();
+      mockTeamAccess('admin');
+      mockPayments();
+      const candidate = 'rejected-test-key-987';
+      server.use(
+        http.put('/api/teams/:teamSlug/payments', () =>
+          HttpResponse.json({ detail: candidate }, { status })
+        )
+      );
+      const rendered = renderRoute({ initialPath: '/teams/plant-sciences' });
+      cleanup = rendered.cleanup;
+      await screen.findByText('Connected');
+      const dialog = await openPaymentsDialog();
+      fireEvent.change(dialog.getByLabelText('Payments API key'), {
+        target: { value: candidate },
+      });
+      fireEvent.click(dialog.getByRole('button', { name: 'Verify and save' }));
+      expect(await dialog.findByRole('alert')).toHaveTextContent(
+        status === 400
+          ? 'This API key could not be validated.'
+          : 'We could not confirm the save.'
+      );
+      expect(dialog.getByLabelText('Payments API key')).toHaveValue(candidate);
+      expect(
+        screen.getByText(connectedPayments.maskedApiKey!)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(connectedPayments.paymentsTeamName!)
+      ).toBeInTheDocument();
+      expect(
+        JSON.stringify(
+          rendered.queryClient
+            .getQueryCache()
+            .getAll()
+            .map((query) => query.state.data)
+        )
+      ).not.toContain(candidate);
+      await waitFor(() =>
+        expect(rendered.queryClient.getMutationCache().getAll()).toHaveLength(0)
+      );
+      fireEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
+      const reopened = await openPaymentsDialog();
+      expect(reopened.getByLabelText('Payments API key')).toHaveValue('');
+    }
+  );
+
+  it('refreshes a saved key that was disabled later and distinguishes an outage', async () => {
+    mockUser();
+    mockTeamAccess('admin');
+    mockPayments();
+    ({ cleanup } = renderRoute({ initialPath: '/teams/plant-sciences' }));
+    await screen.findByText('Connected');
+    mockPayments({
+      ...connectedPayments,
+      paymentsTeamName: null,
+      status: 'invalid',
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Check connection' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'API key is invalid or disabled'
+    );
+    expect(
+      screen.getByText(connectedPayments.maskedApiKey!)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(connectedPayments.paymentsTeamSlug!)
+    ).toBeInTheDocument();
+    mockPayments({
+      ...connectedPayments,
+      paymentsTeamName: null,
+      status: 'unavailable',
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Check connection' }));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Unable to verify the connection'
+      )
+    );
+    expect(
+      screen.queryByText('API key is invalid or disabled')
+    ).not.toBeInTheDocument();
+  });
+
+  it('hides the editor immediately when a save is denied and rechecks access', async () => {
+    mockUser();
+    mockTeamAccess('admin');
+    mockPayments();
+    const rendered = renderRoute({ initialPath: '/teams/plant-sciences' });
+    cleanup = rendered.cleanup;
+    await screen.findByText('Connected');
+    const dialog = await openPaymentsDialog();
+    server.use(
+      http.put(
+        '/api/teams/:teamSlug/payments',
+        () => new HttpResponse(null, { status: 403 })
+      ),
+      http.get('/api/teams/plant-sciences', () =>
+        HttpResponse.json({
+          isSiteAdmin: false,
+          role: 'viewer',
+          team: firstTeam,
+        })
+      )
+    );
+    fireEvent.change(dialog.getByLabelText('Payments API key'), {
+      target: { value: 'revoked-access-test-key' },
+    });
+    fireEvent.click(dialog.getByRole('button', { name: 'Verify and save' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /(?:Set|Replace) API key/ })
+      ).not.toBeInTheDocument();
+      expect(
+        rendered.queryClient.getQueryData(
+          teamAccessQueryOptions(firstTeam.slug).queryKey
+        )
+      ).toMatchObject({ role: 'viewer' });
+    });
+    expect(screen.queryByText('Saved API key')).not.toBeInTheDocument();
+  });
+
+  it('clears the edit form when switching teams and never submits it to the next team', async () => {
+    mockUser();
+    mockTeamAccess('admin');
+    mockPayments();
+    const submissions = vi.fn(() => HttpResponse.json(connectedPayments));
+    server.use(http.put('/api/teams/:teamSlug/payments', submissions));
+    const rendered = renderRoute({ initialPath: '/teams/plant-sciences' });
+    cleanup = rendered.cleanup;
+    await screen.findByText('Connected');
+    const dialog = await openPaymentsDialog();
+    fireEvent.change(dialog.getByLabelText('Payments API key'), {
+      target: { value: 'first-team-only-test-key' },
+    });
+    await act(async () => {
+      await rendered.router.navigate({
+        params: { teamSlug: secondTeam.slug },
+        to: '/teams/$teamSlug',
+      });
+    });
+    expect(
+      await screen.findByRole('heading', { level: 1, name: secondTeam.name })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await screen.findByText('Connected');
+    const newDialog = await openPaymentsDialog();
+    expect(newDialog.getByLabelText('Payments API key')).toHaveValue('');
+    expect(submissions).not.toHaveBeenCalled();
+    expect(
+      rendered.queryClient.getQueryData(
+        teamPaymentsQueryOptions(secondTeam.slug, user.id).queryKey
+      )
+    ).toEqual(connectedPayments);
+  });
+
+  it('closes the editor and hides cached settings when a connection refresh is denied', async () => {
+    mockUser();
+    mockTeamAccess('admin');
+    mockPayments();
+    const rendered = renderRoute({ initialPath: '/teams/plant-sciences' });
+    cleanup = rendered.cleanup;
+    await screen.findByText('Connected');
+    const dialog = await openPaymentsDialog();
+    fireEvent.change(dialog.getByLabelText('Payments API key'), {
+      target: { value: 'unsaved-private-test-key' },
+    });
+    server.use(
+      http.get(
+        '/api/teams/:teamSlug/payments',
+        () => new HttpResponse(null, { status: 403 })
+      )
+    );
+    await act(async () => {
+      await rendered.queryClient.invalidateQueries({
+        queryKey: teamPaymentsQueryOptions(firstTeam.slug, user.id).queryKey,
+      });
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Your access to these payments settings has changed.'
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(connectedPayments.maskedApiKey!)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /(?:Set|Replace) API key/ })
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([false, true])(
+    'clears the candidate and aborts any submission when the effective user changes (pending: %s)',
+    async (isPending) => {
+      mockUser();
+      mockTeamAccess('admin');
+      mockPayments();
+      const requestStarted = Promise.withResolvers<void>();
+      const response = Promise.withResolvers<void>();
+      let wasAborted = false;
+      const submissions = vi.fn(async ({ request }: { request: Request }) => {
+        request.signal.addEventListener('abort', () => {
+          wasAborted = true;
+        });
+        requestStarted.resolve();
+        await response.promise;
+        return HttpResponse.json(connectedPayments);
+      });
+      server.use(http.put('/api/teams/:teamSlug/payments', submissions));
+      const rendered = renderRoute({ initialPath: '/teams/plant-sciences' });
+      cleanup = rendered.cleanup;
+      await screen.findByText('Connected');
+      const dialog = await openPaymentsDialog();
+      fireEvent.change(dialog.getByLabelText('Payments API key'), {
+        target: { value: 'previous-identity-test-key' },
+      });
+      try {
+        if (isPending) {
+          fireEvent.click(
+            dialog.getByRole('button', { name: 'Verify and save' })
+          );
+          await requestStarted.promise;
+        }
+        await act(async () => {
+          rendered.queryClient.setQueryData(meQueryOptions().queryKey, {
+            ...user,
+            iamId: '100002',
+            id: '2',
+            name: 'Another User',
+          });
+        });
+        await waitFor(() =>
+          expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+        );
+        if (isPending) {
+          await waitFor(() => expect(wasAborted).toBe(true));
+        }
+        await screen.findByText('Connected');
+        const reopened = await openPaymentsDialog();
+        expect(reopened.getByLabelText('Payments API key')).toHaveValue('');
+        expect(submissions).toHaveBeenCalledTimes(isPending ? 1 : 0);
+        expect(
+          screen.queryByText('Payments API key verified and saved.')
+        ).not.toBeInTheDocument();
+      } finally {
+        response.resolve();
+      }
+    }
+  );
 });
 
 function mockUser(isSiteAdmin = false) {
