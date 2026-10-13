@@ -269,7 +269,8 @@ and segment warnings appear in `Warnings`. `Message` and `Warning` join their
 respective arrays with spaces. Warnings alone do not make a chart string invalid.
 Connection or configuration failures return an invalid result with a safe message;
 caller cancellation is propagated. The service performs no account conversion or
-transaction-specific checks, and GL cross-validation rules are disabled for this basic check.
+transaction-specific checks. The basic GL check applies Aggie Enterprise
+cross-validation rules (CVRs).
 
 ### Rosetta directory lookup
 
