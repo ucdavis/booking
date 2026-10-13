@@ -56,7 +56,7 @@ public class AggieEnterpriseServiceTests
         variables.GetProperty("segmentString").GetString().Should().Be(chartString);
         if (chartType == "GL")
         {
-            variables.GetProperty("validateCVRs").GetBoolean().Should().BeFalse();
+            variables.GetProperty("validateCVRs").GetBoolean().Should().BeTrue();
         }
     }
 
