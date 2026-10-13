@@ -51,7 +51,7 @@ public sealed class AggieEnterpriseService : IAggieEnterpriseService
         {
             if (type == FinancialChartStringType.Gl)
             {
-                var result = await _client.Value.GlValidateChartstring.ExecuteAsync(chartString, false, cancellationToken);
+                var result = await _client.Value.GlValidateChartstring.ExecuteAsync(chartString, true, cancellationToken);
                 messages.AddRange(result.Errors.Select(error =>
                     error.Exception == null && !string.IsNullOrWhiteSpace(error.Message) ? error.Message : ServiceFailureMessage));
                 var validation = result.Data?.GlValidateChartstring;
