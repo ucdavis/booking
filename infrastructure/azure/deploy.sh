@@ -35,7 +35,10 @@ USAGE
   printf '%s\n' \
     'Deployment settings overlay: infrastructure/azure/deployment-settings.json' \
     'Template defaults: infrastructure/azure/deployment-settings-defaults.json' \
-    'AUTH_CALLBACK_PATH, AUTH_CLIENT_ID, AUTH_DOMAIN, AUTH_INSTANCE, AUTH_TENANT_ID' \
+    'AGGIEENTERPRISE__CONSUMERKEY, AGGIEENTERPRISE__CONSUMERSECRET' \
+    '  AGGIEENTERPRISE__GRAPHQLURL, AGGIEENTERPRISE__SCOPEAPP' \
+    '  AGGIEENTERPRISE__SCOPEENV, AGGIEENTERPRISE__TOKENENDPOINT, AUTH_CALLBACK_PATH' \
+    '  AUTH_CLIENT_ID, AUTH_DOMAIN, AUTH_INSTANCE, AUTH_TENANT_ID' \
     '  NOTIFICATION_BASE_URL, NOTIFICATION_DEFAULT_APP_NAME' \
     '  NOTIFICATION_DEFAULT_BUTTON_TEXT, OTEL_EXPORTER_OTLP_ENDPOINT' \
     '  OTEL_EXPORTER_OTLP_HEADERS, OTEL_EXPORTER_OTLP_PROTOCOL' \
@@ -270,6 +273,12 @@ if (( ${#disabled_settings[@]} > 0 )); then
     --output none
 fi
 
+add_setting "AggieEnterprise__ConsumerKey" "${AGGIEENTERPRISE__CONSUMERKEY:-}"
+add_setting "AggieEnterprise__ConsumerSecret" "${AGGIEENTERPRISE__CONSUMERSECRET:-}"
+add_setting "AggieEnterprise__GraphQlUrl" "${AGGIEENTERPRISE__GRAPHQLURL:-}"
+add_setting "AggieEnterprise__ScopeApp" "${AGGIEENTERPRISE__SCOPEAPP:-}"
+add_setting "AggieEnterprise__ScopeEnv" "${AGGIEENTERPRISE__SCOPEENV:-}"
+add_setting "AggieEnterprise__TokenEndpoint" "${AGGIEENTERPRISE__TOKENENDPOINT:-}"
 add_setting "Auth__CallbackPath" "${AUTH_CALLBACK_PATH:-/signin-oidc}"
 add_setting "Auth__ClientId" "${AUTH_CLIENT_ID:-}"
 add_setting "Auth__Domain" "${AUTH_DOMAIN:-}"
