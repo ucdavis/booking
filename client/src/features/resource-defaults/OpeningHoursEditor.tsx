@@ -65,7 +65,7 @@ export const OpeningHoursEditor = withFieldGroup({
                     Each period stays within its selected day, with closing time
                     after opening time.
                   </p>
-                  <div className="divide-y divide-base-300 rounded-lg border border-base-300">
+                  <div className="divide-y divide-base-300 rounded-sm border border-base-300">
                     {resourceDefaultsDays.map((day) => (
                       <group.Field
                         key={day.key}

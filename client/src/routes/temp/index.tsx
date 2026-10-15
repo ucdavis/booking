@@ -6,11 +6,9 @@ import {
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { ResourceCard } from '@/features/reservations/ResourceCard.tsx';
 import {
   buildings,
   reservations,
-  resources,
 } from '@/features/reservations/mockData.ts';
 
 export const Route = createFileRoute('/temp/')({
@@ -29,22 +27,16 @@ const timeFormatter = new Intl.DateTimeFormat('en-US', {
 });
 
 function ReservationHomePage() {
-  const featuredResources = resources
-    .filter((resource) => resource.availability !== 'unavailable')
-    .slice(0, 3);
-
   return (
     <main className="content-container py-4 sm:py-8">
-      <section className="relative isolate overflow-hidden rounded-xl border-b-8 border-secondary bg-primary px-6 py-10 text-primary-content sm:px-10 sm:py-14">
-        <div
+      <section className="relative isolate overflow-hidden rounded-sm border-b-8 border-secondary bg-primary px-6 py-10 text-primary-content sm:px-10 sm:py-14">
+        <img
+          alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 overflow-hidden"
-        >
-          <span className="absolute -top-20 right-0 h-64 w-64 rounded-full bg-info/25" />
-          <span className="absolute right-44 top-12 h-24 w-24 rounded-full bg-secondary/25" />
-          <span className="absolute -bottom-12 right-20 h-48 w-48 rounded-full bg-primary-content/10" />
-        </div>
-        <div className="relative max-w-3xl">
+          className="pointer-events-none absolute top-1/2 right-6 hidden h-60 w-auto -translate-y-1/2 opacity-80 lg:block"
+          src="/bike-cow.svg"
+        />
+        <div className="relative max-w-3xl lg:w-3/5">
           <p className="mt-3 text-xl font-semibold tracking-tight sm:text-3xl">
             Reserve rooms, shared laboratory benches, and standalone equipment
             across campus.
@@ -93,21 +85,19 @@ function ReservationHomePage() {
             ['Equipment', 'Standalone instruments and event equipment', '67'],
           ].map(([title, description, count]) => (
             <Link
-              className="group rounded-lg border border-base-300 bg-base-200 p-5 transition hover:border-primary hover:shadow-sm"
+              className="group rounded-sm border border-base-300 bg-base-200 p-5 transition hover:border-primary hover:shadow-sm"
               key={title}
               to="/temp/resources"
             >
               <div className="flex items-center justify-between">
-                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary group-hover:bg-secondary">
-                  {title === 'Equipment' ? (
-                    <CubeIcon aria-hidden="true" className="h-5 w-5" />
-                  ) : (
-                    <CalendarDaysIcon aria-hidden="true" className="h-5 w-5" />
-                  )}
-                </span>
+                {title === 'Equipment' ? (
+                  <CubeIcon aria-hidden="true" className="h-5 w-5 text-primary" />
+                ) : (
+                  <CalendarDaysIcon aria-hidden="true" className="h-5 w-5 text-primary" />
+                )}
                 <span className="text-sm text-base-content/60">{count} available</span>
               </div>
-              <h3 className="mt-5 text-lg font-semibold text-primary">{title}</h3>
+              <h3 className="mt-4 text-lg font-semibold text-primary">{title}</h3>
               <p className="mt-1 text-sm leading-6 text-base-content/70">
                 {description}
               </p>
@@ -116,34 +106,10 @@ function ReservationHomePage() {
         </div>
       </section>
 
-      <section aria-labelledby="featured-heading" className="mt-14">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold tracking-wide text-base-content/60 uppercase">
-              Available now
-            </p>
-            <h2
-              className="mt-1 text-2xl font-semibold text-primary"
-              id="featured-heading"
-            >
-              Popular resources
-            </h2>
-          </div>
-          <Link className="link link-primary text-sm" to="/temp/resources">
-            View availability
-          </Link>
-        </div>
-        <div className="mt-5 grid gap-5 lg:grid-cols-3">
-          {featuredResources.map((resource) => (
-            <ResourceCard key={resource.id} resource={resource} />
-          ))}
-        </div>
-      </section>
-
       <div className="mt-14 grid gap-8 lg:grid-cols-[1.3fr_0.7fr]">
         <section
           aria-labelledby="reservations-heading"
-          className="rounded-xl border border-base-300 bg-base-200 p-6 sm:p-8"
+          className="rounded-sm border border-base-300 bg-base-200 p-6 sm:p-8"
         >
           <div className="flex items-center justify-between gap-4 border-b border-base-300 pb-5">
             <div>
@@ -197,7 +163,7 @@ function ReservationHomePage() {
 
         <section
           aria-labelledby="buildings-heading"
-          className="rounded-xl bg-base-300/60 p-6 sm:p-8"
+          className="rounded-sm bg-base-300/60 p-6 sm:p-8"
         >
           <p className="text-sm font-semibold tracking-wide text-base-content/60 uppercase">
             Locations
@@ -210,7 +176,7 @@ function ReservationHomePage() {
           </h2>
           <ul className="mt-5 space-y-4">
             {buildings.map((building) => (
-              <li className="rounded-lg bg-base-200 p-4" key={building.code}>
+              <li className="rounded-sm bg-base-200 p-4" key={building.code}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="font-semibold">{building.name}</h3>

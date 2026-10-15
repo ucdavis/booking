@@ -43,7 +43,7 @@ function SiteAdminPage() {
         className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3"
       >
         <Link
-          className="group flex flex-col rounded-2xl border border-base-300 bg-base-100 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
+          className="group flex flex-col rounded-sm border border-base-300 bg-base-100 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
           to="/admin/users"
         >
           <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -65,7 +65,7 @@ function SiteAdminPage() {
           </span>
         </Link>
         <Link
-          className="group flex flex-col rounded-2xl border border-base-300 bg-base-100 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
+          className="group flex flex-col rounded-sm border border-base-300 bg-base-100 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
           to="/admin/teams"
         >
           <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -84,7 +84,7 @@ function SiteAdminPage() {
           </span>
         </Link>
         <Link
-          className="group flex flex-col rounded-2xl border border-base-300 bg-base-100 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
+          className="group flex flex-col rounded-sm border border-base-300 bg-base-100 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
           to="/admin/resource-templates"
         >
           <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary">

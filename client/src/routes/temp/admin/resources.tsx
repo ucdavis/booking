@@ -23,7 +23,7 @@ function ManageResourcesPage() {
         <button className="btn btn-primary" type="button"><PlusIcon aria-hidden="true" className="h-5 w-5" /> Add resource</button>
       </div>
 
-      <section aria-labelledby="inventory-heading" className="mt-10 overflow-hidden rounded-xl border border-base-300 bg-base-200">
+      <section aria-labelledby="inventory-heading" className="mt-10 overflow-hidden rounded-sm border border-base-300 bg-base-200">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-base-300 px-5 py-5 sm:px-6">
           <div><h2 className="font-semibold text-primary" id="inventory-heading">All resources</h2><p className="mt-1 text-sm text-base-content/65">{resources.length} items shown</p></div>
           <label className="input input-sm flex items-center gap-2"><span className="sr-only">Search inventory</span><input placeholder="Search inventory" type="search" /></label>

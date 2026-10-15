@@ -81,7 +81,7 @@ export function FormBuilder({
         </p>
       )}
       {!value.fields.length ? (
-        <div className="rounded-xl border border-dashed border-base-300 p-8 text-center text-base-content/65">
+        <div className="rounded-sm border border-dashed border-base-300 p-8 text-center text-base-content/65">
           Your form is empty. Add a field or a text block to get started.
         </div>
       ) : (
@@ -89,7 +89,7 @@ export function FormBuilder({
           <ol aria-label="Form fields" className="space-y-3">
             {value.fields.map((field, index) => (
               <li
-                className={`rounded-xl border p-4 ${selectedField?.id === field.id ? 'border-primary bg-primary/5' : 'border-base-300 bg-base-100'}`}
+                className={`rounded-sm border p-4 ${selectedField?.id === field.id ? 'border-primary bg-primary/5' : 'border-base-300 bg-base-100'}`}
                 key={field.id}
                 onDragOver={(event) => {
                   if (!disabled && draggedId) {
@@ -184,7 +184,7 @@ export function FormBuilder({
             ))}
           </ol>
           {selectedField && (
-            <div className="rounded-xl border border-base-300 bg-base-100 p-5">
+            <div className="rounded-sm border border-base-300 bg-base-100 p-5">
               <FormFieldEditor
                 disabled={disabled}
                 field={selectedField}

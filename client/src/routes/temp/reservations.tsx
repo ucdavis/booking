@@ -39,7 +39,7 @@ function MyReservationsPage() {
         <h2 className="text-xl font-semibold text-primary" id="upcoming-heading">Upcoming</h2>
         <div className="mt-5 space-y-4">
           {reservations.map((reservation) => (
-            <article className="rounded-xl border border-base-300 bg-base-200 p-5 sm:p-6" key={reservation.id}>
+            <article className="rounded-sm border border-base-300 bg-base-200 p-5 sm:p-6" key={reservation.id}>
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex min-w-0 items-start gap-4">
                   <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><CalendarDaysIcon aria-hidden="true" className="h-6 w-6" /></span>
@@ -61,7 +61,7 @@ function MyReservationsPage() {
         </div>
       </section>
 
-      <section aria-labelledby="past-heading" className="mt-12 rounded-xl border border-dashed border-base-300 bg-base-200 px-6 py-10">
+      <section aria-labelledby="past-heading" className="mt-12 rounded-sm border border-dashed border-base-300 bg-base-200 px-6 py-10">
         <h2 className="text-lg font-semibold text-primary" id="past-heading">Past reservations</h2>
         <p className="mt-2 text-base-content/70">Your completed reservations will appear here.</p>
       </section>

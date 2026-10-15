@@ -85,7 +85,7 @@ function ResourceTemplatesPage() {
         </div>
         <Link className="btn btn-primary shrink-0" to="/admin/resource-templates/new"><PlusIcon aria-hidden="true" className="h-5 w-5" />Create template</Link>
       </div>
-      <section aria-label="Resource templates" className="mt-8 rounded-xl border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6">
+      <section aria-label="Resource templates" className="mt-8 rounded-sm border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6">
         <label className="mb-6 flex items-center gap-3 text-sm"><input checked={showArchived} className="checkbox checkbox-sm" onChange={(event) => setShowArchived(event.target.checked)} type="checkbox" />Include archived templates</label>
         {duplicateMutation.isError && <p className="mb-4 text-error" role="alert">{duplicateError}</p>}
         {templatesQuery.isPending ? <p className="py-8 text-center text-base-content/70" role="status">Loading templates…</p>

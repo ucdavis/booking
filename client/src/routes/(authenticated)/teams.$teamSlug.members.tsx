@@ -285,7 +285,7 @@ function TeamMembersPage() {
       {editingMember && !isCurrentUser(editingMember) && (
         <form
           aria-labelledby="change-team-role-heading"
-          className="mt-6 rounded-xl border border-base-300 bg-base-100 p-5"
+          className="mt-6 rounded-sm border border-base-300 bg-base-100 p-5"
           onSubmit={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -365,7 +365,7 @@ function TeamMembersPage() {
       {removingMember && !isCurrentUser(removingMember) && (
         <section
           aria-labelledby="remove-team-member-heading"
-          className="mt-6 rounded-xl border border-warning/40 bg-warning/10 p-5"
+          className="mt-6 rounded-sm border border-warning/40 bg-warning/10 p-5"
         >
           <h3 className="font-semibold" id="remove-team-member-heading">
             Remove team member?
@@ -407,7 +407,7 @@ function TeamMembersPage() {
 
       <section
         aria-label="Team members"
-        className="mt-8 rounded-xl border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6"
+        className="mt-8 rounded-sm border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6"
       >
         {membersQuery.data.length === 0 ? (
           <p className="py-8 text-center text-base-content/70">

@@ -95,7 +95,7 @@ function SiteAdminTeamsPage() {
 
       <section
         aria-label="All teams"
-        className="mt-8 rounded-xl border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6"
+        className="mt-8 rounded-sm border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6"
       >
         {teamsQuery.isPending ? (
           <p className="py-8 text-center text-base-content/70" role="status">

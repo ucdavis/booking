@@ -19,7 +19,7 @@ export const ResourceDefaultsEditor = withFieldGroup({
     return (
       <section
         aria-label="Resource defaults"
-        className="space-y-5 rounded-xl border border-base-300 bg-base-100 p-5"
+        className="space-y-5 rounded-sm border border-base-300 bg-base-100 p-5"
       >
         <div>
           <h2 className="text-xl font-semibold text-primary">
@@ -32,7 +32,7 @@ export const ResourceDefaultsEditor = withFieldGroup({
         </div>
         {unavailableReason ? (
           <div
-            className="space-y-2 rounded-lg border border-warning bg-warning/10 p-4"
+            className="space-y-2 rounded-sm border border-warning bg-warning/10 p-4"
             role="status"
           >
             <p>

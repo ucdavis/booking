@@ -35,7 +35,7 @@ function TeamOverviewPage() {
 
   return (
     <>
-      <section className="max-w-3xl rounded-xl border border-base-300 bg-base-100 p-6 shadow-sm sm:p-8">
+      <section className="max-w-3xl rounded-sm border border-base-300 bg-base-100 p-6 shadow-sm sm:p-8">
         <h2 className="text-xl font-semibold text-primary">Team overview</h2>
         <dl className="mt-6 grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
           <dt className="text-sm font-medium text-base-content/65">

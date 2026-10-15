@@ -52,7 +52,7 @@ function EditResourceTemplatePage() {
     return (
       <main className="content-container py-8">
         <h1 className="text-3xl font-semibold text-primary">{template.name}</h1>
-        <div className="mt-6 rounded-xl border border-warning bg-warning/10 p-5" role="alert">
+        <div className="mt-6 rounded-sm border border-warning bg-warning/10 p-5" role="alert">
           <h2 className="font-semibold">This template cannot be edited with this builder</h2>
           <p className="mt-2">{error instanceof Error ? error.message : 'The saved form definition is not supported.'} The saved template has been preserved.</p>
         </div>

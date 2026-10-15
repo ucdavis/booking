@@ -99,7 +99,7 @@ export function CreateTeamDialog({
         <p className="mt-2 text-base-content/70" id="create-team-description">
           Choose a name and URL for the new team.
         </p>
-        <p className="mt-5 rounded-lg border border-warning/40 bg-warning/10 p-4 text-sm">
+        <p className="mt-5 rounded-sm border border-warning/40 bg-warning/10 p-4 text-sm">
           The team name and URL slug cannot be changed after creation. Check
           both carefully before creating the team.
         </p>
