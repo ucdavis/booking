@@ -16,8 +16,7 @@ function ManageResourcesPage() {
       </nav>
       <div className="flex flex-wrap items-end justify-between gap-5">
         <div>
-          <p className="text-sm font-semibold tracking-wide text-primary uppercase">Administration</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-primary sm:text-4xl">Resource inventory</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">Resource inventory</h1>
           <p className="mt-3 max-w-2xl text-lg text-base-content/70">Maintain buildings, rooms, benches, and standalone equipment from one inventory.</p>
         </div>
         <button className="btn btn-primary" type="button"><PlusIcon aria-hidden="true" className="h-5 w-5" /> Add resource</button>

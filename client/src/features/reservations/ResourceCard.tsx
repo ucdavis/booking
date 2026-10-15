@@ -22,13 +22,13 @@ export function ResourceCard({ resource }: { resource: Resource }) {
   return (
     <article className="flex h-full flex-col rounded-sm border border-base-300 bg-base-200 p-5">
       <div className="flex items-center gap-3">
-        <Icon aria-hidden="true" className="h-5 w-5 shrink-0 text-primary" />
         <div>
           <p className="text-xs font-semibold tracking-wide text-base-content/60 uppercase">
             {resourceKindLabels[resource.kind]}
           </p>
           <h3 className="font-semibold text-primary">{resource.name}</h3>
         </div>
+        <Icon aria-hidden="true" className="ml-auto h-5 w-5 shrink-0 text-primary" />
       </div>
 
       <p className="mt-4 flex-1 text-sm leading-6 text-base-content/75">
@@ -78,9 +78,7 @@ export function ResourceCard({ resource }: { resource: Resource }) {
           params={{ resourceId: resource.id }}
           to="/temp/resources/$resourceId"
         >
-          {resource.reservationMode === 'child-resources'
-            ? 'View benches'
-            : 'View'}
+          Reserve
         </Link>
       </div>
     </article>
