@@ -33,7 +33,7 @@ function ReservationHomePage() {
         <img
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 right-6 hidden h-60 w-auto -translate-y-1/2 opacity-80 lg:block"
+          className="pointer-events-none absolute top-1/2 right-6 hidden h-60 w-auto -translate-y-1/2 opacity-60 lg:block"
           src="/bike-cow.svg"
         />
         <div className="relative max-w-3xl lg:w-3/5">
