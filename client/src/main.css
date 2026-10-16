@@ -13,7 +13,7 @@
   --color-accent-color: var(--color-ucd-tahoe);
   --color-error-color: var(--color-ucd-strawberry);
   --color-info-color: var(--color-ucd-arboretum);
-  --color-neutral-color: var(--color-ucd-redbud);
+  --color-neutral-color: oklch(14% 0.005 285.823);
   --color-success-color: var(--color-ucd-sage);
   --color-warning-color: var(--color-ucd-sunflower);
 }

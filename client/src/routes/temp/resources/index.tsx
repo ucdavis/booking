@@ -10,13 +10,25 @@ import {
 
 export const Route = createFileRoute('/temp/resources/')({
   component: ResourceDirectoryPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    availability: search.availability === 'now' ? 'now' : undefined,
+    kind: ['room', 'bench', 'equipment'].includes(String(search.kind))
+      ? (search.kind as ResourceKind)
+      : undefined,
+    q: typeof search.q === 'string' ? search.q : undefined,
+  }),
 });
 
 function ResourceDirectoryPage() {
+  const initialSearch = Route.useSearch();
   const [building, setBuilding] = useState('all');
-  const [kind, setKind] = useState<'all' | ResourceKind>('all');
-  const [search, setSearch] = useState('');
-  const [showAvailableOnly, setShowAvailableOnly] = useState(false);
+  const [kind, setKind] = useState<'all' | ResourceKind>(
+    initialSearch.kind ?? 'all'
+  );
+  const [search, setSearch] = useState(initialSearch.q ?? '');
+  const [showAvailableOnly, setShowAvailableOnly] = useState(
+    initialSearch.availability === 'now'
+  );
 
   const filteredResources = useMemo(
     () =>
