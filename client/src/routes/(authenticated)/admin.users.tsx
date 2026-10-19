@@ -2,8 +2,9 @@ import { UserGroupIcon, UserPlusIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import type { ColumnDef } from '@tanstack/react-table';
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { AddAdminUserDialog } from '@/features/admin/AddAdminUserDialog.tsx';
+import { RemoveAdminUserDialog } from '@/features/admin/RemoveAdminUserDialog.tsx';
 import type { AdminUser } from '@/features/admin/models/AdminUser.ts';
 import { HttpError } from '@/lib/api.ts';
 import {
@@ -26,8 +27,12 @@ function SiteAdminUsersPage() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [removingUser, setRemovingUser] = useState<AdminUser | null>(null);
   const [notice, setNotice] = useState('');
-  const isCurrentUser = (user: AdminUser) =>
-    user.iamId.trim().toLowerCase() === currentUser.iamId?.trim().toLowerCase();
+  const isCurrentUser = useCallback(
+    (user: AdminUser) =>
+      user.iamId.trim().toLowerCase() ===
+      currentUser.iamId?.trim().toLowerCase(),
+    [currentUser.iamId]
+  );
   const removeMutation = useMutation({
     mutationFn: (user: AdminUser) => removeAdminUser(user.id),
     onSuccess: async (_data, user) => {
@@ -37,55 +42,64 @@ function SiteAdminUsersPage() {
     },
   });
 
-  const columns: ColumnDef<AdminUser>[] = [
-    {
-      accessorKey: 'name',
-      cell: ({ row }) => (
-        <span className="font-medium">{row.original.name}</span>
-      ),
-      header: 'Name',
+  const { reset: resetRemoveMutation } = removeMutation;
+  const openRemoval = useCallback(
+    (user: AdminUser) => {
+      if (!isCurrentUser(user)) {
+        setRemovingUser(user);
+        setNotice('');
+        resetRemoveMutation();
+      }
     },
-    {
-      accessorKey: 'email',
-      cell: ({ row }) => row.original.email || 'Not available',
-      header: 'Email',
-    },
-    { accessorKey: 'iamId', header: 'IAM ID' },
-    {
-      accessorKey: 'isActive',
-      cell: ({ row }) => (
-        <span
-          className={`badge badge-sm ${row.original.isActive ? 'badge-success badge-outline' : 'badge-ghost'}`}
-        >
-          {row.original.isActive ? 'Active' : 'Inactive'}
-        </span>
-      ),
-      header: 'Status',
-    },
-    {
-      cell: ({ row }) =>
-        isCurrentUser(row.original) ? (
-          <span className="badge badge-outline">You</span>
-        ) : (
-          <button
-            aria-label={`Remove admin access for ${row.original.name}`}
-            className="btn btn-ghost btn-sm text-error"
-            disabled={removeMutation.isPending}
-            onClick={() => {
-              setRemovingUser(row.original);
-              setNotice('');
-              removeMutation.reset();
-            }}
-            type="button"
-          >
-            Remove
-          </button>
+    [isCurrentUser, resetRemoveMutation]
+  );
+  const columns = useMemo<ColumnDef<AdminUser>[]>(
+    () => [
+      {
+        accessorKey: 'name',
+        cell: ({ row }) => (
+          <span className="font-medium">{row.original.name}</span>
         ),
-      enableSorting: false,
-      header: 'Actions',
-      id: 'actions',
-    },
-  ];
+        header: 'Name',
+      },
+      {
+        accessorKey: 'email',
+        cell: ({ row }) => row.original.email || 'Not available',
+        header: 'Email',
+      },
+      { accessorKey: 'iamId', header: 'IAM ID' },
+      {
+        accessorKey: 'isActive',
+        cell: ({ row }) => (
+          <span
+            className={`badge badge-sm ${row.original.isActive ? 'badge-success badge-outline' : 'badge-ghost'}`}
+          >
+            {row.original.isActive ? 'Active' : 'Inactive'}
+          </span>
+        ),
+        header: 'Status',
+      },
+      {
+        cell: ({ row }) =>
+          isCurrentUser(row.original) ? (
+            <span className="badge badge-outline">You</span>
+          ) : (
+            <button
+              aria-label={`Remove admin access for ${row.original.name}`}
+              className="btn btn-ghost btn-sm text-error"
+              onClick={() => openRemoval(row.original)}
+              type="button"
+            >
+              Remove
+            </button>
+          ),
+        enableSorting: false,
+        header: 'Actions',
+        id: 'actions',
+      },
+    ],
+    [isCurrentUser, openRemoval]
+  );
 
   if (
     usersQuery.error instanceof HttpError &&
@@ -146,49 +160,26 @@ function SiteAdminUsersPage() {
         </p>
       )}
 
-      {removingUser && (
-        <section
-          aria-labelledby="remove-admin-heading"
-          className="mt-6 rounded-sm border border-warning/40 bg-warning/10 p-5"
-        >
-          <h2 className="font-semibold" id="remove-admin-heading">
-            Remove admin access?
-          </h2>
-          <p className="mt-2 text-base-content/80">
-            {removingUser.name} will no longer be a site admin. Their user
-            record and other access will remain.
-          </p>
-          {removeMutation.isError && (
-            <p className="mt-3 text-error" role="alert">
-              {removeMutation.error instanceof HttpError &&
-              removeMutation.error.status === 403
+      {removingUser && !isCurrentUser(removingUser) && (
+        <RemoveAdminUserDialog
+          errorMessage={
+            removeMutation.isError
+              ? removeMutation.error instanceof HttpError &&
+                removeMutation.error.status === 403
                 ? 'You no longer have permission to manage site admin users.'
-                : 'We could not remove admin access. Please try again.'}
-            </p>
-          )}
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              className="btn btn-error btn-sm"
-              disabled={removeMutation.isPending}
-              onClick={() => {
-                if (!isCurrentUser(removingUser)) {
-                  removeMutation.mutate(removingUser);
-                }
-              }}
-              type="button"
-            >
-              {removeMutation.isPending ? 'Removing…' : 'Confirm removal'}
-            </button>
-            <button
-              className="btn btn-ghost btn-sm"
-              disabled={removeMutation.isPending}
-              onClick={() => setRemovingUser(null)}
-              type="button"
-            >
-              Cancel
-            </button>
-          </div>
-        </section>
+                : 'We could not remove admin access. Please try again.'
+              : null
+          }
+          isPending={removeMutation.isPending}
+          key={removingUser.id}
+          onClose={() => setRemovingUser(null)}
+          onConfirm={() => {
+            if (!isCurrentUser(removingUser) && !removeMutation.isPending) {
+              removeMutation.mutate(removingUser);
+            }
+          }}
+          user={removingUser}
+        />
       )}
 
       <section
@@ -217,21 +208,23 @@ function SiteAdminUsersPage() {
             There are no site admin users.
           </p>
         ) : (
-          <DataTable
-            columns={columns}
-            data={usersQuery.data}
-            filterPlaceholder="Search admin users…"
-            initialState={{
-              pagination: { pageSize: 10 },
-              sorting: [{ desc: false, id: 'name' }],
-            }}
-            tableActions={
-              <p className="text-sm text-base-content/60">
-                {usersQuery.data.length} admin{' '}
-                {usersQuery.data.length === 1 ? 'user' : 'users'}
-              </p>
-            }
-          />
+          <fieldset className="min-w-0" disabled={removeMutation.isPending}>
+            <DataTable
+              columns={columns}
+              data={usersQuery.data}
+              filterPlaceholder="Search admin users…"
+              initialState={{
+                pagination: { pageSize: 10 },
+                sorting: [{ desc: false, id: 'name' }],
+              }}
+              tableActions={
+                <p className="text-sm text-base-content/60">
+                  {usersQuery.data.length} admin{' '}
+                  {usersQuery.data.length === 1 ? 'user' : 'users'}
+                </p>
+              }
+            />
+          </fieldset>
         )}
       </section>
 

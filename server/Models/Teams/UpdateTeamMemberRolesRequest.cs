@@ -7,4 +7,6 @@ public sealed class UpdateTeamMemberRolesRequest
 {
     [Required]
     public List<TeamRole>? Roles { get; init; }
+
+    public bool ConfirmSelfAccessChange { get; init; }
 }

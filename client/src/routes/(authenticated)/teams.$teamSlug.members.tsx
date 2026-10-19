@@ -1,5 +1,10 @@
 import { UserPlusIcon } from '@heroicons/react/24/outline';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import {
   createFileRoute,
   Link,
@@ -7,9 +12,10 @@ import {
   type ErrorComponentProps,
 } from '@tanstack/react-router';
 import type { ColumnDef } from '@tanstack/react-table';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AddTeamMemberDialog } from '@/features/teams/AddTeamMemberDialog.tsx';
-import { EditTeamMemberRolesForm } from '@/features/teams/EditTeamMemberRolesForm.tsx';
+import { EditTeamMemberRolesDialog } from '@/features/teams/EditTeamMemberRolesDialog.tsx';
+import { RemoveTeamMemberDialog } from '@/features/teams/RemoveTeamMemberDialog.tsx';
 import type { TeamMember } from '@/features/teams/models/TeamMember.ts';
 import { TeamRole, teamRoleLabels } from '@/features/teams/models/TeamRole.ts';
 import { HttpError } from '@/lib/api.ts';
@@ -18,7 +24,10 @@ import {
   invalidateTeamMemberQueries,
   removeTeamMember,
   teamAccessQueryOptions,
+  teamMemberMutationKey,
+  teamMembersQueryKey,
   teamMembersQueryOptions,
+  teamSelfAccessMutationFilter,
 } from '@/queries/teams.ts';
 import { meQueryOptions } from '@/queries/user.ts';
 import { useUser } from '@/shared/auth/UserContext.tsx';
@@ -53,14 +62,19 @@ export const Route = createFileRoute(
 
 function TeamMembersPage() {
   const { teamSlug } = Route.useParams();
+  const navigate = Route.useNavigate();
   const currentUser = useUser();
   const queryClient = useQueryClient();
+  const isChangingOwnAccess =
+    useIsMutating(teamSelfAccessMutationFilter(teamSlug)) > 0;
   const accessQuery = useQuery({
     ...teamAccessQueryOptions(teamSlug),
+    enabled: !isChangingOwnAccess,
     refetchOnMount: false,
   });
   const membersQuery = useQuery({
     ...teamMembersQueryOptions(teamSlug, currentUser.id),
+    enabled: !isChangingOwnAccess,
     refetchOnMount: false,
   });
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -74,23 +88,73 @@ function TeamMembersPage() {
       queryKey: ['teams', 'access', teamSlug],
     });
   }, [queryClient, teamSlug]);
-  const isCurrentUser = (member: TeamMember) =>
-    member.iamId.trim().toLowerCase() ===
-    currentUser.iamId?.trim().toLowerCase();
+  const isCurrentUser = useCallback(
+    (member: TeamMember) =>
+      member.iamId.trim().toLowerCase() ===
+      currentUser.iamId?.trim().toLowerCase(),
+    [currentUser.iamId]
+  );
+  const isSiteAdmin = accessQuery.data?.isSiteAdmin ?? currentUser.isSiteAdmin;
+  const pauseOwnAccessReads = async ({
+    changesOwnAccess,
+  }: {
+    changesOwnAccess: boolean;
+  }) => {
+    if (changesOwnAccess) {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: teamMembersQueryKey(teamSlug) }),
+        queryClient.cancelQueries({ queryKey: ['teams', 'access', teamSlug] }),
+        queryClient.cancelQueries({ queryKey: ['teams', 'people', teamSlug] }),
+      ]);
+    }
+  };
+  const leaveMemberManagement = async (removed: boolean) => {
+    await invalidateTeamMemberQueries(queryClient, teamSlug, 'none');
+    await (removed
+      ? navigate({ replace: true, to: '/me' })
+      : navigate({
+          params: { teamSlug },
+          replace: true,
+          to: '/teams/$teamSlug',
+        }));
+    queryClient.removeQueries({ queryKey: teamMembersQueryKey(teamSlug) });
+    queryClient.removeQueries({ queryKey: ['teams', 'people', teamSlug] });
+    if (removed) {
+      queryClient.removeQueries({ queryKey: ['teams', 'access', teamSlug] });
+    }
+    await queryClient.invalidateQueries({ queryKey: ['teams', 'memberships'] });
+  };
   const roleMutation = useMutation({
-    mutationFn: ({
+    mutationFn: async ({
+      changesOwnAccess,
+      confirmSelfAccessChange,
       member,
       roles,
     }: {
+      changesOwnAccess: boolean;
+      confirmSelfAccessChange: boolean;
       member: TeamMember;
       roles: TeamRole[];
-    }) => changeTeamMemberRoles(teamSlug, member.id, roles),
+    }) => {
+      await pauseOwnAccessReads({ changesOwnAccess });
+      return changeTeamMemberRoles(
+        teamSlug,
+        member.id,
+        roles,
+        confirmSelfAccessChange
+      );
+    },
+    mutationKey: teamMemberMutationKey(teamSlug),
     onError: (error) => {
       if (error instanceof HttpError && error.status === 403) {
         denyAccess();
       }
     },
-    onSuccess: async (member) => {
+    onSuccess: async (member, { changesOwnAccess }) => {
+      if (changesOwnAccess) {
+        await leaveMemberManagement(false);
+        return;
+      }
       await invalidateTeamMemberQueries(queryClient, teamSlug);
       setEditingMember(null);
       setNotice(
@@ -99,13 +163,29 @@ function TeamMembersPage() {
     },
   });
   const removeMutation = useMutation({
-    mutationFn: (member: TeamMember) => removeTeamMember(teamSlug, member.id),
+    mutationFn: async ({
+      changesOwnAccess,
+      confirmSelfAccessChange,
+      member,
+    }: {
+      changesOwnAccess: boolean;
+      confirmSelfAccessChange: boolean;
+      member: TeamMember;
+    }) => {
+      await pauseOwnAccessReads({ changesOwnAccess });
+      return removeTeamMember(teamSlug, member.id, confirmSelfAccessChange);
+    },
+    mutationKey: teamMemberMutationKey(teamSlug),
     onError: (error) => {
       if (error instanceof HttpError && error.status === 403) {
         denyAccess();
       }
     },
-    onSuccess: async (_data, member) => {
+    onSuccess: async (_data, { changesOwnAccess, member }) => {
+      if (changesOwnAccess) {
+        await leaveMemberManagement(true);
+        return;
+      }
       await invalidateTeamMemberQueries(queryClient, teamSlug);
       setRemovingMember(null);
       setNotice(`${member.name} was removed from this team.`);
@@ -113,7 +193,7 @@ function TeamMembersPage() {
   });
 
   useEffect(() => {
-    if (!(membersQuery.error instanceof HttpError)) {
+    if (isChangingOwnAccess || !(membersQuery.error instanceof HttpError)) {
       return;
     }
     if (membersQuery.error.status === 401) {
@@ -127,65 +207,80 @@ function TeamMembersPage() {
         queryKey: ['teams', 'access', teamSlug],
       });
     }
-  }, [membersQuery.error, queryClient, teamSlug]);
+  }, [isChangingOwnAccess, membersQuery.error, queryClient, teamSlug]);
 
   const isBusy = roleMutation.isPending || removeMutation.isPending;
-  const columns: ColumnDef<TeamMember>[] = [
-    {
-      accessorKey: 'name',
-      cell: ({ row }) => (
-        <span className="font-medium">{row.original.name}</span>
-      ),
-      header: 'Name',
+  const { reset: resetRoleMutation } = roleMutation;
+  const { reset: resetRemoveMutation } = removeMutation;
+  const openRoleEditor = useCallback(
+    (member: TeamMember) => {
+      setEditingMember(member);
+      setRemovingMember(null);
+      setNotice('');
+      resetRoleMutation();
     },
-    {
-      accessorKey: 'email',
-      cell: ({ row }) => row.original.email || 'Not available',
-      header: 'Email',
+    [resetRoleMutation]
+  );
+  const openMemberRemoval = useCallback(
+    (member: TeamMember) => {
+      setRemovingMember(member);
+      setEditingMember(null);
+      setNotice('');
+      resetRemoveMutation();
     },
-    { accessorKey: 'iamId', header: 'IAM ID' },
-    {
-      accessorFn: (member) =>
-        member.roles.map((role) => teamRoleLabels[role]).join(', '),
-      cell: ({ row }) => (
-        <div className="flex flex-wrap gap-1">
-          {row.original.roles.map((role) => (
-            <span className="badge badge-outline badge-sm" key={role}>
-              {teamRoleLabels[role]}
-            </span>
-          ))}
-        </div>
-      ),
-      header: 'Roles',
-      id: 'roles',
-    },
-    {
-      accessorKey: 'isActive',
-      cell: ({ row }) => (
-        <span
-          className={`badge badge-sm ${row.original.isActive ? 'badge-success badge-outline' : 'badge-ghost'}`}
-        >
-          {row.original.isActive ? 'Active' : 'Inactive'}
-        </span>
-      ),
-      header: 'Status',
-    },
-    {
-      cell: ({ row }) =>
-        isCurrentUser(row.original) ? (
-          <span className="badge badge-outline">You</span>
-        ) : (
+    [resetRemoveMutation]
+  );
+  const columns = useMemo<ColumnDef<TeamMember>[]>(
+    () => [
+      {
+        accessorKey: 'name',
+        cell: ({ row }) => (
+          <span className="font-medium">{row.original.name}</span>
+        ),
+        header: 'Name',
+      },
+      {
+        accessorKey: 'email',
+        cell: ({ row }) => row.original.email || 'Not available',
+        header: 'Email',
+      },
+      { accessorKey: 'iamId', header: 'IAM ID' },
+      {
+        accessorFn: (member) =>
+          member.roles.map((role) => teamRoleLabels[role]).join(', '),
+        cell: ({ row }) => (
           <div className="flex flex-wrap gap-1">
+            {row.original.roles.map((role) => (
+              <span className="badge badge-outline badge-sm" key={role}>
+                {teamRoleLabels[role]}
+              </span>
+            ))}
+          </div>
+        ),
+        header: 'Roles',
+        id: 'roles',
+      },
+      {
+        accessorKey: 'isActive',
+        cell: ({ row }) => (
+          <span
+            className={`badge badge-sm ${row.original.isActive ? 'badge-success badge-outline' : 'badge-ghost'}`}
+          >
+            {row.original.isActive ? 'Active' : 'Inactive'}
+          </span>
+        ),
+        header: 'Status',
+      },
+      {
+        cell: ({ row }) => (
+          <div className="flex flex-wrap gap-1">
+            {isCurrentUser(row.original) && (
+              <span className="badge badge-outline self-center">You</span>
+            )}
             <button
               aria-label={`Manage roles for ${row.original.name}`}
               className="btn btn-ghost btn-sm"
-              disabled={isBusy}
-              onClick={() => {
-                setEditingMember(row.original);
-                setRemovingMember(null);
-                setNotice('');
-                roleMutation.reset();
-              }}
+              onClick={() => openRoleEditor(row.original)}
               type="button"
             >
               Manage roles
@@ -193,24 +288,20 @@ function TeamMembersPage() {
             <button
               aria-label={`Remove ${row.original.name} from team`}
               className="btn btn-ghost btn-sm text-error"
-              disabled={isBusy}
-              onClick={() => {
-                setRemovingMember(row.original);
-                setEditingMember(null);
-                setNotice('');
-                removeMutation.reset();
-              }}
+              onClick={() => openMemberRemoval(row.original)}
               type="button"
             >
               Remove member
             </button>
           </div>
         ),
-      enableSorting: false,
-      header: 'Actions',
-      id: 'actions',
-    },
-  ];
+        enableSorting: false,
+        header: 'Actions',
+        id: 'actions',
+      },
+    ],
+    [isCurrentUser, openMemberRemoval, openRoleEditor]
+  );
 
   if (
     membersQuery.error instanceof HttpError &&
@@ -223,13 +314,13 @@ function TeamMembersPage() {
     accessQuery.isSuccess &&
     (accessQuery.data.isSiteAdmin ||
       accessQuery.data.roles.includes(TeamRole.Admin));
-  if (accessDenied || !canManage) {
+  if (!isChangingOwnAccess && (accessDenied || !canManage)) {
     return <TeamMembersError error={new HttpError(403, '/api/teams')} />;
   }
-  if (membersQuery.isError) {
+  if (membersQuery.isError && !isChangingOwnAccess) {
     return <TeamMembersError error={membersQuery.error} />;
   }
-  if (membersQuery.isPending) {
+  if (membersQuery.isPending || !membersQuery.data) {
     return <p role="status">Loading team members…</p>;
   }
 
@@ -239,8 +330,8 @@ function TeamMembersPage() {
         <div>
           <h2 className="text-2xl font-semibold text-primary">Team members</h2>
           <p className="mt-3 max-w-2xl text-base-content/70">
-            Add people and manage their roles on this team. You cannot change
-            your own roles or remove yourself.
+            Add people and manage their roles on this team. Changes that remove
+            your own administrator access require confirmation.
           </p>
         </div>
         <button
@@ -263,63 +354,47 @@ function TeamMembersPage() {
         </p>
       )}
 
-      {editingMember && !isCurrentUser(editingMember) && (
-        <EditTeamMemberRolesForm
+      {editingMember && (
+        <EditTeamMemberRolesDialog
           hasError={roleMutation.isError}
+          isCurrentUser={isCurrentUser(editingMember)}
           isPending={roleMutation.isPending}
+          isSiteAdmin={isSiteAdmin}
           key={editingMember.id}
           member={editingMember}
-          onCancel={() => setEditingMember(null)}
           onChange={() => roleMutation.reset()}
-          onSave={async (roles) => {
-            if (!isCurrentUser(editingMember)) {
-              await roleMutation.mutateAsync({ member: editingMember, roles });
-            }
+          onClose={() => setEditingMember(null)}
+          onSave={async (roles, confirmSelfAccessChange) => {
+            await roleMutation.mutateAsync({
+              changesOwnAccess:
+                isCurrentUser(editingMember) &&
+                !isSiteAdmin &&
+                !roles.includes(TeamRole.Admin),
+              confirmSelfAccessChange,
+              member: editingMember,
+              roles,
+            });
           }}
         />
       )}
 
-      {removingMember && !isCurrentUser(removingMember) && (
-        <section
-          aria-labelledby="remove-team-member-heading"
-          className="mt-6 rounded-sm border border-warning/40 bg-warning/10 p-5"
-        >
-          <h3 className="font-semibold" id="remove-team-member-heading">
-            Remove team member?
-          </h3>
-          <p className="mt-2 text-base-content/80">
-            Remove all of {removingMember.name}&apos;s roles on this team. Their
-            user account, other teams, and any site admin access will remain.
-          </p>
-          {removeMutation.isError && (
-            <p className="mt-3 text-error" role="alert">
-              We could not remove this team member. Refresh the page to check
-              their current access, then try again.
-            </p>
-          )}
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              className="btn btn-error btn-sm"
-              disabled={removeMutation.isPending}
-              onClick={() => {
-                if (!isCurrentUser(removingMember)) {
-                  removeMutation.mutate(removingMember);
-                }
-              }}
-              type="button"
-            >
-              {removeMutation.isPending ? 'Removing…' : 'Confirm removal'}
-            </button>
-            <button
-              className="btn btn-ghost btn-sm"
-              disabled={removeMutation.isPending}
-              onClick={() => setRemovingMember(null)}
-              type="button"
-            >
-              Cancel
-            </button>
-          </div>
-        </section>
+      {removingMember && (
+        <RemoveTeamMemberDialog
+          hasError={removeMutation.isError}
+          isCurrentUser={isCurrentUser(removingMember)}
+          isPending={removeMutation.isPending}
+          isSiteAdmin={isSiteAdmin}
+          key={removingMember.id}
+          member={removingMember}
+          onClose={() => setRemovingMember(null)}
+          onConfirm={() =>
+            removeMutation.mutate({
+              changesOwnAccess: isCurrentUser(removingMember) && !isSiteAdmin,
+              confirmSelfAccessChange: isCurrentUser(removingMember),
+              member: removingMember,
+            })
+          }
+        />
       )}
 
       <section
@@ -331,21 +406,23 @@ function TeamMembersPage() {
             This team does not have any members yet.
           </p>
         ) : (
-          <DataTable
-            columns={columns}
-            data={membersQuery.data}
-            filterPlaceholder="Search team members…"
-            initialState={{
-              pagination: { pageSize: 10 },
-              sorting: [{ desc: false, id: 'name' }],
-            }}
-            tableActions={
-              <p className="text-sm text-base-content/60">
-                {membersQuery.data.length}{' '}
-                {membersQuery.data.length === 1 ? 'member' : 'members'}
-              </p>
-            }
-          />
+          <fieldset className="min-w-0" disabled={isBusy}>
+            <DataTable
+              columns={columns}
+              data={membersQuery.data}
+              filterPlaceholder="Search team members…"
+              initialState={{
+                pagination: { pageSize: 10 },
+                sorting: [{ desc: false, id: 'name' }],
+              }}
+              tableActions={
+                <p className="text-sm text-base-content/60">
+                  {membersQuery.data.length}{' '}
+                  {membersQuery.data.length === 1 ? 'member' : 'members'}
+                </p>
+              }
+            />
+          </fieldset>
         )}
       </section>
 

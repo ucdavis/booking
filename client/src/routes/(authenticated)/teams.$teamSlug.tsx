@@ -1,5 +1,5 @@
 import { UserGroupIcon } from '@heroicons/react/24/outline';
-import { useQuery } from '@tanstack/react-query';
+import { useIsMutating, useQuery } from '@tanstack/react-query';
 import {
   createFileRoute,
   Link,
@@ -10,7 +10,10 @@ import {
 import { useEffect } from 'react';
 import { TeamRole } from '@/features/teams/models/TeamRole.ts';
 import { HttpError } from '@/lib/api.ts';
-import { teamAccessQueryOptions } from '@/queries/teams.ts';
+import {
+  teamAccessQueryOptions,
+  teamSelfAccessMutationFilter,
+} from '@/queries/teams.ts';
 import { NotAuthorizedPage } from '@/shared/auth/NotAuthorizedPage.tsx';
 
 export const Route = createFileRoute('/(authenticated)/teams/$teamSlug')({
@@ -41,8 +44,11 @@ export const Route = createFileRoute('/(authenticated)/teams/$teamSlug')({
 
 function TeamLayout() {
   const { teamSlug } = Route.useParams();
+  const isChangingOwnAccess =
+    useIsMutating(teamSelfAccessMutationFilter(teamSlug)) > 0;
   const teamQuery = useQuery({
     ...teamAccessQueryOptions(teamSlug),
+    enabled: !isChangingOwnAccess,
     refetchOnMount: false,
   });
 

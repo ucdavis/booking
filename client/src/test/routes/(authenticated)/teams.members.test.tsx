@@ -19,6 +19,8 @@ import {
 import type { TeamMember } from '@/features/teams/models/TeamMember.ts';
 import { TeamRole } from '@/features/teams/models/TeamRole.ts';
 import {
+  invalidateTeamMemberQueries,
+  myTeamsQueryOptions,
   teamMembersQueryKey,
   teamMembersQueryOptions,
 } from '@/queries/teams.ts';
@@ -160,6 +162,55 @@ function silenceRouteErrors() {
 }
 
 describe('team members', () => {
+  it.each(['active', 'none'] as const)(
+    'discards an unfinished initial membership response after self removal with %s refetching',
+    async (refetchType) => {
+      let releaseInitialResponse!: () => void;
+      let signalInitialRequest!: () => void;
+      const heldResponse = new Promise<void>((resolve) => {
+        releaseInitialResponse = resolve;
+      });
+      const initialRequestStarted = new Promise<void>((resolve) => {
+        signalInitialRequest = resolve;
+      });
+      let requests = 0;
+      server.use(
+        http.get('/api/teams', async () => {
+          requests += 1;
+          if (requests === 1) {
+            signalInitialRequest();
+            await heldResponse;
+            return HttpResponse.json([team]);
+          }
+          return HttpResponse.json([]);
+        })
+      );
+      const queryClient = new QueryClient();
+      const options = myTeamsQueryOptions(user.id);
+      const initialRead = queryClient
+        .fetchQuery(options)
+        .catch(() => undefined);
+
+      try {
+        await initialRequestStarted;
+        expect(queryClient.getQueryData(options.queryKey)).toBeUndefined();
+
+        await invalidateTeamMemberQueries(queryClient, team.slug, refetchType);
+        releaseInitialResponse();
+        await initialRead;
+
+        expect(queryClient.getQueryData(options.queryKey)).toBeUndefined();
+        expect(await queryClient.fetchQuery(options)).toEqual([]);
+        expect(queryClient.getQueryData(options.queryKey)).toEqual([]);
+        expect(requests).toBe(2);
+      } finally {
+        releaseInitialResponse();
+        await initialRead;
+        queryClient.clear();
+      }
+    }
+  );
+
   it('allows management when Admin is one of several assigned roles', async () => {
     mockAccess({ roles: ['viewer', 'admin'] });
     ({ cleanup } = renderRoute({
@@ -175,7 +226,7 @@ describe('team members', () => {
   });
 
   it.each([false, true])(
-    'keeps the current user read-only, including site admins (%s)',
+    'allows current-user role management, including site admins (%s)',
     async (isSiteAdmin) => {
       mockAccess({ isSiteAdmin });
       ({ cleanup } = renderRoute({
@@ -194,9 +245,11 @@ describe('team members', () => {
       );
       expect(ownRow.getByText('You')).toBeInTheDocument();
       expect(
-        ownRow.queryByRole('button', { name: /Manage roles|Remove/ })
-      ).not.toBeInTheDocument();
-      expect(ownRow.queryByRole('combobox')).not.toBeInTheDocument();
+        ownRow.getByRole('button', { name: 'Manage roles for Taylor Admin' })
+      ).toBeEnabled();
+      expect(
+        ownRow.getByRole('button', { name: 'Remove Taylor Admin from team' })
+      ).toBeEnabled();
       const otherRow = within(
         screen.getByRole('row', { name: /Avery Editor/ })
       );
@@ -206,6 +259,319 @@ describe('team members', () => {
       expect(
         otherRow.getByRole('button', { name: 'Remove Avery Editor from team' })
       ).toBeEnabled();
+    }
+  );
+
+  it.each([
+    ['Manage roles for Avery Editor', 'Manage team roles'],
+    ['Remove Avery Editor from team', 'Remove team member?'],
+  ])(
+    'closes the %s dialog on Escape and restores focus without submitting',
+    async (buttonName, dialogName) => {
+      mockAccess();
+      const update = vi.fn(() => HttpResponse.json(otherMember));
+      const remove = vi.fn(() => new HttpResponse(null, { status: 204 }));
+      server.use(
+        http.put('/api/teams/plant-sciences/members/2/roles', update),
+        http.delete('/api/teams/plant-sciences/members/2', remove)
+      );
+      ({ cleanup } = renderRoute({
+        initialPath: '/teams/plant-sciences/members',
+      }));
+      const opener = await screen.findByRole('button', { name: buttonName });
+      opener.focus();
+      fireEvent.click(opener);
+      const dialog = screen.getByRole('dialog', { name: dialogName });
+      expect(dialog).toHaveAttribute('open');
+
+      fireEvent(dialog, new Event('cancel', { cancelable: true }));
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(opener).toHaveFocus();
+      expect(update).not.toHaveBeenCalled();
+      expect(remove).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([false, true])(
+    'saves own roles without another warning when Admin is retained (Editor initially %s)',
+    async (hasEditor) => {
+      mockAccess();
+      let ownRoles = hasEditor
+        ? [TeamRole.Admin, TeamRole.Editor]
+        : [TeamRole.Admin];
+      const changes: unknown[] = [];
+      server.use(
+        http.get('/api/teams/plant-sciences/members', () =>
+          HttpResponse.json([
+            { ...currentMember, roles: ownRoles },
+            otherMember,
+          ])
+        ),
+        http.put(
+          '/api/teams/plant-sciences/members/1/roles',
+          async ({ request }) => {
+            changes.push(await request.json());
+            ownRoles = hasEditor
+              ? [TeamRole.Admin]
+              : [TeamRole.Admin, TeamRole.Editor];
+            return HttpResponse.json({ ...currentMember, roles: ownRoles });
+          }
+        )
+      );
+      const rendered = renderRoute({
+        initialPath: '/teams/plant-sciences/members',
+      });
+      cleanup = rendered.cleanup;
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name: 'Manage roles for Taylor Admin',
+        })
+      );
+      const dialog = within(
+        screen.getByRole('dialog', { name: 'Manage team roles' })
+      );
+      fireEvent.click(dialog.getByRole('checkbox', { name: 'Editor' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Save roles' }));
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      );
+      expect(changes).toEqual([
+        { roles: hasEditor ? ['admin'] : ['admin', 'editor'] },
+      ]);
+      expect(rendered.router.state.location.pathname).toBe(
+        '/teams/plant-sciences/members'
+      );
+      expect(
+        screen.queryByRole('heading', { name: 'Remove your Admin role?' })
+      ).not.toBeInTheDocument();
+    }
+  );
+
+  it.each([false, true])(
+    'confirms own Admin removal, preserves warning choices on Back and failure, and updates access (site admin %s)',
+    async (isSiteAdmin) => {
+      mockAccess({ isSiteAdmin });
+      let ownRoles = [TeamRole.Admin, TeamRole.Editor];
+      const changes: unknown[] = [];
+      const deniedMemberRequests = vi.fn();
+      server.use(
+        http.get('/api/teams', () =>
+          HttpResponse.json([{ ...team, roles: ownRoles }])
+        ),
+        http.get('/api/teams/plant-sciences', () =>
+          HttpResponse.json({
+            isSiteAdmin,
+            roles: ownRoles,
+            team: { ...team, roles: ownRoles },
+          })
+        ),
+        http.get('/api/teams/plant-sciences/members', () => {
+          if (!isSiteAdmin && !ownRoles.includes(TeamRole.Admin)) {
+            deniedMemberRequests();
+            return new HttpResponse(null, { status: 403 });
+          }
+          return HttpResponse.json([
+            { ...currentMember, roles: ownRoles },
+            otherMember,
+          ]);
+        }),
+        http.put(
+          '/api/teams/plant-sciences/members/1/roles',
+          async ({ request }) => {
+            changes.push(await request.json());
+            if (changes.length === 1) {
+              return new HttpResponse(null, { status: 500 });
+            }
+            ownRoles = [TeamRole.Editor];
+            return HttpResponse.json({ ...currentMember, roles: ownRoles });
+          }
+        )
+      );
+      const rendered = renderRoute({
+        initialPath: '/teams/plant-sciences/members',
+      });
+      cleanup = rendered.cleanup;
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name: 'Manage roles for Taylor Admin',
+        })
+      );
+      const dialog = within(
+        screen.getByRole('dialog', { name: 'Manage team roles' })
+      );
+      fireEvent.click(dialog.getByRole('checkbox', { name: 'Admin' }));
+      fireEvent.click(dialog.getByRole('button', { name: 'Save roles' }));
+
+      expect(
+        await dialog.findByRole('heading', { name: 'Remove your Admin role?' })
+      ).toBeInTheDocument();
+      expect(
+        dialog.getByText(
+          isSiteAdmin
+            ? /You will keep access to manage this team through site administration/
+            : /You will no longer be able to manage team members or payment settings/
+        )
+      ).toBeInTheDocument();
+      expect(changes).toEqual([]);
+      fireEvent.click(dialog.getByRole('button', { name: 'Back to roles' }));
+      expect(dialog.getByRole('checkbox', { name: 'Admin' })).not.toBeChecked();
+      expect(dialog.getByRole('checkbox', { name: 'Editor' })).toBeChecked();
+      fireEvent.click(dialog.getByRole('button', { name: 'Save roles' }));
+      await dialog.findByRole('heading', { name: 'Remove your Admin role?' });
+      expect(changes).toEqual([]);
+      fireEvent.click(
+        dialog.getByRole('button', { name: 'Confirm role change' })
+      );
+
+      expect(
+        await dialog.findByText(/We could not change this member's roles/)
+      ).toBeInTheDocument();
+      expect(
+        dialog.getByRole('heading', { name: 'Remove your Admin role?' })
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(
+          dialog.getByRole('button', { name: 'Confirm role change' })
+        ).toBeEnabled()
+      );
+      fireEvent.click(
+        dialog.getByRole('button', { name: 'Confirm role change' })
+      );
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      );
+      expect(changes).toEqual([
+        { confirmSelfAccessChange: true, roles: ['editor'] },
+        { confirmSelfAccessChange: true, roles: ['editor'] },
+      ]);
+      await waitFor(() =>
+        expect(rendered.router.state.location.pathname).toBe(
+          isSiteAdmin
+            ? '/teams/plant-sciences/members'
+            : '/teams/plant-sciences'
+        )
+      );
+      expect(
+        await screen.findByRole('heading', {
+          name: isSiteAdmin ? 'Team members' : 'Team overview',
+        })
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('heading', { name: 'Not authorized' })
+      ).not.toBeInTheDocument();
+      expect(deniedMemberRequests).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([false, true])(
+    'warns before removing every own role, permits retry, and updates access (site admin %s)',
+    async (isSiteAdmin) => {
+      mockAccess({ isSiteAdmin });
+      let removed = false;
+      const removalQueries: string[] = [];
+      const deniedMemberRequests = vi.fn();
+      server.use(
+        http.get('/api/teams', () => HttpResponse.json(removed ? [] : [team])),
+        http.get('/api/teams/plant-sciences', () =>
+          removed && !isSiteAdmin
+            ? new HttpResponse(null, { status: 403 })
+            : HttpResponse.json({
+                isSiteAdmin,
+                roles: removed ? [] : ['admin'],
+                team,
+              })
+        ),
+        http.get('/api/teams/plant-sciences/members', () => {
+          if (removed && !isSiteAdmin) {
+            deniedMemberRequests();
+            return new HttpResponse(null, { status: 403 });
+          }
+          return HttpResponse.json(
+            removed ? [otherMember] : [currentMember, otherMember]
+          );
+        }),
+        http.delete('/api/teams/plant-sciences/members/1', ({ request }) => {
+          removalQueries.push(new URL(request.url).search);
+          if (removalQueries.length === 1) {
+            return new HttpResponse(null, { status: 500 });
+          }
+          removed = true;
+          return new HttpResponse(null, { status: 204 });
+        })
+      );
+      const rendered = renderRoute({
+        initialPath: '/teams/plant-sciences/members',
+      });
+      cleanup = rendered.cleanup;
+      const opener = await screen.findByRole('button', {
+        name: 'Remove Taylor Admin from team',
+      });
+      opener.focus();
+      fireEvent.click(opener);
+      let dialog = within(
+        screen.getByRole('dialog', { name: 'Remove team member?' })
+      );
+      expect(
+        dialog.getByText(/You are removing all of your team roles/)
+      ).toBeInTheDocument();
+      expect(
+        dialog.getByText(
+          isSiteAdmin
+            ? /You will keep access through site administration/
+            : /You will lose access to this team and be taken to your profile/
+        )
+      ).toBeInTheDocument();
+      expect(removalQueries).toEqual([]);
+      fireEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(opener).toHaveFocus();
+      expect(removalQueries).toEqual([]);
+      fireEvent.click(opener);
+      dialog = within(
+        screen.getByRole('dialog', { name: 'Remove team member?' })
+      );
+      fireEvent.click(dialog.getByRole('button', { name: 'Confirm removal' }));
+
+      expect(
+        await dialog.findByText(/We could not remove/)
+      ).toBeInTheDocument();
+      expect(
+        dialog.getByText(/You are removing all of your team roles/)
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(
+          dialog.getByRole('button', { name: 'Confirm removal' })
+        ).toBeEnabled()
+      );
+      fireEvent.click(dialog.getByRole('button', { name: 'Confirm removal' }));
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      );
+      expect(removalQueries).toEqual([
+        '?confirmSelfAccessChange=true',
+        '?confirmSelfAccessChange=true',
+      ]);
+      await waitFor(() =>
+        expect(rendered.router.state.location.pathname).toBe(
+          isSiteAdmin ? '/teams/plant-sciences/members' : '/me'
+        )
+      );
+      expect(
+        await screen.findByRole('heading', {
+          name: isSiteAdmin ? 'Team members' : 'My profile',
+        })
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('row', { name: /Taylor Admin/ })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('heading', { name: 'Not authorized' })
+      ).not.toBeInTheDocument();
+      expect(deniedMemberRequests).not.toHaveBeenCalled();
     }
   );
 
@@ -385,6 +751,9 @@ describe('team members', () => {
         name: 'Manage roles for Avery Editor',
       })
     );
+    expect(
+      screen.getByRole('dialog', { name: 'Manage team roles' })
+    ).toHaveAttribute('open');
     expect(screen.getByRole('checkbox', { name: 'Editor' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Admin' })).not.toBeChecked();
     expect(
@@ -584,6 +953,7 @@ describe('team members', () => {
   it('requires removal confirmation and refreshes the team after removing all roles', async () => {
     mockAccess();
     let removed = false;
+    let removalQuery: string | undefined;
     let token: string | null = null;
     server.use(
       http.get('/api/teams/plant-sciences/members', () =>
@@ -595,6 +965,7 @@ describe('team members', () => {
       ),
       http.delete('/api/teams/plant-sciences/members/2', ({ request }) => {
         removed = true;
+        removalQuery = new URL(request.url).search;
         token = request.headers.get('RequestVerificationToken');
         return new HttpResponse(null, { status: 204 });
       })
@@ -608,8 +979,8 @@ describe('team members', () => {
       })
     );
     expect(
-      screen.getByRole('heading', { name: 'Remove team member?' })
-    ).toBeInTheDocument();
+      screen.getByRole('dialog', { name: 'Remove team member?' })
+    ).toHaveAttribute('open');
     expect(removed).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(removed).toBe(false);
@@ -629,6 +1000,7 @@ describe('team members', () => {
     expect(
       screen.getByRole('row', { name: /Taylor Admin/ })
     ).toBeInTheDocument();
+    expect(removalQuery).toBe('');
     expect(token).toBe('team-antiforgery-token');
   });
 

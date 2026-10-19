@@ -908,11 +908,10 @@ namespace Server.Core.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("Role")
-                        .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
-                    b.HasKey("TeamId", "UserId");
+                    b.HasKey("TeamId", "UserId", "Role");
 
                     b.HasIndex("UserId");
 

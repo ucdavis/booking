@@ -285,12 +285,14 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
             return NotFound("That team member could not be found.");
         }
         var user = permissions[0].User;
-        if (string.Equals(user.IamId.Trim(), currentIamId.Trim(), StringComparison.OrdinalIgnoreCase))
+        var existingRoles = permissions.Select(permission => permission.Role).ToList();
+        var isSelf = string.Equals(user.IamId.Trim(), currentIamId.Trim(), StringComparison.OrdinalIgnoreCase);
+        if (isSelf && existingRoles.Contains(TeamRole.Admin) && !roles.Contains(TeamRole.Admin) &&
+            !request.ConfirmSelfAccessChange)
         {
-            return BadRequest("You cannot change your own team roles.");
+            return BadRequest("Confirm removing your own Admin role. You may lose access to manage this team's members.");
         }
 
-        var existingRoles = permissions.Select(permission => permission.Role).ToList();
         if (roles.Any(role => !CanAssignRole(role) && !existingRoles.Contains(role)))
         {
             return BadRequest("New role assignments must use Admin or Editor.");
@@ -327,7 +329,8 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
 
     [HttpDelete("{userId:int}")]
     public async Task<IActionResult> RemoveMember(
-        string teamSlug, int userId, CancellationToken cancellationToken = default)
+        string teamSlug, int userId, [FromQuery] bool confirmSelfAccessChange = false,
+        CancellationToken cancellationToken = default)
     {
         var currentIamId = User.FindFirst("ucdPersonIAMID")?.Value;
         if (string.IsNullOrWhiteSpace(currentIamId))
@@ -343,9 +346,10 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
         {
             return NotFound("That team member could not be found.");
         }
-        if (string.Equals(permissions[0].User.IamId.Trim(), currentIamId.Trim(), StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(permissions[0].User.IamId.Trim(), currentIamId.Trim(), StringComparison.OrdinalIgnoreCase) &&
+            !confirmSelfAccessChange)
         {
-            return BadRequest("You cannot remove your own team access.");
+            return BadRequest("Confirm removing your own team membership. You may lose access to this team.");
         }
 
         dbContext.TeamPermissions.RemoveRange(permissions);

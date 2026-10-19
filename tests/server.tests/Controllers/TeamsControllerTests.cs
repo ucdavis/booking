@@ -653,8 +653,10 @@ public class TeamsControllerTests
         JsonSerializer.Deserialize<TeamRole>($"\"{name}\"", options).Should().Be(role);
     }
 
-    [Fact]
-    public async Task Updating_and_removing_members_preserves_users_and_other_team_memberships()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Updating_and_removing_other_members_preserves_users_and_other_team_memberships(bool confirmSelfAccessChange)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var user = new User { IamId = "0000000001", Name = "Target", IsAdmin = true };
@@ -670,12 +672,19 @@ public class TeamsControllerTests
         var controller = CreateMembersController(db);
 
         var updated = ReadValue(await controller.UpdateRoles("team-a", user.Id,
-            new UpdateTeamMemberRolesRequest { Roles = [TeamRole.Admin, TeamRole.Editor] }));
+            new UpdateTeamMemberRolesRequest
+            {
+                Roles = [TeamRole.Admin, TeamRole.Editor], ConfirmSelfAccessChange = confirmSelfAccessChange,
+            }));
 
         updated.Roles.Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor });
         db.TeamPermissions.Count(permission => permission.Team.Slug == "team-a").Should().Be(2);
+        ReadValue(await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest
+        {
+            Roles = [TeamRole.Editor], ConfirmSelfAccessChange = confirmSelfAccessChange,
+        })).Roles.Should().Equal(TeamRole.Editor);
         user.IsAdmin.Should().BeTrue();
-        (await controller.RemoveMember("team-a", user.Id)).Should().BeOfType<NoContentResult>();
+        (await controller.RemoveMember("team-a", user.Id, confirmSelfAccessChange)).Should().BeOfType<NoContentResult>();
         db.ChangeTracker.Clear();
         (await db.Users.SingleAsync()).IsAdmin.Should().BeTrue();
         var remaining = await db.TeamPermissions.Include(permission => permission.Team).SingleAsync();
@@ -686,7 +695,7 @@ public class TeamsControllerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Self_role_changes_and_removal_are_blocked_including_site_admins(bool isAdmin)
+    public async Task Self_role_changes_can_add_and_remove_roles_without_confirmation_when_retaining_admin(bool isAdmin)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var user = new User { IamId = "0000000001", Name = "Self", IsAdmin = isAdmin };
@@ -695,14 +704,93 @@ public class TeamsControllerTests
             User = user, Team = new Team { Name = "Team A", Slug = "team-a" }, Role = TeamRole.Admin,
         });
         await db.SaveChangesAsync();
-        var controller = CreateMembersController(db, " 0000000001 ");
+        var controller = CreateMembersController(db, user.IamId);
 
-        (await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest { Roles = [TeamRole.Editor] }))
-            .Result.Should().BeOfType<BadRequestObjectResult>();
-        (await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest { Roles = [TeamRole.Admin, TeamRole.Editor] }))
-            .Result.Should().BeOfType<BadRequestObjectResult>();
-        (await controller.RemoveMember("team-a", user.Id)).Should().BeOfType<BadRequestObjectResult>();
+        ReadValue(await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest
+        {
+            Roles = [TeamRole.Admin, TeamRole.Editor],
+        })).Roles.Should().Equal(TeamRole.Admin, TeamRole.Editor);
+        ReadValue(await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest
+        {
+            Roles = [TeamRole.Admin],
+        })).Roles.Should().Equal(TeamRole.Admin);
         (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Admin);
+    }
+
+    [Fact]
+    public async Task Site_admin_can_add_own_admin_role_without_confirmation()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var user = new User { IamId = "0000000001", Name = "Self", IsAdmin = true };
+        db.TeamPermissions.Add(new TeamPermission
+        {
+            User = user, Team = new Team { Name = "Team A", Slug = "team-a" }, Role = TeamRole.Editor,
+        });
+        await db.SaveChangesAsync();
+
+        ReadValue(await CreateMembersController(db, user.IamId).UpdateRoles("team-a", user.Id,
+            new UpdateTeamMemberRolesRequest { Roles = [TeamRole.Admin, TeamRole.Editor] }))
+            .Roles.Should().Equal(TeamRole.Admin, TeamRole.Editor);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Removing_own_admin_role_requires_confirmation_for_normalized_effective_identity(bool isAdmin)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var user = new User { IamId = "Member1", Name = "Self", IsAdmin = isAdmin };
+        var team = new Team { Name = "Team A", Slug = "team-a" };
+        db.TeamPermissions.AddRange(
+            new TeamPermission { User = user, Team = team, Role = TeamRole.Admin },
+            new TeamPermission { User = user, Team = team, Role = TeamRole.Editor });
+        await db.SaveChangesAsync();
+        var controller = CreateMembersController(db, " member1 ");
+
+        var unconfirmed = await controller.UpdateRoles("team-a", user.Id,
+            new UpdateTeamMemberRolesRequest { Roles = [TeamRole.Editor] });
+
+        unconfirmed.Result.Should().BeOfType<BadRequestObjectResult>();
+        (await db.TeamPermissions.Select(permission => permission.Role).ToListAsync())
+            .Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor });
+        db.ChangeTracker.HasChanges().Should().BeFalse();
+
+        ReadValue(await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest
+        {
+            Roles = [TeamRole.Editor], ConfirmSelfAccessChange = true,
+        })).Roles.Should().Equal(TeamRole.Editor);
+        (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Editor);
+        user.IsAdmin.Should().Be(isAdmin);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Removing_own_membership_requires_confirmation_and_preserves_other_teams(bool isAdmin)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var user = new User { IamId = "Member1", Name = "Self", IsAdmin = isAdmin };
+        var team = new Team { Name = "Team A", Slug = "team-a" };
+        db.TeamPermissions.AddRange(
+            new TeamPermission { User = user, Team = team, Role = TeamRole.Admin },
+            new TeamPermission { User = user, Team = team, Role = TeamRole.Editor },
+            new TeamPermission
+            {
+                User = user, Team = new Team { Name = "Other", Slug = "other" }, Role = TeamRole.Admin,
+            });
+        await db.SaveChangesAsync();
+        var controller = CreateMembersController(db, " member1 ");
+
+        (await controller.RemoveMember("team-a", user.Id)).Should().BeOfType<BadRequestObjectResult>();
+        db.TeamPermissions.Should().HaveCount(3);
+        db.ChangeTracker.HasChanges().Should().BeFalse();
+
+        (await controller.RemoveMember("team-a", user.Id, confirmSelfAccessChange: true))
+            .Should().BeOfType<NoContentResult>();
+        db.ChangeTracker.Clear();
+        var remaining = await db.TeamPermissions.Include(permission => permission.Team).SingleAsync();
+        remaining.Team.Slug.Should().Be("other");
+        (await db.Users.SingleAsync()).IsAdmin.Should().Be(isAdmin);
     }
 
     [Fact]
@@ -717,12 +805,13 @@ public class TeamsControllerTests
         db.Teams.Add(new Team { Name = "Team A", Slug = "team-a" });
         await db.SaveChangesAsync();
         var controller = CreateMembersController(db);
-        var update = new UpdateTeamMemberRolesRequest { Roles = [TeamRole.Admin] };
+        var update = new UpdateTeamMemberRolesRequest { Roles = [TeamRole.Admin], ConfirmSelfAccessChange = true };
 
         (await controller.UpdateRoles("team-a", user.Id, update)).Result.Should().BeOfType<NotFoundObjectResult>();
         (await controller.RemoveMember("team-a", user.Id)).Should().BeOfType<NotFoundObjectResult>();
         (await CreateMembersController(db, null).UpdateRoles("other", user.Id, update)).Result.Should().BeOfType<ForbidResult>();
-        (await CreateMembersController(db, null).RemoveMember("other", user.Id)).Should().BeOfType<ForbidResult>();
+        (await CreateMembersController(db, null).RemoveMember("other", user.Id, confirmSelfAccessChange: true))
+            .Should().BeOfType<ForbidResult>();
         (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Editor);
     }
 
