@@ -25,6 +25,21 @@ public sealed class TeamAccessService(AppDbContext dbContext)
             cancellationToken);
     }
 
+    public async Task<bool> CanEditTeam(
+        ClaimsPrincipal principal, string? teamSlug, CancellationToken cancellationToken = default)
+    {
+        var iamId = GetIamId(principal);
+        if (iamId == null || string.IsNullOrWhiteSpace(teamSlug))
+        {
+            return false;
+        }
+
+        return await dbContext.Users.AnyAsync(user => user.IamId == iamId && user.IsActive &&
+            (user.IsAdmin || dbContext.TeamPermissions.Any(permission =>
+                permission.UserId == user.Id && permission.Team.Slug == teamSlug &&
+                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor))), cancellationToken);
+    }
+
     public async Task<bool> CanAdministerTeam(
         ClaimsPrincipal principal, string? teamSlug, CancellationToken cancellationToken = default)
     {

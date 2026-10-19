@@ -130,6 +130,17 @@ function TeamLayout() {
         >
           Overview
         </Link>
+        {(isSiteAdmin || role === TeamRole.Admin || role === TeamRole.Editor) && (
+          <Link
+            activeProps={{ className: 'border-primary text-primary' }}
+            className="border-b-2 px-1 py-3 text-sm font-semibold hover:text-primary"
+            inactiveProps={{ className: 'border-transparent text-base-content/70' }}
+            params={{ teamSlug: team.slug }}
+            to="/teams/$teamSlug/resource-templates"
+          >
+            Resource templates
+          </Link>
+        )}
         {(isSiteAdmin || role === TeamRole.Admin) && (
           <Link
             activeProps={{ className: 'border-primary text-primary' }}

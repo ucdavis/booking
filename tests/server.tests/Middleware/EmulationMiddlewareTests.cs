@@ -62,7 +62,9 @@ public class EmulationMiddlewareTests
     [InlineData(AuthenticationHelper.SiteAdminPolicy, null, false)]
     [InlineData(AuthenticationHelper.TeamAccessPolicy, "target-team", true)]
     [InlineData(AuthenticationHelper.TeamAdminPolicy, "target-team", false)]
+    [InlineData(AuthenticationHelper.TeamEditorPolicy, "target-team", false)]
     [InlineData(AuthenticationHelper.TeamAccessPolicy, "actor-team", false)]
+    [InlineData(AuthenticationHelper.TeamEditorPolicy, "actor-team", false)]
     public async Task Authorization_middleware_checks_target_permissions_without_restoring_actor(
         string policy, string? teamSlug, bool allowed)
     {
@@ -77,6 +79,25 @@ public class EmulationMiddlewareTests
         result.Context.Response.StatusCode.Should().Be(allowed ? StatusCodes.Status200OK : StatusCodes.Status403Forbidden);
         result.Context.User.FindFirst("ucdPersonIAMID")!.Value.Should().Be(Fixture.TargetIamId);
         EmulationService.GetActor(result.Context).FindFirst("ucdPersonIAMID")!.Value.Should().Be(Fixture.ActorIamId);
+    }
+
+    [Fact]
+    public async Task Emulated_editor_access_uses_the_target_membership()
+    {
+        using var fixture = new Fixture();
+        await fixture.SeedAsync();
+        await fixture.ChangeUsersAsync(async db =>
+        {
+            var permission = await db.TeamPermissions.SingleAsync(permission => permission.Team.Slug == "target-team");
+            permission.Role = TeamRole.Editor;
+        });
+        var login = await fixture.SignInAsync();
+
+        var result = await fixture.RequestAsync(login.Cookie, fixture.Select(login.SessionId),
+            policy: AuthenticationHelper.TeamEditorPolicy, teamSlug: "target-team");
+
+        result.ReachedEndpoint.Should().BeTrue();
+        result.Context.User.FindFirst("ucdPersonIAMID")!.Value.Should().Be(Fixture.TargetIamId);
     }
 
     [Fact]

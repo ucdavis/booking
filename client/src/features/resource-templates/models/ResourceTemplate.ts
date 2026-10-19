@@ -7,5 +7,6 @@ export interface ResourceTemplate {
   isActive: boolean;
   name: string;
   resourceDefaultsJson: string | null;
+  teamId: number | null;
   updatedAt: string;
 }

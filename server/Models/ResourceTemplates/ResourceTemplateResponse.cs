@@ -3,6 +3,7 @@ namespace Server.Models.ResourceTemplates;
 public sealed class ResourceTemplateResponse
 {
     public int Id { get; init; }
+    public int? TeamId { get; init; }
     public required string Name { get; init; }
     public string? Description { get; init; }
     public int FormSchemaVersion { get; init; }
