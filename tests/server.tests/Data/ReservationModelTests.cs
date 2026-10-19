@@ -102,6 +102,7 @@ public class ReservationModelTests
     [InlineData(TeamRole.Admin, "admin")]
     [InlineData(TeamRole.Editor, "editor")]
     [InlineData(TeamRole.Viewer, "viewer")]
+    [InlineData(TeamRole.Approver, "approver")]
     public void Team_role_enum_preserves_existing_text_storage(TeamRole role, string storedValue)
     {
         using var context = CreateContext();
@@ -113,7 +114,7 @@ public class ReservationModelTests
         converter.ConvertToProvider(role).Should().Be(storedValue);
         converter.ConvertFromProvider(storedValue).Should().Be(role);
         context.Database.GenerateCreateScript().Should()
-            .Contain("CHECK ([Role] IN ('admin', 'editor', 'viewer'))");
+            .Contain("CHECK ([Role] IN ('admin', 'editor', 'viewer', 'approver'))");
     }
 
     [Fact]

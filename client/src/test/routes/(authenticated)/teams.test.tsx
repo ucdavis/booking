@@ -204,7 +204,7 @@ describe('team payments settings', () => {
     }
   );
 
-  it.each(['editor', 'viewer'] as const)(
+  it.each(['approver', 'editor', 'viewer'] as const)(
     'shows connection details without editing or the masked key for %s',
     async (role) => {
       mockUser();
@@ -481,7 +481,9 @@ function mockUser(isSiteAdmin = false) {
   );
 }
 
-function mockTeamAccess(role: 'admin' | 'editor' | 'viewer' | null = 'viewer') {
+function mockTeamAccess(
+  role: 'admin' | 'approver' | 'editor' | 'viewer' | null = 'viewer'
+) {
   server.use(
     http.get('/api/teams/:teamSlug', ({ params }) =>
       HttpResponse.json({
@@ -499,6 +501,44 @@ function silenceRouteErrors() {
 }
 
 describe('profile team memberships', () => {
+  it('shows Approver membership and opens its overview from the team menu', async () => {
+    mockUser();
+    mockTeamAccess('approver');
+    server.use(
+      http.get('/api/teams', () =>
+        HttpResponse.json([
+          { ...firstTeam, roles: [TeamRole.Approver] },
+          secondTeam,
+        ])
+      )
+    );
+    const rendered = renderRoute({ initialPath: '/me' });
+    cleanup = rendered.cleanup;
+
+    const memberships = within(
+      await screen.findByRole('list', { name: 'Team memberships' })
+    );
+    expect(memberships.getByText('Approver')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose team' }));
+    const navigation = within(
+      screen.getByRole('navigation', { name: 'Primary navigation' })
+    );
+    fireEvent.click(navigation.getByRole('link', { name: firstTeam.name }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Team overview' })
+    ).toBeInTheDocument();
+    expect(rendered.router.state.location.pathname).toBe(
+      '/teams/plant-sciences'
+    );
+    expect(
+      screen.queryByRole('link', { name: 'Members' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Resource templates' })
+    ).not.toBeInTheDocument();
+  });
+
   it('shows multiple role badges in one membership row', async () => {
     mockUser();
     server.use(
@@ -519,7 +559,12 @@ describe('profile team memberships', () => {
     'shows names and roles for at most five of %s memberships',
     async (count) => {
       mockUser();
-      const roles = [TeamRole.Admin, TeamRole.Editor, TeamRole.Viewer];
+      const roles = [
+        TeamRole.Admin,
+        TeamRole.Approver,
+        TeamRole.Editor,
+        TeamRole.Viewer,
+      ];
       const teams = Array.from({ length: count }, (_, index) => ({
         id: index + 1,
         name: `Team ${index + 1}`,
@@ -723,7 +768,7 @@ describe('team administration navigation and access', () => {
     );
   });
 
-  it.each(['admin', 'editor', 'viewer'] as const)(
+  it.each(['admin', 'approver', 'editor', 'viewer'] as const)(
     'allows the team landing page for the %s role',
     async (role) => {
       mockUser();

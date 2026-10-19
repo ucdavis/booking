@@ -28,6 +28,7 @@ export const TeamRoleFields = withFieldGroup({
       : assignableTeamRoles;
     const descriptions: Record<TeamRole, string> = {
       admin: 'Manage this team and its members.',
+      approver: 'View this team. Approval permissions are not active yet.',
       editor: 'Manage team resource templates without managing members.',
       viewer: 'Existing view access. This role cannot be newly assigned.',
     };

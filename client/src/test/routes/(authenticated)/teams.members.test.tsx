@@ -721,6 +721,120 @@ describe('team members', () => {
     expect(token).toBe('team-antiforgery-token');
   });
 
+  it('adds an Approver-only member and explains that approval permissions are not active', async () => {
+    mockAccess();
+    let added = false;
+    let body: unknown;
+    const approver = { ...person, id: 3, roles: [TeamRole.Approver] };
+    server.use(
+      http.get('/api/teams/plant-sciences/members/people', () =>
+        HttpResponse.json([person])
+      ),
+      http.get('/api/teams/plant-sciences/members', () =>
+        HttpResponse.json([
+          currentMember,
+          otherMember,
+          ...(added ? [approver] : []),
+        ])
+      ),
+      http.post('/api/teams/plant-sciences/members', async ({ request }) => {
+        body = await request.json();
+        added = true;
+        return HttpResponse.json(approver);
+      })
+    );
+    ({ cleanup } = renderRoute({
+      initialPath: '/teams/plant-sciences/members',
+    }));
+    const dialog = await openAddDialog();
+    fireEvent.change(
+      dialog.getByRole('textbox', { name: 'Email, IAM ID, or Kerberos ID' }),
+      { target: { value: person.email } }
+    );
+    fireEvent.click(dialog.getByRole('button', { name: 'Search' }));
+    expect(
+      await dialog.findByRole('radio', { name: 'Sam Smith' })
+    ).toBeChecked();
+    const checkbox = dialog.getByRole('checkbox', { name: 'Approver' });
+    expect(checkbox).not.toBeChecked();
+    expect(checkbox).toHaveAccessibleDescription(
+      'View this team. Approval permissions are not active yet.'
+    );
+    fireEvent.click(checkbox);
+    fireEvent.click(dialog.getByRole('checkbox', { name: 'Editor' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Add member' }));
+
+    const row = within(await screen.findByRole('row', { name: /Sam Smith/ }));
+    expect(row.getByText('Approver')).toBeInTheDocument();
+    expect(row.queryByText('Editor')).not.toBeInTheDocument();
+    expect(row.queryByText('Admin')).not.toBeInTheDocument();
+    expect(body).toEqual({ iamId: person.iamId, roles: ['approver'] });
+  });
+
+  it('adds and removes Approver while retaining another team role', async () => {
+    mockAccess();
+    let memberRoles = [TeamRole.Editor];
+    const changes: { roles: TeamRole[] }[] = [];
+    server.use(
+      http.get('/api/teams/plant-sciences/members', () =>
+        HttpResponse.json([
+          currentMember,
+          { ...otherMember, roles: memberRoles },
+        ])
+      ),
+      http.put(
+        '/api/teams/plant-sciences/members/2/roles',
+        async ({ request }) => {
+          const body = (await request.json()) as { roles: TeamRole[] };
+          changes.push(body);
+          memberRoles = body.roles;
+          return HttpResponse.json({ ...otherMember, roles: memberRoles });
+        }
+      )
+    );
+    ({ cleanup } = renderRoute({
+      initialPath: '/teams/plant-sciences/members',
+    }));
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Manage roles for Avery Editor',
+      })
+    );
+    let dialog = within(
+      screen.getByRole('dialog', { name: 'Manage team roles' })
+    );
+    expect(dialog.getByRole('checkbox', { name: 'Editor' })).toBeChecked();
+    fireEvent.click(dialog.getByRole('checkbox', { name: 'Approver' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Save roles' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    );
+    const row = within(screen.getByRole('row', { name: /Avery Editor/ }));
+    expect(row.getByText('Editor')).toBeInTheDocument();
+    expect(row.getByText('Approver')).toBeInTheDocument();
+    fireEvent.click(
+      row.getByRole('button', { name: 'Manage roles for Avery Editor' })
+    );
+    dialog = within(screen.getByRole('dialog', { name: 'Manage team roles' }));
+    expect(dialog.getByRole('checkbox', { name: 'Approver' })).toBeChecked();
+    fireEvent.click(dialog.getByRole('checkbox', { name: 'Approver' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Save roles' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    );
+    const updatedRow = within(
+      screen.getByRole('row', { name: /Avery Editor/ })
+    );
+    expect(updatedRow.getByText('Editor')).toBeInTheDocument();
+    expect(updatedRow.queryByText('Approver')).not.toBeInTheDocument();
+    expect(changes).toEqual([
+      { roles: ['approver', 'editor'] },
+      { roles: ['editor'] },
+    ]);
+  });
+
   it('adds roles only after explicit Save and allows cancelling the edit', async () => {
     mockAccess();
     let memberRoles = ['editor'];
@@ -1004,7 +1118,7 @@ describe('team members', () => {
     expect(token).toBe('team-antiforgery-token');
   });
 
-  it.each(['editor', 'viewer'])(
+  it.each(['approver', 'editor', 'viewer'])(
     'hides Members and denies direct member management for a team %s',
     async (role) => {
       silenceRouteErrors();

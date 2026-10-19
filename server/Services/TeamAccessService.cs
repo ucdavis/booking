@@ -21,7 +21,8 @@ public sealed class TeamAccessService(AppDbContext dbContext)
         return await dbContext.Users.AnyAsync(user => user.IamId == iamId && user.IsActive &&
             (user.IsAdmin || dbContext.TeamPermissions.Any(permission =>
                 permission.UserId == user.Id && permission.Team.Slug == teamSlug &&
-                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor || permission.Role == TeamRole.Viewer))),
+                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor ||
+                    permission.Role == TeamRole.Viewer || permission.Role == TeamRole.Approver))),
             cancellationToken);
     }
 
@@ -67,7 +68,8 @@ public sealed class TeamAccessService(AppDbContext dbContext)
         // Site administrators use the all-teams list; this menu contains explicit memberships only.
         var permissions = await dbContext.TeamPermissions.AsNoTracking()
             .Where(permission => permission.User.IamId == iamId && permission.User.IsActive &&
-                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor || permission.Role == TeamRole.Viewer))
+                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor ||
+                    permission.Role == TeamRole.Viewer || permission.Role == TeamRole.Approver))
             .OrderBy(permission => permission.Team.Name)
             .ThenBy(permission => permission.Team.Slug)
             .Select(permission => new
@@ -119,7 +121,8 @@ public sealed class TeamAccessService(AppDbContext dbContext)
 
         var roles = await dbContext.TeamPermissions.AsNoTracking()
             .Where(permission => permission.TeamId == team.Id && permission.UserId == user.Id &&
-                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor || permission.Role == TeamRole.Viewer))
+                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor ||
+                    permission.Role == TeamRole.Viewer || permission.Role == TeamRole.Approver))
             .OrderBy(permission => permission.Role)
             .Select(permission => permission.Role)
             .ToListAsync(cancellationToken);

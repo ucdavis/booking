@@ -168,11 +168,18 @@ describe('team resource templates', () => {
     }
   );
 
-  it.each(['', '/new', '/1'])(
-    'hides template navigation and denies direct viewer access to %s',
-    async (suffix) => {
+  it.each([
+    ['viewer', ''],
+    ['viewer', '/new'],
+    ['viewer', '/1'],
+    ['approver', ''],
+    ['approver', '/new'],
+    ['approver', '/1'],
+  ])(
+    'hides template navigation and denies direct %s access to %s',
+    async (role, suffix) => {
       silenceRouteErrors();
-      mockAccess({ role: 'viewer' });
+      mockAccess({ role });
       const denied = vi.fn(() => new HttpResponse(null, { status: 403 }));
       server.use(
         http.get('/api/teams/:teamSlug/resource-templates', denied),

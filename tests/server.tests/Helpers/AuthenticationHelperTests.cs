@@ -90,10 +90,13 @@ public class AuthenticationHelperTests : IDisposable
     [InlineData(false, true, TeamRole.Admin, "team-a", true)]
     [InlineData(false, true, TeamRole.Editor, "team-a", true)]
     [InlineData(false, true, TeamRole.Viewer, "team-a", true)]
+    [InlineData(false, true, TeamRole.Approver, "team-a", true)]
+    [InlineData(false, true, TeamRole.Approver, "team-b", false)]
     [InlineData(false, true, TeamRole.Admin, "team-b", false)]
     [InlineData(false, true, (TeamRole)999, "team-a", false)]
     [InlineData(false, true, null, "team-a", false)]
     [InlineData(false, false, TeamRole.Admin, "team-a", false)]
+    [InlineData(false, false, TeamRole.Approver, "team-a", false)]
     [InlineData(true, true, null, "team-b", true)]
     [InlineData(true, true, TeamRole.Viewer, "team-b", true)]
     [InlineData(true, false, TeamRole.Admin, "team-a", false)]
@@ -197,6 +200,7 @@ public class AuthenticationHelperTests : IDisposable
     [InlineData(AuthenticationHelper.TeamAdminPolicy, false, true, TeamRole.Admin, true)]
     [InlineData(AuthenticationHelper.TeamAdminPolicy, false, true, TeamRole.Editor, false)]
     [InlineData(AuthenticationHelper.TeamAdminPolicy, false, true, TeamRole.Viewer, false)]
+    [InlineData(AuthenticationHelper.TeamAdminPolicy, false, true, TeamRole.Approver, false)]
     [InlineData(AuthenticationHelper.TeamAdminPolicy, false, true, (TeamRole)999, false)]
     [InlineData(AuthenticationHelper.TeamAdminPolicy, false, true, null, false)]
     [InlineData(AuthenticationHelper.TeamAdminPolicy, false, false, TeamRole.Admin, false)]
@@ -206,6 +210,7 @@ public class AuthenticationHelperTests : IDisposable
     [InlineData(AuthenticationHelper.TeamEditorPolicy, false, true, TeamRole.Admin, true)]
     [InlineData(AuthenticationHelper.TeamEditorPolicy, false, true, TeamRole.Editor, true)]
     [InlineData(AuthenticationHelper.TeamEditorPolicy, false, true, TeamRole.Viewer, false)]
+    [InlineData(AuthenticationHelper.TeamEditorPolicy, false, true, TeamRole.Approver, false)]
     [InlineData(AuthenticationHelper.TeamEditorPolicy, false, true, (TeamRole)999, false)]
     [InlineData(AuthenticationHelper.TeamEditorPolicy, false, true, null, false)]
     [InlineData(AuthenticationHelper.TeamEditorPolicy, false, false, TeamRole.Editor, false)]
@@ -234,8 +239,10 @@ public class AuthenticationHelperTests : IDisposable
             .Succeeded.Should().Be(isAdmin && isActive);
     }
 
-    [Fact]
-    public async Task Team_policies_union_assigned_roles_and_recheck_each_role_removal()
+    [Theory]
+    [InlineData(TeamRole.Viewer)]
+    [InlineData(TeamRole.Approver)]
+    public async Task Team_policies_union_assigned_roles_and_recheck_each_role_removal(TeamRole remainingRole)
     {
         var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var user = new User { IamId = "sandbox-10001", Name = "Member" };
@@ -243,7 +250,7 @@ public class AuthenticationHelperTests : IDisposable
         var admin = new TeamPermission { User = user, Team = team, Role = TeamRole.Admin };
         var editor = new TeamPermission { User = user, Team = team, Role = TeamRole.Editor };
         db.TeamPermissions.AddRange(
-            new TeamPermission { User = user, Team = team, Role = TeamRole.Viewer }, editor, admin);
+            new TeamPermission { User = user, Team = team, Role = remainingRole }, editor, admin);
         await db.SaveChangesAsync();
         var principal = CreatePrincipal();
 

@@ -29,6 +29,7 @@ public class TeamsControllerTests
         using var db = TestDbContextFactory.CreateInMemory();
         var user = new User { IamId = "member-iam", Name = "Member", IsAdmin = isAdmin };
         db.TeamPermissions.AddRange(
+            new TeamPermission { User = user, Team = new Team { Name = "Agronomy", Slug = "agronomy" }, Role = TeamRole.Approver },
             new TeamPermission { User = user, Team = new Team { Name = "Zoology", Slug = "zoology" }, Role = TeamRole.Viewer },
             new TeamPermission { User = user, Team = new Team { Name = "Biology", Slug = "biology" }, Role = TeamRole.Editor },
             new TeamPermission { User = user, Team = new Team { Name = "Physics", Slug = "physics" }, Role = TeamRole.Admin },
@@ -42,12 +43,12 @@ public class TeamsControllerTests
 
         var teams = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
             .Should().BeOfType<List<TeamSummaryResponse>>().Subject;
-        teams.Select(team => team.Slug).Should().Equal("biology", "physics", "zoology");
-        teams.SelectMany(team => team.Roles).Should().Equal(TeamRole.Editor, TeamRole.Admin, TeamRole.Viewer);
+        teams.Select(team => team.Slug).Should().Equal("agronomy", "biology", "physics", "zoology");
+        teams.SelectMany(team => team.Roles).Should().Equal(TeamRole.Approver, TeamRole.Editor, TeamRole.Admin, TeamRole.Viewer);
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(teams, TeamJsonOptions()));
         json.RootElement.EnumerateArray().SelectMany(team => team.GetProperty("roles").EnumerateArray())
             .Select(role => role.GetString())
-            .Should().Equal("editor", "admin", "viewer");
+            .Should().Equal("approver", "editor", "admin", "viewer");
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
 
@@ -55,6 +56,7 @@ public class TeamsControllerTests
     [InlineData(TeamRole.Admin)]
     [InlineData(TeamRole.Editor)]
     [InlineData(TeamRole.Viewer)]
+    [InlineData(TeamRole.Approver)]
     public async Task GetTeam_returns_the_matching_membership_for_every_team_role(TeamRole role)
     {
         using var db = TestDbContextFactory.CreateInMemory();
@@ -90,20 +92,21 @@ public class TeamsControllerTests
         };
         db.TeamPermissions.AddRange(
             new TeamPermission { User = user, Team = team, Role = TeamRole.Editor },
+            new TeamPermission { User = user, Team = team, Role = TeamRole.Approver },
             new TeamPermission { User = user, Team = team, Role = TeamRole.Admin });
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
         var summary = ReadValue(await CreateController(db).GetTeams()).Should().ContainSingle().Which;
-        summary.Roles.Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor });
+        summary.Roles.Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor, TeamRole.Approver });
         var access = ReadValue(await CreateController(db).GetTeam("biology"));
-        access.Roles.Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor });
+        access.Roles.Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor, TeamRole.Approver });
         access.Team.Roles.Should().BeEquivalentTo(access.Roles);
         var member = ReadValue(await CreateMembersController(db).GetMembers("biology")).Should().ContainSingle().Which;
-        member.Roles.Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor });
+        member.Roles.Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor, TeamRole.Approver });
         var match = ReadValue(await CreateMembersController(db).SearchPeople("biology", user.IamId))
             .Should().ContainSingle().Which;
-        match.Roles.Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor });
+        match.Roles.Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor, TeamRole.Approver });
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
 
@@ -127,6 +130,7 @@ public class TeamsControllerTests
 
     [Theory]
     [InlineData(false, TeamRole.Viewer)]
+    [InlineData(false, TeamRole.Approver)]
     [InlineData(true, (TeamRole)999)]
     public async Task Inactive_users_and_unrecognized_roles_have_no_team_access(bool isActive, TeamRole role)
     {
@@ -335,6 +339,7 @@ public class TeamsControllerTests
     [Theory]
     [InlineData(TeamRole.Admin)]
     [InlineData(TeamRole.Editor)]
+    [InlineData(TeamRole.Approver)]
     public async Task Add_member_creates_user_from_complete_directory_data_and_assigns_only_the_requested_team(TeamRole role)
     {
         using var db = TestDbContextFactory.CreateInMemory();
@@ -577,24 +582,57 @@ public class TeamsControllerTests
         (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Editor);
     }
 
-    [Fact]
-    public async Task Add_member_assigns_multiple_roles_and_rejects_duplicate_membership()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Add_member_assigns_multiple_roles_and_rejects_duplicate_membership(bool includeApprover)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         db.Teams.Add(new Team { Name = "Team A", Slug = "team-a" });
         _people.Add(CreatePerson());
         await db.SaveChangesAsync();
         var controller = CreateMembersController(db);
-        var request = new AddTeamMemberRequest { IamId = "0000000001", Roles = [TeamRole.Admin, TeamRole.Editor] };
+        List<TeamRole> roles = includeApprover
+            ? [TeamRole.Admin, TeamRole.Editor, TeamRole.Approver]
+            : [TeamRole.Admin, TeamRole.Editor];
+        var request = new AddTeamMemberRequest { IamId = "0000000001", Roles = roles };
 
         var member = ReadValue(await controller.AddMember("team-a", request));
 
-        member.Roles.Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor });
+        member.Roles.Should().BeEquivalentTo(roles);
         db.Users.Should().ContainSingle();
         (await db.TeamPermissions.Select(permission => permission.Role).ToListAsync())
-            .Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor });
+            .Should().BeEquivalentTo(roles);
         (await controller.AddMember("team-a", request)).Result.Should().BeOfType<ConflictObjectResult>();
-        db.TeamPermissions.Should().HaveCount(2);
+        db.TeamPermissions.Should().HaveCount(roles.Count);
+    }
+
+    [Fact]
+    public async Task Approver_can_be_added_retained_alone_and_removed_from_an_existing_membership()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var user = new User { IamId = "0000000001", Name = "Member" };
+        db.TeamPermissions.Add(new TeamPermission
+        {
+            User = user, Team = new Team { Name = "Team A", Slug = "team-a" }, Role = TeamRole.Editor,
+        });
+        await db.SaveChangesAsync();
+        var controller = CreateMembersController(db);
+
+        ReadValue(await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest
+        {
+            Roles = [TeamRole.Editor, TeamRole.Approver],
+        })).Roles.Should().Equal(TeamRole.Editor, TeamRole.Approver);
+        ReadValue(await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest
+        {
+            Roles = [TeamRole.Approver],
+        })).Roles.Should().Equal(TeamRole.Approver);
+        (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Approver);
+        ReadValue(await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest
+        {
+            Roles = [TeamRole.Editor],
+        })).Roles.Should().Equal(TeamRole.Editor);
+        (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Editor);
     }
 
     [Fact]
@@ -645,6 +683,7 @@ public class TeamsControllerTests
     [InlineData(TeamRole.Admin, "admin")]
     [InlineData(TeamRole.Editor, "editor")]
     [InlineData(TeamRole.Viewer, "viewer")]
+    [InlineData(TeamRole.Approver, "approver")]
     public void Team_role_json_preserves_lowercase_names_including_existing_viewers(TeamRole role, string name)
     {
         var options = TeamJsonOptions();

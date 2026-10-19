@@ -127,7 +127,7 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
         }
         if (!HasValidRoles(request.Roles) || request.Roles!.Any(role => !CanAssignRole(role)))
         {
-            return BadRequest("Choose at least one Admin or Editor role without duplicates.");
+            return BadRequest("Choose at least one Admin, Editor, or Approver role without duplicates.");
         }
         var roles = request.Roles!.OrderBy(role => role).ToList();
 
@@ -295,7 +295,7 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
 
         if (roles.Any(role => !CanAssignRole(role) && !existingRoles.Contains(role)))
         {
-            return BadRequest("New role assignments must use Admin or Editor.");
+            return BadRequest("New role assignments must use Admin, Editor, or Approver.");
         }
 
         dbContext.TeamPermissions.RemoveRange(permissions.Where(permission => !roles.Contains(permission.Role)));
@@ -407,7 +407,8 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
         return !originalRoles.OrderBy(role => role).SequenceEqual(currentRoles.OrderBy(role => role));
     }
 
-    private static bool CanAssignRole(TeamRole? role) => role == TeamRole.Admin || role == TeamRole.Editor;
+    private static bool CanAssignRole(TeamRole? role)
+        => role == TeamRole.Admin || role == TeamRole.Editor || role == TeamRole.Approver;
 
     private static bool HasValidRoles(List<TeamRole>? roles)
         => roles != null && roles.Count > 0 && roles.Distinct().Count() == roles.Count &&
