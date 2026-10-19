@@ -1,6 +1,8 @@
+using System.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Server.Core.Data;
 using Server.Core.Domain;
 using Server.Helpers;
@@ -26,20 +28,34 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
             return NotFound("That team could not be found.");
         }
 
-        var members = await dbContext.TeamPermissions.AsNoTracking()
+        var permissions = await dbContext.TeamPermissions.AsNoTracking()
             .Where(permission => permission.TeamId == teamId)
             .OrderBy(permission => permission.User.Name)
             .ThenBy(permission => permission.User.IamId)
-            .Select(permission => new TeamMemberResponse
+            .Select(permission => new
             {
                 Id = permission.UserId,
                 IamId = permission.User.IamId,
                 Name = permission.User.Name,
                 Email = permission.User.Email,
                 IsActive = permission.User.IsActive,
-                Role = permission.Role,
+                permission.Role,
             })
             .ToListAsync(cancellationToken);
+
+        var members = permissions.GroupBy(permission => new
+            {
+                permission.Id, permission.IamId, permission.Name, permission.Email, permission.IsActive,
+            })
+            .Select(group => new TeamMemberResponse
+            {
+                Id = group.Key.Id,
+                IamId = group.Key.IamId,
+                Name = group.Key.Name,
+                Email = group.Key.Email,
+                IsActive = group.Key.IsActive,
+                Roles = group.Select(permission => permission.Role).OrderBy(role => role).ToList(),
+            }).ToList();
 
         return Ok(members);
     }
@@ -63,7 +79,7 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
         var people = (await rosettaService.SearchPeopleAsync(search, cancellationToken))
             .Where(person => person.HasRequiredDetails()).Take(10).ToList();
         var iamIds = people.Select(person => person.IamId).ToList();
-        var users = await (
+        var userPermissions = await (
             from user in dbContext.Users.AsNoTracking()
             where iamIds.Contains(user.IamId)
             join permission in dbContext.TeamPermissions.AsNoTracking().Where(permission => permission.TeamId == teamId)
@@ -75,7 +91,14 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
                 user.IsActive,
                 Role = permission == null ? null : (TeamRole?)permission.Role,
             })
-            .ToDictionaryAsync(user => user.IamId, cancellationToken);
+            .ToListAsync(cancellationToken);
+        var users = userPermissions.GroupBy(user => user.IamId)
+            .ToDictionary(group => group.Key, group => new
+            {
+                IsActive = group.First().IsActive,
+                Roles = group.Where(user => user.Role != null).Select(user => user.Role!.Value)
+                    .OrderBy(role => role).ToList(),
+            });
         var matches = people.Select(person =>
         {
             users.TryGetValue(person.IamId, out var user);
@@ -86,7 +109,7 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
                 Email = person.Email,
                 Kerberos = person.Kerberos,
                 IsActive = user == null || user.IsActive,
-                Role = user?.Role,
+                Roles = user?.Roles ?? [],
             };
         }).ToList();
 
@@ -102,10 +125,11 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
         {
             return BadRequest("A valid IAM ID is required.");
         }
-        if (!CanAssignRole(request.Role))
+        if (!HasValidRoles(request.Roles) || request.Roles!.Any(role => !CanAssignRole(role)))
         {
-            return BadRequest("Choose the Admin or Editor role.");
+            return BadRequest("Choose at least one Admin or Editor role without duplicates.");
         }
+        var roles = request.Roles!.OrderBy(role => role).ToList();
 
         var teamId = await FindTeamId(teamSlug, cancellationToken);
         if (teamId == null)
@@ -121,7 +145,7 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
         }
         if (user != null && await HasMembership(teamId.Value, user.Id, cancellationToken))
         {
-            return Conflict("This user already belongs to the team. Change their role from the member list.");
+            return Conflict("This user already belongs to the team. Change their roles from the member list.");
         }
 
         // Recheck required directory details before granting access to an existing or new user.
@@ -129,6 +153,13 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
         if (person == null || !person.HasRequiredDetails() || person.IamId != iamId)
         {
             return NotFound("That person could not be found. Search again before adding a team member.");
+        }
+
+        // The role is part of the key, so a transaction protects the whole membership from concurrent adds.
+        await using var transaction = await BeginMembershipTransaction(cancellationToken);
+        if (user != null && await HasMembership(teamId.Value, user.Id, cancellationToken))
+        {
+            return Conflict("This user already belongs to the team. Change their roles from the member list.");
         }
         if (user == null)
         {
@@ -146,21 +177,35 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
         }
 
         PopulateMissingDetails(user, person.Email!, person.Kerberos!);
-        var permission = new TeamPermission { TeamId = teamId.Value, User = user, Role = request.Role!.Value };
-        dbContext.TeamPermissions.Add(permission);
+        var permissions = roles.Select(role => new TeamPermission { TeamId = teamId.Value, User = user, Role = role })
+            .ToList();
+        dbContext.TeamPermissions.AddRange(permissions);
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
+            if (transaction != null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
         }
         catch (DbUpdateException)
         {
-            // A first login or another add may have won either unique key. Discard both attempted inserts.
-            dbContext.Entry(permission).State = EntityState.Detached;
+            if (transaction != null)
+            {
+                await transaction.DisposeAsync();
+            }
+
+            // A first login or another add may have won a unique key. Discard the attempted inserts.
+            foreach (var permission in permissions)
+            {
+                dbContext.Entry(permission).State = EntityState.Detached;
+            }
             if (isNewUser)
             {
                 dbContext.Entry(user).State = EntityState.Detached;
             }
 
+            await using var retryTransaction = await BeginMembershipTransaction(cancellationToken);
             user = await dbContext.Users.SingleOrDefaultAsync(user => user.IamId == iamId, cancellationToken);
             if (user == null)
             {
@@ -180,15 +225,28 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
             }
 
             PopulateMissingDetails(user, person.Email!, person.Kerberos!);
-            permission = new TeamPermission { TeamId = teamId.Value, User = user, Role = request.Role.Value };
-            dbContext.TeamPermissions.Add(permission);
+            permissions = roles.Select(role => new TeamPermission { TeamId = teamId.Value, User = user, Role = role })
+                .ToList();
+            dbContext.TeamPermissions.AddRange(permissions);
             try
             {
                 await dbContext.SaveChangesAsync(cancellationToken);
+                if (retryTransaction != null)
+                {
+                    await retryTransaction.CommitAsync(cancellationToken);
+                }
             }
             catch (DbUpdateException)
             {
-                dbContext.Entry(permission).State = EntityState.Detached;
+                if (retryTransaction != null)
+                {
+                    await retryTransaction.DisposeAsync();
+                }
+
+                foreach (var permission in permissions)
+                {
+                    dbContext.Entry(permission).State = EntityState.Detached;
+                }
                 if (await HasMembership(teamId.Value, user.Id, cancellationToken))
                 {
                     return Conflict("This user already belongs to the team. Refresh the member list.");
@@ -198,18 +256,19 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
             }
         }
 
-        return Ok(ToResponse(user, permission.Role));
+        return Ok(ToResponse(user, roles));
     }
 
-    [HttpPut("{userId:int}/role")]
-    public async Task<ActionResult<TeamMemberResponse>> UpdateRole(
-        string teamSlug, int userId, [FromBody] UpdateTeamMemberRoleRequest request,
+    [HttpPut("{userId:int}/roles")]
+    public async Task<ActionResult<TeamMemberResponse>> UpdateRoles(
+        string teamSlug, int userId, [FromBody] UpdateTeamMemberRolesRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (!CanAssignRole(request.Role))
+        if (!HasValidRoles(request.Roles))
         {
-            return BadRequest("Choose the Admin or Editor role.");
+            return BadRequest("Choose at least one valid team role without duplicates.");
         }
+        var roles = request.Roles!.OrderBy(role => role).ToList();
 
         var currentIamId = User.FindFirst("ucdPersonIAMID")?.Value;
         if (string.IsNullOrWhiteSpace(currentIamId))
@@ -217,21 +276,53 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
             return Forbid();
         }
 
-        var permission = await dbContext.TeamPermissions.Include(permission => permission.User)
-            .SingleOrDefaultAsync(permission => permission.Team.Slug == teamSlug && permission.UserId == userId,
-                cancellationToken);
-        if (permission == null)
+        await using var transaction = await BeginMembershipTransaction(cancellationToken);
+        var permissions = await dbContext.TeamPermissions.Include(permission => permission.User)
+            .Where(permission => permission.Team.Slug == teamSlug && permission.UserId == userId)
+            .ToListAsync(cancellationToken);
+        if (permissions.Count == 0)
         {
             return NotFound("That team member could not be found.");
         }
-        if (string.Equals(permission.User.IamId.Trim(), currentIamId.Trim(), StringComparison.OrdinalIgnoreCase))
+        var user = permissions[0].User;
+        if (string.Equals(user.IamId.Trim(), currentIamId.Trim(), StringComparison.OrdinalIgnoreCase))
         {
-            return BadRequest("You cannot change your own team role.");
+            return BadRequest("You cannot change your own team roles.");
         }
 
-        permission.Role = request.Role!.Value;
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(ToResponse(permission.User, permission.Role));
+        var existingRoles = permissions.Select(permission => permission.Role).ToList();
+        if (roles.Any(role => !CanAssignRole(role) && !existingRoles.Contains(role)))
+        {
+            return BadRequest("New role assignments must use Admin or Editor.");
+        }
+
+        dbContext.TeamPermissions.RemoveRange(permissions.Where(permission => !roles.Contains(permission.Role)));
+        dbContext.TeamPermissions.AddRange(roles.Where(role => !existingRoles.Contains(role))
+            .Select(role => new TeamPermission { TeamId = permissions[0].TeamId, User = user, Role = role }));
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            if (transaction != null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+        }
+        catch (DbUpdateException exception)
+        {
+            if (transaction != null)
+            {
+                await transaction.DisposeAsync();
+            }
+
+            if (exception is DbUpdateConcurrencyException ||
+                await MembershipChanged(permissions[0].TeamId, userId, existingRoles, cancellationToken))
+            {
+                return Conflict("This member's roles changed while saving. Refresh the member list and try again.");
+            }
+
+            throw;
+        }
+        return Ok(ToResponse(user, roles));
     }
 
     [HttpDelete("{userId:int}")]
@@ -244,20 +335,44 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
             return Forbid();
         }
 
-        var permission = await dbContext.TeamPermissions.Include(permission => permission.User)
-            .SingleOrDefaultAsync(permission => permission.Team.Slug == teamSlug && permission.UserId == userId,
-                cancellationToken);
-        if (permission == null)
+        await using var transaction = await BeginMembershipTransaction(cancellationToken);
+        var permissions = await dbContext.TeamPermissions.Include(permission => permission.User)
+            .Where(permission => permission.Team.Slug == teamSlug && permission.UserId == userId)
+            .ToListAsync(cancellationToken);
+        if (permissions.Count == 0)
         {
             return NotFound("That team member could not be found.");
         }
-        if (string.Equals(permission.User.IamId.Trim(), currentIamId.Trim(), StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(permissions[0].User.IamId.Trim(), currentIamId.Trim(), StringComparison.OrdinalIgnoreCase))
         {
             return BadRequest("You cannot remove your own team access.");
         }
 
-        dbContext.TeamPermissions.Remove(permission);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        dbContext.TeamPermissions.RemoveRange(permissions);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            if (transaction != null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+        }
+        catch (DbUpdateException exception)
+        {
+            if (transaction != null)
+            {
+                await transaction.DisposeAsync();
+            }
+
+            if (exception is DbUpdateConcurrencyException ||
+                await MembershipChanged(permissions[0].TeamId, userId,
+                    permissions.Select(permission => permission.Role).ToList(), cancellationToken))
+            {
+                return Conflict("This member's roles changed while removing them. Refresh the member list and try again.");
+            }
+
+            throw;
+        }
         return NoContent();
     }
 
@@ -269,7 +384,30 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
         => dbContext.TeamPermissions.AnyAsync(permission => permission.TeamId == teamId && permission.UserId == userId,
             cancellationToken);
 
+    private async Task<IDbContextTransaction?> BeginMembershipTransaction(CancellationToken cancellationToken)
+    {
+        if (!dbContext.Database.IsRelational())
+        {
+            return null;
+        }
+
+        return await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+    }
+
+    private async Task<bool> MembershipChanged(
+        int teamId, int userId, List<TeamRole> originalRoles, CancellationToken cancellationToken)
+    {
+        var currentRoles = await dbContext.TeamPermissions.AsNoTracking()
+            .Where(permission => permission.TeamId == teamId && permission.UserId == userId)
+            .Select(permission => permission.Role).ToListAsync(cancellationToken);
+        return !originalRoles.OrderBy(role => role).SequenceEqual(currentRoles.OrderBy(role => role));
+    }
+
     private static bool CanAssignRole(TeamRole? role) => role == TeamRole.Admin || role == TeamRole.Editor;
+
+    private static bool HasValidRoles(List<TeamRole>? roles)
+        => roles != null && roles.Count > 0 && roles.Distinct().Count() == roles.Count &&
+            roles.All(role => CanAssignRole(role) || role == TeamRole.Viewer);
 
     private static void PopulateMissingDetails(User user, string email, string kerberos)
     {
@@ -285,13 +423,13 @@ public class TeamMembersController(AppDbContext dbContext, IRosettaService roset
         }
     }
 
-    private static TeamMemberResponse ToResponse(User user, TeamRole role) => new()
+    private static TeamMemberResponse ToResponse(User user, List<TeamRole> roles) => new()
     {
         Id = user.Id,
         IamId = user.IamId,
         Name = user.Name,
         Email = user.Email,
         IsActive = user.IsActive,
-        Role = role,
+        Roles = roles,
     };
 }

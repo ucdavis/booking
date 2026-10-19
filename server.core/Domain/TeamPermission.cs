@@ -29,7 +29,7 @@ public class TeamPermission
 
         builder.ToTable(table => table.HasCheckConstraint(
             "CK_TeamPermissions_Role", "[Role] IN ('admin', 'editor', 'viewer')"));
-        builder.HasKey(permission => new { permission.TeamId, permission.UserId });
+        builder.HasKey(permission => new { permission.TeamId, permission.UserId, permission.Role });
 
         builder.HasOne(permission => permission.User)
             .WithMany()

@@ -11,3 +11,15 @@ export const teamRoleLabels: Record<TeamRole, string> = {
   [TeamRole.Editor]: 'Editor',
   [TeamRole.Viewer]: 'Viewer',
 };
+
+export function createTeamRoleSelection(roles: TeamRole[] = []) {
+  return {
+    admin: roles.includes(TeamRole.Admin),
+    editor: roles.includes(TeamRole.Editor),
+    viewer: roles.includes(TeamRole.Viewer),
+  };
+}
+
+export function selectedTeamRoles(selection: Record<TeamRole, boolean>) {
+  return Object.values(TeamRole).filter((role) => selection[role]);
+}

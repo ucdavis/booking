@@ -1,19 +1,22 @@
 import { MagnifyingGlassIcon, UserPlusIcon } from '@heroicons/react/24/outline';
-import { useForm, useStore } from '@tanstack/react-form';
+import { useStore } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { TeamMember } from './models/TeamMember.ts';
 import {
-  assignableTeamRoles,
+  createTeamRoleSelection,
+  selectedTeamRoles,
   TeamRole,
   teamRoleLabels,
 } from './models/TeamRole.ts';
+import { TeamRoleFields } from './TeamRoleFields.tsx';
 import { HttpError } from '@/lib/api.ts';
 import {
   addTeamMember,
   invalidateTeamMemberQueries,
   teamPeopleQueryOptions,
 } from '@/queries/teams.ts';
+import { useAppForm } from '@/shared/forms/formContext.tsx';
 
 export function AddTeamMemberDialog({
   onAccessDenied,
@@ -41,12 +44,12 @@ export function AddTeamMemberDialog({
     people?.find(
       (person) =>
         person.isActive &&
-        person.role === null &&
+        person.roles.length === 0 &&
         (person.iamId === iamId || (iamId === null && people.length === 1))
     );
   const addMutation = useMutation({
-    mutationFn: ({ iamId, role }: { iamId: string; role: TeamRole }) =>
-      addTeamMember(teamSlug, iamId, role),
+    mutationFn: ({ iamId, roles }: { iamId: string; roles: TeamRole[] }) =>
+      addTeamMember(teamSlug, iamId, roles),
     onError: (error) => {
       if (error instanceof HttpError && error.status === 403) {
         onAccessDenied();
@@ -57,15 +60,17 @@ export function AddTeamMemberDialog({
       onAdded(member);
     },
   });
-  const form = useForm({
+  const form = useAppForm({
     defaultValues: {
-      role: TeamRole.Editor as TeamRole,
+      roles: createTeamRoleSelection([TeamRole.Editor]),
       selectedIamId: null as string | null,
     },
     onSubmit: async ({ value }) => {
       const person = findSelectedPerson(value.selectedIamId);
+      const roles = selectedTeamRoles(value.roles);
       if (
         !person ||
+        roles.length === 0 ||
         peopleQuery.isFetching ||
         peopleQuery.isError ||
         addMutation.isPending
@@ -73,9 +78,9 @@ export function AddTeamMemberDialog({
         return;
       }
       try {
-        await addMutation.mutateAsync({ iamId: person.iamId, role: value.role });
+        await addMutation.mutateAsync({ iamId: person.iamId, roles });
       } catch {
-        // Keep the selected person and role available when adding fails.
+        // Keep the selected person and roles available when adding fails.
       }
     },
   });
@@ -84,6 +89,8 @@ export function AddTeamMemberDialog({
     (state) => state.values.selectedIamId
   );
   const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
+  const roleSelection = useStore(form.store, (state) => state.values.roles);
+  const roles = selectedTeamRoles(roleSelection);
   const isPending = isSubmitting || addMutation.isPending;
   const selectedPerson = findSelectedPerson(selectedIamId);
 
@@ -135,6 +142,7 @@ export function AddTeamMemberDialog({
 
   const canAdd =
     selectedPerson &&
+    roles.length > 0 &&
     !peopleQuery.isFetching &&
     !peopleQuery.isError &&
     !isPending;
@@ -177,7 +185,7 @@ export function AddTeamMemberDialog({
           className="mt-2 text-base-content/70"
           id="add-team-member-description"
         >
-          Find a person, review their details, and choose their role on this
+          Find a person, review their details, and choose their roles on this
           team.
         </p>
 
@@ -210,9 +218,7 @@ export function AddTeamMemberDialog({
             <button
               className="btn btn-primary"
               disabled={
-                !searchText.trim() ||
-                peopleQuery.isFetching ||
-                isPending
+                !searchText.trim() || peopleQuery.isFetching || isPending
               }
               type="submit"
             >
@@ -268,7 +274,7 @@ export function AddTeamMemberDialog({
                         checked={selectedPerson?.iamId === person.iamId}
                         className="radio radio-primary mt-1 shrink-0"
                         disabled={
-                          person.role !== null ||
+                          person.roles.length > 0 ||
                           !person.isActive ||
                           isPending
                         }
@@ -293,9 +299,12 @@ export function AddTeamMemberDialog({
                           <dt className="text-base-content/60">Kerberos ID</dt>
                           <dd>{person.kerberos || 'Not available'}</dd>
                         </dl>
-                        {person.role !== null && (
+                        {person.roles.length > 0 && (
                           <p className="mt-3 text-sm font-medium">
-                            Already a team member ({teamRoleLabels[person.role]}
+                            Already a team member (
+                            {person.roles
+                              .map((role) => teamRoleLabels[role])
+                              .join(', ')}
                             )
                           </p>
                         )}
@@ -321,45 +330,14 @@ export function AddTeamMemberDialog({
             void form.handleSubmit();
           }}
         >
-          <form.Field name="role">
-            {(field) => (
-              <>
-                <label
-                  className="mb-2 block text-sm font-semibold"
-                  htmlFor="add-team-member-role"
-                >
-                  Team role
-                </label>
-                <select
-                  className="select select-bordered w-full"
-                  disabled={isPending}
-                  id="add-team-member-role"
-                  onBlur={field.handleBlur}
-                  onChange={(event) => {
-                    const selectedRole = assignableTeamRoles.find(
-                      (value) => value === event.target.value
-                    );
-                    if (selectedRole) {
-                      field.handleChange(selectedRole);
-                      addMutation.reset();
-                    }
-                  }}
-                  value={field.state.value}
-                >
-                  {assignableTeamRoles.map((value) => (
-                    <option key={value} value={value}>
-                      {teamRoleLabels[value]}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-2 text-sm text-base-content/65">
-                  {field.state.value === TeamRole.Admin
-                    ? 'Admins can manage this team and its members.'
-                    : 'Editors have team access but cannot manage members.'}
-                </p>
-              </>
-            )}
-          </form.Field>
+          <TeamRoleFields
+            disabled={isPending}
+            error={roles.length === 0 ? 'Select at least one role.' : undefined}
+            fields="roles"
+            form={form}
+            includeViewer={false}
+            onChange={() => addMutation.reset()}
+          />
         </form>
 
         {addMutation.isError && (

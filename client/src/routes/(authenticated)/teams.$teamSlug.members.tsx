@@ -1,5 +1,4 @@
 import { UserPlusIcon } from '@heroicons/react/24/outline';
-import { useForm, useStore } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createFileRoute,
@@ -10,15 +9,12 @@ import {
 import type { ColumnDef } from '@tanstack/react-table';
 import { useCallback, useEffect, useState } from 'react';
 import { AddTeamMemberDialog } from '@/features/teams/AddTeamMemberDialog.tsx';
+import { EditTeamMemberRolesForm } from '@/features/teams/EditTeamMemberRolesForm.tsx';
 import type { TeamMember } from '@/features/teams/models/TeamMember.ts';
-import {
-  assignableTeamRoles,
-  TeamRole,
-  teamRoleLabels,
-} from '@/features/teams/models/TeamRole.ts';
+import { TeamRole, teamRoleLabels } from '@/features/teams/models/TeamRole.ts';
 import { HttpError } from '@/lib/api.ts';
 import {
-  changeTeamMemberRole,
+  changeTeamMemberRoles,
   invalidateTeamMemberQueries,
   removeTeamMember,
   teamAccessQueryOptions,
@@ -82,8 +78,13 @@ function TeamMembersPage() {
     member.iamId.trim().toLowerCase() ===
     currentUser.iamId?.trim().toLowerCase();
   const roleMutation = useMutation({
-    mutationFn: ({ member, role }: { member: TeamMember; role: TeamRole }) =>
-      changeTeamMemberRole(teamSlug, member.id, role),
+    mutationFn: ({
+      member,
+      roles,
+    }: {
+      member: TeamMember;
+      roles: TeamRole[];
+    }) => changeTeamMemberRoles(teamSlug, member.id, roles),
     onError: (error) => {
       if (error instanceof HttpError && error.status === 403) {
         denyAccess();
@@ -92,36 +93,11 @@ function TeamMembersPage() {
     onSuccess: async (member) => {
       await invalidateTeamMemberQueries(queryClient, teamSlug);
       setEditingMember(null);
-      setNotice(`${member.name}'s role is now ${teamRoleLabels[member.role]}.`);
+      setNotice(
+        `${member.name}'s roles are now ${member.roles.map((role) => teamRoleLabels[role]).join(', ')}.`
+      );
     },
   });
-  const roleForm = useForm({
-    defaultValues: { role: TeamRole.Editor as TeamRole },
-    onSubmit: async ({ value }) => {
-      if (
-        !editingMember ||
-        isCurrentUser(editingMember) ||
-        value.role === editingMember.role ||
-        roleMutation.isPending
-      ) {
-        return;
-      }
-      try {
-        await roleMutation.mutateAsync({
-          member: editingMember,
-          role: value.role,
-        });
-      } catch {
-        // Keep the selected role available when saving fails.
-      }
-    },
-  });
-  const newRole = useStore(roleForm.store, (state) => state.values.role);
-  const isRoleSubmitting = useStore(
-    roleForm.store,
-    (state) => state.isSubmitting
-  );
-  const isRolePending = isRoleSubmitting || roleMutation.isPending;
   const removeMutation = useMutation({
     mutationFn: (member: TeamMember) => removeTeamMember(teamSlug, member.id),
     onError: (error) => {
@@ -153,7 +129,7 @@ function TeamMembersPage() {
     }
   }, [membersQuery.error, queryClient, teamSlug]);
 
-  const isBusy = isRolePending || removeMutation.isPending;
+  const isBusy = roleMutation.isPending || removeMutation.isPending;
   const columns: ColumnDef<TeamMember>[] = [
     {
       accessorKey: 'name',
@@ -169,9 +145,19 @@ function TeamMembersPage() {
     },
     { accessorKey: 'iamId', header: 'IAM ID' },
     {
-      accessorKey: 'role',
-      cell: ({ row }) => teamRoleLabels[row.original.role],
-      header: 'Role',
+      accessorFn: (member) =>
+        member.roles.map((role) => teamRoleLabels[role]).join(', '),
+      cell: ({ row }) => (
+        <div className="flex flex-wrap gap-1">
+          {row.original.roles.map((role) => (
+            <span className="badge badge-outline badge-sm" key={role}>
+              {teamRoleLabels[role]}
+            </span>
+          ))}
+        </div>
+      ),
+      header: 'Roles',
+      id: 'roles',
     },
     {
       accessorKey: 'isActive',
@@ -191,24 +177,18 @@ function TeamMembersPage() {
         ) : (
           <div className="flex flex-wrap gap-1">
             <button
-              aria-label={`Change role for ${row.original.name}`}
+              aria-label={`Manage roles for ${row.original.name}`}
               className="btn btn-ghost btn-sm"
               disabled={isBusy}
               onClick={() => {
                 setEditingMember(row.original);
-                roleForm.reset({
-                  role:
-                    row.original.role === TeamRole.Admin
-                      ? TeamRole.Admin
-                      : TeamRole.Editor,
-                });
                 setRemovingMember(null);
                 setNotice('');
                 roleMutation.reset();
               }}
               type="button"
             >
-              Change role
+              Manage roles
             </button>
             <button
               aria-label={`Remove ${row.original.name} from team`}
@@ -222,7 +202,7 @@ function TeamMembersPage() {
               }}
               type="button"
             >
-              Remove
+              Remove member
             </button>
           </div>
         ),
@@ -241,7 +221,8 @@ function TeamMembersPage() {
 
   const canManage =
     accessQuery.isSuccess &&
-    (accessQuery.data.isSiteAdmin || accessQuery.data.role === TeamRole.Admin);
+    (accessQuery.data.isSiteAdmin ||
+      accessQuery.data.roles.includes(TeamRole.Admin));
   if (accessDenied || !canManage) {
     return <TeamMembersError error={new HttpError(403, '/api/teams')} />;
   }
@@ -259,7 +240,7 @@ function TeamMembersPage() {
           <h2 className="text-2xl font-semibold text-primary">Team members</h2>
           <p className="mt-3 max-w-2xl text-base-content/70">
             Add people and manage their roles on this team. You cannot change
-            your own role or remove yourself.
+            your own roles or remove yourself.
           </p>
         </div>
         <button
@@ -283,83 +264,19 @@ function TeamMembersPage() {
       )}
 
       {editingMember && !isCurrentUser(editingMember) && (
-        <form
-          aria-labelledby="change-team-role-heading"
-          className="mt-6 rounded-sm border border-base-300 bg-base-100 p-5"
-          onSubmit={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void roleForm.handleSubmit();
+        <EditTeamMemberRolesForm
+          hasError={roleMutation.isError}
+          isPending={roleMutation.isPending}
+          key={editingMember.id}
+          member={editingMember}
+          onCancel={() => setEditingMember(null)}
+          onChange={() => roleMutation.reset()}
+          onSave={async (roles) => {
+            if (!isCurrentUser(editingMember)) {
+              await roleMutation.mutateAsync({ member: editingMember, roles });
+            }
           }}
-        >
-          <h3 className="font-semibold" id="change-team-role-heading">
-            Change team role
-          </h3>
-          <p className="mt-2 text-base-content/80">
-            Choose a new role for {editingMember.name}. Their current role is{' '}
-            {teamRoleLabels[editingMember.role]}.
-          </p>
-          <label
-            className="mt-4 mb-2 block text-sm font-semibold"
-            htmlFor="team-member-new-role"
-          >
-            New role
-          </label>
-          <roleForm.Field name="role">
-            {(field) => (
-              <select
-                className="select select-bordered w-full max-w-xs"
-                disabled={isRolePending}
-                id="team-member-new-role"
-                onBlur={field.handleBlur}
-                onChange={(event) => {
-                  const selectedRole = assignableTeamRoles.find(
-                    (value) => value === event.target.value
-                  );
-                  if (selectedRole) {
-                    field.handleChange(selectedRole);
-                    roleMutation.reset();
-                  }
-                }}
-                value={field.state.value}
-              >
-                {assignableTeamRoles.map((value) => (
-                  <option key={value} value={value}>
-                    {teamRoleLabels[value]}
-                  </option>
-                ))}
-              </select>
-            )}
-          </roleForm.Field>
-          <p className="mt-2 text-sm text-base-content/65">
-            {newRole === TeamRole.Admin
-              ? 'Admins can manage this team and its members.'
-              : 'Editors have team access but cannot manage members.'}
-          </p>
-          {roleMutation.isError && (
-            <p className="mt-3 text-error" role="alert">
-              We could not change this member&apos;s role. Refresh the page to
-              check their current access, then try again.
-            </p>
-          )}
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              className="btn btn-primary btn-sm"
-              disabled={isRolePending || newRole === editingMember.role}
-              type="submit"
-            >
-              {isRolePending ? 'Saving…' : 'Save role'}
-            </button>
-            <button
-              className="btn btn-ghost btn-sm"
-              disabled={isRolePending}
-              onClick={() => setEditingMember(null)}
-              type="button"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+        />
       )}
 
       {removingMember && !isCurrentUser(removingMember) && (
@@ -371,8 +288,8 @@ function TeamMembersPage() {
             Remove team member?
           </h3>
           <p className="mt-2 text-base-content/80">
-            Remove {removingMember.name}&apos;s role on this team. Their user
-            account, other teams, and any site admin access will remain.
+            Remove all of {removingMember.name}&apos;s roles on this team. Their
+            user account, other teams, and any site admin access will remain.
           </p>
           {removeMutation.isError && (
             <p className="mt-3 text-error" role="alert">
@@ -438,7 +355,7 @@ function TeamMembersPage() {
           onAdded={(member) => {
             setIsAddOpen(false);
             setNotice(
-              `${member.name} was added as ${teamRoleLabels[member.role]}.`
+              `${member.name} was added with roles: ${member.roles.map((role) => teamRoleLabels[role]).join(', ')}.`
             );
           }}
           onClose={() => setIsAddOpen(false)}

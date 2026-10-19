@@ -113,25 +113,27 @@ export const teamPeopleQueryOptions = (
 export const addTeamMember = (
   teamSlug: string,
   iamId: string,
-  role: TeamRole
+  roles: TeamRole[]
 ) =>
   fetchJson<TeamMember>(teamMembersUrl(teamSlug), {
-    body: JSON.stringify({ iamId, role }),
+    body: JSON.stringify({ iamId, roles }),
     method: 'POST',
   });
 
-export const changeTeamMemberRole = (
+export const changeTeamMemberRoles = (
   teamSlug: string,
   userId: number,
-  role: TeamRole
+  roles: TeamRole[]
 ) =>
-  fetchJson<TeamMember>(`${teamMembersUrl(teamSlug)}/${userId}/role`, {
-    body: JSON.stringify({ role }),
+  fetchJson<TeamMember>(`${teamMembersUrl(teamSlug)}/${userId}/roles`, {
+    body: JSON.stringify({ roles }),
     method: 'PUT',
   });
 
 export const removeTeamMember = (teamSlug: string, userId: number) =>
-  fetchJson<void>(`${teamMembersUrl(teamSlug)}/${userId}`, { method: 'DELETE' });
+  fetchJson<void>(`${teamMembersUrl(teamSlug)}/${userId}`, {
+    method: 'DELETE',
+  });
 
 export async function invalidateTeamMemberQueries(
   queryClient: QueryClient,

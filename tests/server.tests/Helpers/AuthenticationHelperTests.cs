@@ -234,6 +234,37 @@ public class AuthenticationHelperTests : IDisposable
             .Succeeded.Should().Be(isAdmin && isActive);
     }
 
+    [Fact]
+    public async Task Team_policies_union_assigned_roles_and_recheck_each_role_removal()
+    {
+        var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = new User { IamId = "sandbox-10001", Name = "Member" };
+        var team = new Team { Name = "Team A", Slug = "team-a" };
+        var admin = new TeamPermission { User = user, Team = team, Role = TeamRole.Admin };
+        var editor = new TeamPermission { User = user, Team = team, Role = TeamRole.Editor };
+        db.TeamPermissions.AddRange(
+            new TeamPermission { User = user, Team = team, Role = TeamRole.Viewer }, editor, admin);
+        await db.SaveChangesAsync();
+        var principal = CreatePrincipal();
+
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamAdminPolicy))
+            .Succeeded.Should().BeTrue();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamEditorPolicy))
+            .Succeeded.Should().BeTrue();
+        db.TeamPermissions.Remove(admin);
+        await db.SaveChangesAsync();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamAdminPolicy))
+            .Succeeded.Should().BeFalse();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamEditorPolicy))
+            .Succeeded.Should().BeTrue();
+        db.TeamPermissions.Remove(editor);
+        await db.SaveChangesAsync();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamEditorPolicy))
+            .Succeeded.Should().BeFalse();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a"))
+            .Succeeded.Should().BeTrue();
+    }
+
     [Theory]
     [InlineData(AuthenticationHelper.TeamAdminPolicy)]
     [InlineData(AuthenticationHelper.TeamEditorPolicy)]
@@ -273,7 +304,8 @@ public class AuthenticationHelperTests : IDisposable
 
         (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", policy))
             .Succeeded.Should().BeTrue();
-        permission.Role = demotedRole;
+        db.TeamPermissions.Remove(permission);
+        db.TeamPermissions.Add(new TeamPermission { User = user, Team = permission.Team, Role = demotedRole });
         await db.SaveChangesAsync();
         (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", policy))
             .Succeeded.Should().BeFalse();

@@ -3,8 +3,8 @@ using Server.Core.Domain;
 
 namespace Server.Models.Teams;
 
-public sealed class UpdateTeamMemberRoleRequest
+public sealed class UpdateTeamMemberRolesRequest
 {
     [Required]
-    public TeamRole? Role { get; init; }
+    public List<TeamRole>? Roles { get; init; }
 }

@@ -35,15 +35,25 @@ const user: User = {
   roles: [],
 };
 
-const team = { id: 1, name: 'Plant Sciences', slug: 'plant-sciences' };
-const otherTeam = { id: 2, name: 'Animal Science', slug: 'animal-science' };
+const team = {
+  id: 1,
+  name: 'Plant Sciences',
+  roles: [TeamRole.Admin],
+  slug: 'plant-sciences',
+};
+const otherTeam = {
+  id: 2,
+  name: 'Animal Science',
+  roles: [TeamRole.Admin],
+  slug: 'animal-science',
+};
 const currentMember: TeamMember = {
   email: user.email,
   iamId: '100001',
   id: 1,
   isActive: true,
   name: user.name,
-  role: TeamRole.Admin,
+  roles: [TeamRole.Admin],
 };
 const otherMember: TeamMember = {
   email: 'avery@example.com',
@@ -51,7 +61,7 @@ const otherMember: TeamMember = {
   id: 2,
   isActive: true,
   name: 'Avery Editor',
-  role: TeamRole.Editor,
+  roles: [TeamRole.Editor],
 };
 const person = {
   email: 'sam@example.com',
@@ -59,7 +69,7 @@ const person = {
   isActive: true,
   kerberos: 'samsmith',
   name: 'Sam Smith',
-  role: null,
+  roles: [],
 };
 
 let cleanup: (() => void) | undefined;
@@ -115,14 +125,15 @@ afterEach(() => {
 function mockAccess({
   isSiteAdmin = false,
   role = 'admin',
-}: { isSiteAdmin?: boolean; role?: string | null } = {}) {
+  roles = role ? [role] : [],
+}: { isSiteAdmin?: boolean; role?: string | null; roles?: string[] } = {}) {
   server.use(
     http.get('/api/user/me', () => HttpResponse.json({ ...user, isSiteAdmin })),
     http.get('/api/teams', () => HttpResponse.json([team])),
     http.get('/api/teams/:teamSlug', ({ params }) =>
       HttpResponse.json({
         isSiteAdmin,
-        role,
+        roles,
         team: params.teamSlug === otherTeam.slug ? otherTeam : team,
       })
     ),
@@ -149,6 +160,20 @@ function silenceRouteErrors() {
 }
 
 describe('team members', () => {
+  it('allows management when Admin is one of several assigned roles', async () => {
+    mockAccess({ roles: ['viewer', 'admin'] });
+    ({ cleanup } = renderRoute({
+      initialPath: '/teams/plant-sciences/members',
+    }));
+
+    expect(
+      await screen.findByRole('button', {
+        name: 'Manage roles for Avery Editor',
+      })
+    ).toBeEnabled();
+    expect(screen.getByRole('link', { name: 'Members' })).toBeInTheDocument();
+  });
+
   it.each([false, true])(
     'keeps the current user read-only, including site admins (%s)',
     async (isSiteAdmin) => {
@@ -169,14 +194,14 @@ describe('team members', () => {
       );
       expect(ownRow.getByText('You')).toBeInTheDocument();
       expect(
-        ownRow.queryByRole('button', { name: /Change role|Remove/ })
+        ownRow.queryByRole('button', { name: /Manage roles|Remove/ })
       ).not.toBeInTheDocument();
       expect(ownRow.queryByRole('combobox')).not.toBeInTheDocument();
       const otherRow = within(
         screen.getByRole('row', { name: /Avery Editor/ })
       );
       expect(
-        otherRow.getByRole('button', { name: 'Change role for Avery Editor' })
+        otherRow.getByRole('button', { name: 'Manage roles for Avery Editor' })
       ).toBeEnabled();
       expect(
         otherRow.getByRole('button', { name: 'Remove Avery Editor from team' })
@@ -192,7 +217,12 @@ describe('team members', () => {
       );
       return HttpResponse.json([
         person,
-        { ...person, iamId: '100004', name: 'Existing Member', role: 'editor' },
+        {
+          ...person,
+          iamId: '100004',
+          name: 'Existing Member',
+          roles: ['editor'],
+        },
         {
           ...person,
           iamId: '100005',
@@ -262,7 +292,7 @@ describe('team members', () => {
     expect(dialog.getByRole('button', { name: 'Add member' })).toBeEnabled();
   });
 
-  it('defaults additions to Editor, offers only Admin and Editor, and posts the selected IAM ID with a team token', async () => {
+  it('defaults additions to Editor and submits multiple selected roles with a team token', async () => {
     mockAccess();
     let added = false;
     let body: unknown;
@@ -275,14 +305,18 @@ describe('team members', () => {
         HttpResponse.json([
           currentMember,
           otherMember,
-          ...(added ? [{ ...person, id: 3, role: 'editor' }] : []),
+          ...(added ? [{ ...person, id: 3, roles: ['admin', 'editor'] }] : []),
         ])
       ),
       http.post('/api/teams/plant-sciences/members', async ({ request }) => {
         body = await request.json();
         token = request.headers.get('RequestVerificationToken');
         added = true;
-        return HttpResponse.json({ ...person, id: 3, role: 'editor' });
+        return HttpResponse.json({
+          ...person,
+          id: 3,
+          roles: ['admin', 'editor'],
+        });
       })
     );
     ({ cleanup } = renderRoute({
@@ -295,14 +329,16 @@ describe('team members', () => {
     );
     fireEvent.click(dialog.getByRole('button', { name: 'Search' }));
     fireEvent.click(await dialog.findByRole('radio', { name: 'Sam Smith' }));
-    const roleSelect = dialog.getByRole('combobox', { name: 'Team role' });
-    expect(roleSelect).toHaveValue('editor');
+    expect(dialog.getByRole('checkbox', { name: 'Editor' })).toBeChecked();
+    expect(dialog.getByRole('checkbox', { name: 'Admin' })).not.toBeChecked();
     expect(
-      within(roleSelect)
-        .getAllByRole('option')
-        .map((option) => option.textContent)
-        .sort()
-    ).toEqual(['Admin', 'Editor']);
+      dialog.queryByRole('checkbox', { name: 'Viewer' })
+    ).not.toBeInTheDocument();
+    fireEvent.click(dialog.getByRole('checkbox', { name: 'Editor' }));
+    expect(dialog.getByText('Select at least one role.')).toBeInTheDocument();
+    expect(dialog.getByRole('button', { name: 'Add member' })).toBeDisabled();
+    fireEvent.click(dialog.getByRole('checkbox', { name: 'Editor' }));
+    fireEvent.click(dialog.getByRole('checkbox', { name: 'Admin' }));
     fireEvent.click(dialog.getByRole('button', { name: 'Add member' }));
 
     expect(
@@ -311,26 +347,33 @@ describe('team members', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     );
-    expect(body).toEqual({ iamId: person.iamId, role: 'editor' });
+    expect(body).toEqual({ iamId: person.iamId, roles: ['admin', 'editor'] });
+    const memberRow = within(screen.getByRole('row', { name: /Sam Smith/ }));
+    expect(memberRow.getByText('Admin')).toBeInTheDocument();
+    expect(memberRow.getByText('Editor')).toBeInTheDocument();
+    expect(screen.getAllByRole('row', { name: /Sam Smith/ })).toHaveLength(1);
     expect(token).toBe('team-antiforgery-token');
   });
 
-  it('changes another member role only after explicit Save and allows cancelling the edit', async () => {
+  it('adds roles only after explicit Save and allows cancelling the edit', async () => {
     mockAccess();
-    let memberRole = 'editor';
+    let memberRoles = ['editor'];
     const changes: unknown[] = [];
     let token: string | null = null;
     server.use(
       http.get('/api/teams/plant-sciences/members', () =>
-        HttpResponse.json([currentMember, { ...otherMember, role: memberRole }])
+        HttpResponse.json([
+          currentMember,
+          { ...otherMember, roles: memberRoles },
+        ])
       ),
       http.put(
-        '/api/teams/plant-sciences/members/2/role',
+        '/api/teams/plant-sciences/members/2/roles',
         async ({ request }) => {
           changes.push(await request.json());
           token = request.headers.get('RequestVerificationToken');
-          memberRole = 'admin';
-          return HttpResponse.json({ ...otherMember, role: memberRole });
+          memberRoles = ['admin', 'editor'];
+          return HttpResponse.json({ ...otherMember, roles: memberRoles });
         }
       )
     );
@@ -339,36 +382,30 @@ describe('team members', () => {
     }));
     fireEvent.click(
       await screen.findByRole('button', {
-        name: 'Change role for Avery Editor',
+        name: 'Manage roles for Avery Editor',
       })
     );
-    const newRole = screen.getByRole('combobox', { name: 'New role' });
-    expect(newRole).toHaveValue('editor');
+    expect(screen.getByRole('checkbox', { name: 'Editor' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Admin' })).not.toBeChecked();
     expect(
-      within(newRole)
-        .getAllByRole('option')
-        .map((option) => option.textContent)
-        .sort()
-    ).toEqual(['Admin', 'Editor']);
-    fireEvent.change(newRole, { target: { value: 'admin' } });
+      screen.queryByRole('checkbox', { name: 'Viewer' })
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Admin' }));
     expect(changes).toEqual([]);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(
-      screen.queryByRole('combobox', { name: 'New role' })
+      screen.queryByRole('checkbox', { name: 'Admin' })
     ).not.toBeInTheDocument();
     expect(changes).toEqual([]);
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Change role for Avery Editor' })
+      screen.getByRole('button', { name: 'Manage roles for Avery Editor' })
     );
-    expect(screen.getByRole('combobox', { name: 'New role' })).toHaveValue(
-      'editor'
-    );
-    expect(screen.getByRole('button', { name: 'Save role' })).toBeDisabled();
-    fireEvent.change(screen.getByRole('combobox', { name: 'New role' }), {
-      target: { value: 'admin' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Save role' }));
+    expect(screen.getByRole('checkbox', { name: 'Editor' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Admin' })).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Save roles' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Admin' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save roles' }));
 
     await waitFor(() => {
       expect(
@@ -377,10 +414,15 @@ describe('team members', () => {
         )
       ).toBeInTheDocument();
       expect(
-        screen.queryByRole('combobox', { name: 'New role' })
+        screen.queryByRole('checkbox', { name: 'Admin' })
       ).not.toBeInTheDocument();
     });
-    expect(changes).toEqual([{ role: 'admin' }]);
+    expect(changes).toEqual([{ roles: ['admin', 'editor'] }]);
+    expect(
+      within(screen.getByRole('row', { name: /Avery Editor/ })).getByText(
+        'Editor'
+      )
+    ).toBeInTheDocument();
     expect(token).toBe('team-antiforgery-token');
   });
 
@@ -398,7 +440,7 @@ describe('team members', () => {
         additions.push(await request.json());
         return additions.length === 1
           ? new HttpResponse(null, { status: 500 })
-          : HttpResponse.json({ ...person, id: 3, role: 'admin' });
+          : HttpResponse.json({ ...person, id: 3, roles: ['admin'] });
       })
     );
     ({ cleanup } = renderRoute({
@@ -411,18 +453,16 @@ describe('team members', () => {
     );
     fireEvent.click(dialog.getByRole('button', { name: 'Search' }));
     fireEvent.click(await dialog.findByRole('radio', { name: 'Sam Smith' }));
-    fireEvent.change(dialog.getByRole('combobox', { name: 'Team role' }), {
-      target: { value: 'admin' },
-    });
+    fireEvent.click(dialog.getByRole('checkbox', { name: 'Admin' }));
+    fireEvent.click(dialog.getByRole('checkbox', { name: 'Editor' }));
     fireEvent.click(dialog.getByRole('button', { name: 'Add member' }));
 
     expect(await dialog.findByRole('alert')).toHaveTextContent(
       'We could not add this team member.'
     );
     expect(dialog.getByRole('radio', { name: 'Sam Smith' })).toBeChecked();
-    expect(dialog.getByRole('combobox', { name: 'Team role' })).toHaveValue(
-      'admin'
-    );
+    expect(dialog.getByRole('checkbox', { name: 'Admin' })).toBeChecked();
+    expect(dialog.getByRole('checkbox', { name: 'Editor' })).not.toBeChecked();
     await waitFor(() =>
       expect(dialog.getByRole('button', { name: 'Add member' })).toBeEnabled()
     );
@@ -432,8 +472,8 @@ describe('team members', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     );
     expect(additions).toEqual([
-      { iamId: person.iamId, role: 'admin' },
-      { iamId: person.iamId, role: 'admin' },
+      { iamId: person.iamId, roles: ['admin'] },
+      { iamId: person.iamId, roles: ['admin'] },
     ]);
   });
 
@@ -442,12 +482,12 @@ describe('team members', () => {
     const changes: unknown[] = [];
     server.use(
       http.put(
-        '/api/teams/plant-sciences/members/2/role',
+        '/api/teams/plant-sciences/members/2/roles',
         async ({ request }) => {
           changes.push(await request.json());
           return changes.length === 1
             ? new HttpResponse(null, { status: 500 })
-            : HttpResponse.json({ ...otherMember, role: 'admin' });
+            : HttpResponse.json({ ...otherMember, roles: ['admin'] });
         }
       )
     );
@@ -456,41 +496,101 @@ describe('team members', () => {
     }));
     fireEvent.click(
       await screen.findByRole('button', {
-        name: 'Change role for Avery Editor',
+        name: 'Manage roles for Avery Editor',
       })
     );
-    fireEvent.change(screen.getByRole('combobox', { name: 'New role' }), {
-      target: { value: 'admin' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Save role' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Admin' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Editor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save roles' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      "We could not change this member's role."
+      "We could not change this member's roles."
     );
-    expect(screen.getByRole('combobox', { name: 'New role' })).toHaveValue(
-      'admin'
-    );
+    expect(screen.getByRole('checkbox', { name: 'Admin' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Editor' })).not.toBeChecked();
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Save role' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Save roles' })).toBeEnabled()
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Save role' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save roles' }));
 
     await waitFor(() =>
       expect(
-        screen.queryByRole('combobox', { name: 'New role' })
+        screen.queryByRole('checkbox', { name: 'Admin' })
       ).not.toBeInTheDocument()
     );
-    expect(changes).toEqual([{ role: 'admin' }, { role: 'admin' }]);
+    expect(changes).toEqual([{ roles: ['admin'] }, { roles: ['admin'] }]);
   });
 
-  it('requires removal confirmation and refreshes the team after removal', async () => {
+  it('displays legacy Viewer alongside other roles and allows removing it while retaining membership', async () => {
+    mockAccess();
+    let memberRoles = ['editor', 'viewer'];
+    const changes: unknown[] = [];
+    server.use(
+      http.get('/api/teams/plant-sciences/members', () =>
+        HttpResponse.json([
+          currentMember,
+          { ...otherMember, roles: memberRoles },
+        ])
+      ),
+      http.put(
+        '/api/teams/plant-sciences/members/2/roles',
+        async ({ request }) => {
+          changes.push(await request.json());
+          memberRoles = ['editor'];
+          return HttpResponse.json({ ...otherMember, roles: memberRoles });
+        }
+      )
+    );
+    ({ cleanup } = renderRoute({
+      initialPath: '/teams/plant-sciences/members',
+    }));
+    const row = within(
+      await screen.findByRole('row', { name: /Avery Editor/ })
+    );
+    expect(row.getByText('Viewer')).toBeInTheDocument();
+    expect(row.getByText('Editor')).toBeInTheDocument();
+    expect(screen.getAllByRole('row', { name: /Avery Editor/ })).toHaveLength(
+      1
+    );
+    fireEvent.click(
+      row.getByRole('button', { name: 'Manage roles for Avery Editor' })
+    );
+    expect(screen.getByRole('checkbox', { name: 'Viewer' })).toBeChecked();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Viewer' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Editor' }));
+    expect(screen.getByText('Select at least one role.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save roles' })).toBeDisabled();
+    expect(changes).toEqual([]);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Editor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save roles' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+      expect(
+        within(screen.getByRole('row', { name: /Avery Editor/ })).queryByText(
+          'Viewer'
+        )
+      ).not.toBeInTheDocument();
+    });
+    expect(changes).toEqual([{ roles: ['editor'] }]);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Manage roles for Avery Editor' })
+    );
+    expect(
+      screen.queryByRole('checkbox', { name: 'Viewer' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('requires removal confirmation and refreshes the team after removing all roles', async () => {
     mockAccess();
     let removed = false;
     let token: string | null = null;
     server.use(
       http.get('/api/teams/plant-sciences/members', () =>
         HttpResponse.json(
-          removed ? [currentMember] : [currentMember, otherMember]
+          removed
+            ? [currentMember]
+            : [currentMember, { ...otherMember, roles: ['admin', 'editor'] }]
         )
       ),
       http.delete('/api/teams/plant-sciences/members/2', ({ request }) => {

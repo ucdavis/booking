@@ -117,6 +117,16 @@ public class ReservationModelTests
     }
 
     [Fact]
+    public void Team_permission_key_allows_distinct_roles_per_member()
+    {
+        using var context = CreateContext();
+        var permission = context.Model.FindEntityType(typeof(TeamPermission))!;
+
+        permission.FindPrimaryKey()!.Properties.Select(property => property.Name)
+            .Should().Equal(nameof(TeamPermission.TeamId), nameof(TeamPermission.UserId), nameof(TeamPermission.Role));
+    }
+
+    [Fact]
     public void Composite_foreign_keys_preserve_resource_and_request_ownership()
     {
         using var context = CreateContext();

@@ -36,8 +36,18 @@ const user: User = {
   roles: [],
 };
 
-const firstTeam = { id: 1, name: 'Plant Sciences', slug: 'plant-sciences' };
-const secondTeam = { id: 2, name: 'Animal Science', slug: 'animal-science' };
+const firstTeam = {
+  id: 1,
+  name: 'Plant Sciences',
+  roles: [TeamRole.Viewer],
+  slug: 'plant-sciences',
+};
+const secondTeam = {
+  id: 2,
+  name: 'Animal Science',
+  roles: [TeamRole.Viewer],
+  slug: 'animal-science',
+};
 let cleanup: (() => void) | undefined;
 const originalShowModal = Object.getOwnPropertyDescriptor(
   HTMLDialogElement.prototype,
@@ -314,7 +324,7 @@ describe('team payments settings', () => {
       http.get('/api/teams/plant-sciences', () =>
         HttpResponse.json({
           isSiteAdmin: false,
-          role: 'viewer',
+          roles: ['viewer'],
           team: firstTeam,
         })
       )
@@ -332,7 +342,7 @@ describe('team payments settings', () => {
         rendered.queryClient.getQueryData(
           teamAccessQueryOptions(firstTeam.slug).queryKey
         )
-      ).toMatchObject({ role: 'viewer' });
+      ).toMatchObject({ roles: ['viewer'] });
     });
     expect(screen.queryByText('Saved API key')).not.toBeInTheDocument();
   });
@@ -476,7 +486,7 @@ function mockTeamAccess(role: 'admin' | 'editor' | 'viewer' | null = 'viewer') {
     http.get('/api/teams/:teamSlug', ({ params }) =>
       HttpResponse.json({
         isSiteAdmin: role === null,
-        role,
+        roles: role ? [role] : [],
         team: params.teamSlug === firstTeam.slug ? firstTeam : secondTeam,
       })
     )
@@ -489,6 +499,22 @@ function silenceRouteErrors() {
 }
 
 describe('profile team memberships', () => {
+  it('shows multiple role badges in one membership row', async () => {
+    mockUser();
+    server.use(
+      http.get('/api/teams', () =>
+        HttpResponse.json([{ ...firstTeam, roles: ['admin', 'editor'] }])
+      )
+    );
+    ({ cleanup } = renderRoute({ initialPath: '/me' }));
+
+    const list = await screen.findByRole('list', { name: 'Team memberships' });
+    const rows = within(list).getAllByRole('listitem');
+    expect(rows).toHaveLength(1);
+    expect(within(rows[0]).getByText('Admin')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('Editor')).toBeInTheDocument();
+  });
+
   it.each([1, 5, 6, 8])(
     'shows names and roles for at most five of %s memberships',
     async (count) => {
@@ -497,7 +523,7 @@ describe('profile team memberships', () => {
       const teams = Array.from({ length: count }, (_, index) => ({
         id: index + 1,
         name: `Team ${index + 1}`,
-        role: roles[index % roles.length],
+        roles: [roles[index % roles.length]],
         slug: `team-${index + 1}`,
       }));
       server.use(http.get('/api/teams', () => HttpResponse.json(teams)));
@@ -515,7 +541,7 @@ describe('profile team memberships', () => {
           within(row).getByRole('link', { name: team.name })
         ).toHaveAttribute('href', `/teams/${team.slug}`);
         expect(
-          within(row).getByText(teamRoleLabels[team.role])
+          within(row).getByText(teamRoleLabels[team.roles[0]])
         ).toBeInTheDocument();
       }
       expect(screen.queryByText('Sign-in roles')).not.toBeInTheDocument();
@@ -597,7 +623,7 @@ describe('profile team memberships', () => {
     ).not.toBeInTheDocument();
     server.use(
       http.get('/api/teams', () =>
-        HttpResponse.json([{ ...firstTeam, role: TeamRole.Editor }])
+        HttpResponse.json([{ ...firstTeam, roles: [TeamRole.Editor] }])
       )
     );
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
@@ -770,7 +796,7 @@ describe('team administration navigation and access', () => {
     });
     queryClient.setQueryData(teamAccessQueryOptions(firstTeam.slug).queryKey, {
       isSiteAdmin: false,
-      role: TeamRole.Admin,
+      roles: [TeamRole.Admin],
       team: firstTeam,
     });
     ({ cleanup } = renderRoute({

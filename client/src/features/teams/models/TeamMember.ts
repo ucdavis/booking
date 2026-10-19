@@ -6,5 +6,5 @@ export interface TeamMember {
   id: number;
   isActive: boolean;
   name: string;
-  role: TeamRole;
+  roles: TeamRole[];
 }
