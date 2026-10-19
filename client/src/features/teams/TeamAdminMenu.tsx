@@ -56,7 +56,7 @@ export function TeamAdminMenu({
     return (
       <Link
         activeProps={{ className: 'font-semibold text-primary' }}
-        className="text-base-content/70 transition-colors hover:text-primary"
+        className="text-base-content/90 transition-colors hover:text-primary"
         params={{ teamSlug: teams[0].slug }}
         to="/teams/$teamSlug"
       >
@@ -84,7 +84,7 @@ export function TeamAdminMenu({
       <button
         aria-controls="team-admin-navigation"
         aria-expanded={isOpen}
-        className={`flex items-center gap-1.5 transition-colors hover:text-primary ${currentTeam ? 'font-semibold text-primary' : 'text-base-content/70'}`}
+        className={`flex items-center gap-1.5 transition-colors hover:text-primary ${currentTeam ? 'font-semibold text-primary' : 'text-base-content/90'}`}
         onClick={() => setIsOpen((open) => !open)}
         ref={buttonRef}
         type="button"

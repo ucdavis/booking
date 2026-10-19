@@ -64,7 +64,7 @@ export function TeamPaymentsSettings({
   return (
     <section
       aria-labelledby="team-payments-title"
-      className="mt-6 max-w-3xl rounded-xl border border-base-300 bg-base-100 p-6 shadow-sm sm:p-8"
+      className="mt-6 max-w-3xl rounded-sm border border-base-300 bg-base-100 p-6 shadow-sm sm:p-8"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2

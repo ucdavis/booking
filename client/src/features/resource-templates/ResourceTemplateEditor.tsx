@@ -171,7 +171,7 @@ export function ResourceTemplateEditor({
         <div className="mt-4 space-y-2">
           <span className="badge badge-outline">Version {currentTemplate.formSchemaVersion}</span>
           {isReadOnly ? (
-            <div className="space-y-3 rounded-lg border border-base-300 bg-base-200 p-4">
+            <div className="space-y-3 rounded-sm border border-base-300 bg-base-200 p-4">
               <p>Archived templates are read-only. Duplicate this template to make changes.</p>
               <Link className="link link-primary" to="/admin/resource-templates">Back to resource templates</Link>
             </div>
@@ -184,7 +184,7 @@ export function ResourceTemplateEditor({
       )}
 
       {blocker.status === 'blocked' && (
-        <section aria-label="Unsaved changes" className="mt-6 rounded-xl border border-warning bg-warning/10 p-5" role="alert">
+        <section aria-label="Unsaved changes" className="mt-6 rounded-sm border border-warning bg-warning/10 p-5" role="alert">
           <h2 className="font-semibold">Leave this editor?</h2>
           <p className="mt-1">Your unsaved changes will be lost. Wait for any save to finish before leaving.</p>
           <div className="mt-3 flex gap-3">
@@ -212,7 +212,7 @@ export function ResourceTemplateEditor({
         <form.Subscribe selector={(state) => state.isSubmitting}>
           {(isSubmitting) => (
             <fieldset className="space-y-6" disabled={isSaving || isSubmitting}>
-              <fieldset className="space-y-5 rounded-xl border border-base-300 bg-base-100 p-5" disabled={isReadOnly}>
+              <fieldset className="space-y-5 rounded-sm border border-base-300 bg-base-100 p-5" disabled={isReadOnly}>
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
                   <form.Field name="name">
                     {(field) => {

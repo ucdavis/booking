@@ -190,7 +190,7 @@ export function EmulateUserDialog({
                 <div className="space-y-3">
                   {candidates.map((candidate) => (
                     <label
-                      className={`flex gap-3 rounded-xl border p-4 ${selectedCandidate?.iamId === candidate.iamId ? 'border-primary bg-primary/5' : 'border-base-300'}`}
+                      className={`flex gap-3 rounded-sm border p-4 ${selectedCandidate?.iamId === candidate.iamId ? 'border-primary bg-primary/5' : 'border-base-300'}`}
                       key={candidate.iamId}
                     >
                       <input

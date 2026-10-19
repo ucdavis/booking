@@ -10,13 +10,25 @@ import {
 
 export const Route = createFileRoute('/temp/resources/')({
   component: ResourceDirectoryPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    availability: search.availability === 'now' ? 'now' : undefined,
+    kind: ['room', 'bench', 'equipment'].includes(String(search.kind))
+      ? (search.kind as ResourceKind)
+      : undefined,
+    q: typeof search.q === 'string' ? search.q : undefined,
+  }),
 });
 
 function ResourceDirectoryPage() {
+  const initialSearch = Route.useSearch();
   const [building, setBuilding] = useState('all');
-  const [kind, setKind] = useState<'all' | ResourceKind>('all');
-  const [search, setSearch] = useState('');
-  const [showAvailableOnly, setShowAvailableOnly] = useState(false);
+  const [kind, setKind] = useState<'all' | ResourceKind>(
+    initialSearch.kind ?? 'all'
+  );
+  const [search, setSearch] = useState(initialSearch.q ?? '');
+  const [showAvailableOnly, setShowAvailableOnly] = useState(
+    initialSearch.availability === 'now'
+  );
 
   const filteredResources = useMemo(
     () =>
@@ -57,7 +69,7 @@ function ResourceDirectoryPage() {
         <p className="mt-3 text-lg leading-7 text-base-content/70">Search reservable rooms, lab benches, and equipment. Every result includes its building and location details.</p>
       </div>
 
-      <section aria-labelledby="filters-heading" className="mt-8 rounded-xl border border-base-300 bg-base-200 p-5 sm:p-6">
+      <section aria-labelledby="filters-heading" className="mt-8 rounded-sm border border-base-300 bg-base-200 p-5 sm:p-6">
         <div className="flex items-center gap-2 text-primary">
           <AdjustmentsHorizontalIcon aria-hidden="true" className="h-5 w-5" />
           <h2 className="font-semibold" id="filters-heading">Search and filters</h2>
@@ -100,7 +112,7 @@ function ResourceDirectoryPage() {
             {filteredResources.map((resource) => <ResourceCard key={resource.id} resource={resource} />)}
           </div>
         ) : (
-          <div className="mt-5 rounded-xl border border-dashed border-base-300 bg-base-200 px-6 py-14 text-center">
+          <div className="mt-5 rounded-sm border border-dashed border-base-300 bg-base-200 px-6 py-14 text-center">
             <h3 className="text-lg font-semibold">No resources match those filters</h3>
             <p className="mt-2 text-base-content/70">Try removing a filter or search for a different feature.</p>
           </div>

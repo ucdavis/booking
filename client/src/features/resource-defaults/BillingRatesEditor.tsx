@@ -58,14 +58,14 @@ export const BillingRatesEditor = withFieldGroup({
                     Rates can apply per hour, per day, or per booking.
                   </p>
                   {billingRates.length === 0 && (
-                    <p className="rounded-lg border border-dashed border-base-300 p-4 text-sm text-base-content/65">
+                    <p className="rounded-sm border border-dashed border-base-300 p-4 text-sm text-base-content/65">
                       No billing rates are configured.
                     </p>
                   )}
                   <div className="space-y-3">
                     {billingRates.map((rate, index) => (
                       <div
-                        className="rounded-lg border border-base-300 p-4"
+                        className="rounded-sm border border-base-300 p-4"
                         key={rate.id}
                       >
                         <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">

@@ -125,7 +125,7 @@ export function SiteHeader() {
         >
           {navigationItems.map(([label, to]) => (
             <Link
-              className="text-base-content/70 transition-colors hover:text-base-content"
+              className="text-base-content/90 transition-colors hover:text-base-content"
               key={to}
               to={to}
             >
@@ -158,7 +158,7 @@ export function SiteHeader() {
               <button
                 aria-controls="site-admin-navigation"
                 aria-expanded={adminMenuOpen}
-                className={`flex items-center gap-1.5 transition-colors hover:text-primary ${isAdminPage ? 'font-semibold text-primary' : 'text-base-content/70'}`}
+                className={`flex items-center gap-1.5 transition-colors hover:text-primary ${isAdminPage ? 'font-semibold text-primary' : 'text-base-content/90'}`}
                 onClick={() => setAdminMenuOpen((open) => !open)}
                 ref={adminButtonRef}
                 type="button"
@@ -236,7 +236,7 @@ export function SiteHeader() {
                     ? `${userQuery.data.name} (Emulating)`
                     : undefined
                 }
-                className={`flex items-center gap-1.5 transition-colors hover:text-primary ${pathname === '/me' ? 'font-semibold text-primary' : 'text-base-content/70'}`}
+                className={`flex items-center gap-1.5 transition-colors hover:text-primary ${pathname === '/me' ? 'font-semibold text-primary' : 'text-base-content/90'}`}
                 onClick={() => setUserMenuOpen((open) => !open)}
                 ref={userButtonRef}
                 type="button"

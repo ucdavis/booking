@@ -55,7 +55,7 @@ export function FormPreview({ definition }: { definition: FormDefinition }) {
   return (
     <section
       aria-label="Form preview"
-      className="rounded-xl border border-base-300 bg-base-100 p-5 sm:p-6"
+      className="rounded-sm border border-base-300 bg-base-100 p-5 sm:p-6"
     >
       <h2 className="text-xl font-semibold text-primary">Preview</h2>
       <p className="mt-1 text-sm text-base-content/65">

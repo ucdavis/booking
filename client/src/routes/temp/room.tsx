@@ -104,7 +104,7 @@ function TempRoomPage() {
         </ol>
       </nav>
 
-      <article className="overflow-hidden rounded-lg border border-base-300 bg-base-200">
+      <article className="overflow-hidden rounded-sm border border-base-300 bg-base-200">
         <header className="border-b-8 border-secondary bg-primary px-6 py-8 text-primary-content sm:px-10 sm:py-10">
           <div className="grid gap-8 lg:grid-cols-2">
             <div>
@@ -138,7 +138,7 @@ function TempRoomPage() {
               </section>
             </div>
 
-            <dl className="grid grid-cols-3 self-start divide-x divide-primary-content/20 overflow-hidden rounded-lg border border-primary-content/25 bg-primary-content/5">
+            <dl className="grid grid-cols-3 self-start divide-x divide-primary-content/20 overflow-hidden rounded-sm border border-primary-content/25 bg-primary-content/5">
               <div className="flex items-start gap-2 px-3 py-4">
                 <Squares2X2Icon
                   aria-hidden="true"
@@ -297,7 +297,7 @@ function TempRoomPage() {
 
             <section
               aria-labelledby="reservation-details-heading"
-              className="rounded-lg border border-base-300 bg-base-100 p-5 sm:p-6"
+              className="rounded-sm border border-base-300 bg-base-100 p-5 sm:p-6"
             >
               <h3
                 className="text-lg font-semibold text-primary"
@@ -372,7 +372,7 @@ function TempRoomPage() {
                 </label>
 
                 {repeatType === 'custom' ? (
-                  <div className="mt-4 space-y-5 rounded-lg border border-base-300 bg-base-200 p-4 sm:p-5">
+                  <div className="mt-4 space-y-5 rounded-sm border border-base-300 bg-base-200 p-4 sm:p-5">
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                       <span className="text-sm font-semibold text-base-content">
                         Repeats every:
@@ -470,7 +470,7 @@ function TempRoomPage() {
                 ) : null}
               </div>
 
-              <div className="mt-6 rounded-lg bg-base-200 p-4 text-sm">
+              <div className="mt-6 rounded-sm bg-base-200 p-4 text-sm">
                 <p className="font-semibold text-primary">Your selection</p>
                 <p className="mt-2 text-base-content/70">
                   {selectedDates.length > 0 && selectedTime

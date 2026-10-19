@@ -67,7 +67,7 @@ function TempBuildingPage() {
         </ol>
       </nav>
 
-      <article className="overflow-hidden rounded-lg border border-base-300 bg-base-200">
+      <article className="overflow-hidden rounded-sm border border-base-300 bg-base-200">
         <div className="border-b-8 border-secondary lg:grid lg:grid-cols-3">
           <div className="flex flex-col bg-primary text-primary-content lg:col-span-2">
             <div className="px-6 pb-2 pt-8 sm:px-10">
@@ -220,7 +220,7 @@ function TempBuildingPage() {
             {visibleRooms.map((room) => (
               <li key={room.name}>
                 <Link
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-base-300 bg-base-100 px-5 py-4 transition-colors hover:border-primary"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-base-300 bg-base-100 px-5 py-4 transition-colors hover:border-primary"
                   to="/temp/room"
                 >
                   <div>
@@ -242,7 +242,7 @@ function TempBuildingPage() {
             ))}
           </ul>
           {visibleRooms.length === 0 && (
-            <p className="mt-6 rounded-lg border border-base-300 bg-base-100 px-5 py-8 text-center text-base-content/70">
+            <p className="mt-6 rounded-sm border border-base-300 bg-base-100 px-5 py-8 text-center text-base-content/70">
               No sample rooms match those filters.
             </p>
           )}

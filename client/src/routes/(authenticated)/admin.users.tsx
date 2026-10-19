@@ -149,7 +149,7 @@ function SiteAdminUsersPage() {
       {removingUser && (
         <section
           aria-labelledby="remove-admin-heading"
-          className="mt-6 rounded-xl border border-warning/40 bg-warning/10 p-5"
+          className="mt-6 rounded-sm border border-warning/40 bg-warning/10 p-5"
         >
           <h2 className="font-semibold" id="remove-admin-heading">
             Remove admin access?
@@ -193,7 +193,7 @@ function SiteAdminUsersPage() {
 
       <section
         aria-label="Site admin users"
-        className="mt-8 rounded-xl border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6"
+        className="mt-8 rounded-sm border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6"
       >
         {usersQuery.isPending ? (
           <p className="py-8 text-center text-base-content/70" role="status">

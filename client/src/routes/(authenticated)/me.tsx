@@ -62,9 +62,8 @@ function MyProfilePage() {
       <div className="mt-8 grid items-start gap-6 lg:grid-cols-3">
         <section
           aria-labelledby="account-details-heading"
-          className="min-w-0 overflow-hidden rounded-2xl border border-base-300 bg-base-200 shadow-sm lg:col-span-2"
+          className="min-w-0 overflow-hidden rounded-sm border border-base-300 bg-base-200 lg:col-span-2"
         >
-          <div className="h-2 bg-secondary" />
           <div className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:p-8">
             <div
               aria-hidden="true"
@@ -115,7 +114,7 @@ function MyProfilePage() {
 
         <section
           aria-labelledby="access-heading"
-          className="min-w-0 rounded-2xl border border-base-300 bg-base-200 p-6 shadow-sm sm:p-8"
+          className="min-w-0 rounded-sm border border-base-300 bg-base-200 p-6 sm:p-8"
         >
           <div className="flex items-center gap-2 text-primary">
             <ShieldCheckIcon aria-hidden="true" className="h-5 w-5" />
@@ -182,7 +181,7 @@ function MyProfilePage() {
                       <ul aria-label="Team memberships" className="space-y-2">
                         {visibleTeams.map((team) => (
                           <li
-                            className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg bg-primary/5 px-3 py-3"
+                            className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-sm bg-primary/5 px-3 py-3"
                             key={team.id}
                           >
                             <Link
