@@ -917,7 +917,7 @@ namespace Server.Core.Migrations
 
                     b.ToTable("TeamPermissions", t =>
                         {
-                            t.HasCheckConstraint("CK_TeamPermissions_Role", "[Role] IN ('admin', 'editor', 'viewer')");
+                            t.HasCheckConstraint("CK_TeamPermissions_Role", "[Role] IN ('admin', 'editor', 'viewer', 'approver')");
                         });
                 });
 
