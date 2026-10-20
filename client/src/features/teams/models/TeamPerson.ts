@@ -6,5 +6,5 @@ export interface TeamPerson {
   isActive: boolean;
   kerberos: string | null;
   name: string;
-  role: TeamRole | null;
+  roles: TeamRole[];
 }

@@ -191,11 +191,16 @@ function MyProfilePage() {
                             >
                               {team.name}
                             </Link>
-                            <span className="badge badge-outline badge-sm shrink-0">
-                              {team.role
-                                ? teamRoleLabels[team.role]
-                                : 'Not available'}
-                            </span>
+                            <div className="flex flex-wrap gap-1">
+                              {team.roles.map((role) => (
+                                <span
+                                  className="badge badge-outline badge-sm"
+                                  key={role}
+                                >
+                                  {teamRoleLabels[role]}
+                                </span>
+                              ))}
+                            </div>
                           </li>
                         ))}
                       </ul>

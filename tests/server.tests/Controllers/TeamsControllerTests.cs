@@ -29,6 +29,7 @@ public class TeamsControllerTests
         using var db = TestDbContextFactory.CreateInMemory();
         var user = new User { IamId = "member-iam", Name = "Member", IsAdmin = isAdmin };
         db.TeamPermissions.AddRange(
+            new TeamPermission { User = user, Team = new Team { Name = "Agronomy", Slug = "agronomy" }, Role = TeamRole.Approver },
             new TeamPermission { User = user, Team = new Team { Name = "Zoology", Slug = "zoology" }, Role = TeamRole.Viewer },
             new TeamPermission { User = user, Team = new Team { Name = "Biology", Slug = "biology" }, Role = TeamRole.Editor },
             new TeamPermission { User = user, Team = new Team { Name = "Physics", Slug = "physics" }, Role = TeamRole.Admin },
@@ -42,11 +43,12 @@ public class TeamsControllerTests
 
         var teams = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
             .Should().BeOfType<List<TeamSummaryResponse>>().Subject;
-        teams.Select(team => team.Slug).Should().Equal("biology", "physics", "zoology");
-        teams.Select(team => team.Role).Should().Equal(TeamRole.Editor, TeamRole.Admin, TeamRole.Viewer);
+        teams.Select(team => team.Slug).Should().Equal("agronomy", "biology", "physics", "zoology");
+        teams.SelectMany(team => team.Roles).Should().Equal(TeamRole.Approver, TeamRole.Editor, TeamRole.Admin, TeamRole.Viewer);
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(teams, TeamJsonOptions()));
-        json.RootElement.EnumerateArray().Select(team => team.GetProperty("role").GetString())
-            .Should().Equal("editor", "admin", "viewer");
+        json.RootElement.EnumerateArray().SelectMany(team => team.GetProperty("roles").EnumerateArray())
+            .Select(role => role.GetString())
+            .Should().Equal("approver", "editor", "admin", "viewer");
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
 
@@ -54,6 +56,7 @@ public class TeamsControllerTests
     [InlineData(TeamRole.Admin)]
     [InlineData(TeamRole.Editor)]
     [InlineData(TeamRole.Viewer)]
+    [InlineData(TeamRole.Approver)]
     public async Task GetTeam_returns_the_matching_membership_for_every_team_role(TeamRole role)
     {
         using var db = TestDbContextFactory.CreateInMemory();
@@ -71,11 +74,40 @@ public class TeamsControllerTests
             .Should().BeOfType<TeamAccessResponse>().Subject;
         access.Team.Slug.Should().Be("biology");
         access.Team.Name.Should().Be("Biology");
-        access.Team.Role.Should().BeNull();
+        access.Team.Roles.Should().Equal(role);
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(access, TeamJsonOptions()));
-        json.RootElement.GetProperty("team").TryGetProperty("role", out _).Should().BeFalse();
-        access.Role.Should().Be(role);
+        json.RootElement.GetProperty("team").GetProperty("roles").GetArrayLength().Should().Be(1);
+        access.Roles.Should().Equal(role);
         access.IsSiteAdmin.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Team_queries_group_multiple_roles_into_one_team_and_one_member()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var team = new Team { Name = "Biology", Slug = "biology" };
+        var user = new User
+        {
+            IamId = "member-iam", Name = "Member", Email = "member@example.test", Kerberos = "member",
+        };
+        db.TeamPermissions.AddRange(
+            new TeamPermission { User = user, Team = team, Role = TeamRole.Editor },
+            new TeamPermission { User = user, Team = team, Role = TeamRole.Approver },
+            new TeamPermission { User = user, Team = team, Role = TeamRole.Admin });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var summary = ReadValue(await CreateController(db).GetTeams()).Should().ContainSingle().Which;
+        summary.Roles.Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor, TeamRole.Approver });
+        var access = ReadValue(await CreateController(db).GetTeam("biology"));
+        access.Roles.Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor, TeamRole.Approver });
+        access.Team.Roles.Should().BeEquivalentTo(access.Roles);
+        var member = ReadValue(await CreateMembersController(db).GetMembers("biology")).Should().ContainSingle().Which;
+        member.Roles.Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor, TeamRole.Approver });
+        var match = ReadValue(await CreateMembersController(db).SearchPeople("biology", user.IamId))
+            .Should().ContainSingle().Which;
+        match.Roles.Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor, TeamRole.Approver });
+        db.ChangeTracker.Entries().Should().BeEmpty();
     }
 
     [Fact]
@@ -90,13 +122,15 @@ public class TeamsControllerTests
 
         var access = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
             .Should().BeOfType<TeamAccessResponse>().Subject;
-        access.Role.Should().BeNull();
+        access.Roles.Should().BeEmpty();
+        access.Team.Roles.Should().BeEmpty();
         access.IsSiteAdmin.Should().BeTrue();
         db.TeamPermissions.Should().BeEmpty();
     }
 
     [Theory]
     [InlineData(false, TeamRole.Viewer)]
+    [InlineData(false, TeamRole.Approver)]
     [InlineData(true, (TeamRole)999)]
     public async Task Inactive_users_and_unrecognized_roles_have_no_team_access(bool isActive, TeamRole role)
     {
@@ -158,7 +192,7 @@ public class TeamsControllerTests
         var members = ReadValue(await CreateMembersController(db).GetMembers("team-a"));
 
         members.Select(member => member.Name).Should().Equal("Amy", "Zoe");
-        members[0].Role.Should().Be(TeamRole.Viewer);
+        members[0].Roles.Should().Equal(TeamRole.Viewer);
         members[0].IsActive.Should().BeFalse();
         db.ChangeTracker.Entries().Should().BeEmpty();
         (await CreateMembersController(db).GetMembers("missing")).Result.Should().BeOfType<NotFoundObjectResult>();
@@ -186,8 +220,8 @@ public class TeamsControllerTests
         match.Name.Should().Be("Directory Person");
         match.Kerberos.Should().Be("person1");
         match.IsActive.Should().BeFalse();
-        match.Role.Should().Be(TeamRole.Viewer);
-        ReadValue(await CreateMembersController(db).SearchPeople("team-b", query)).Single().Role.Should().BeNull();
+        match.Roles.Should().Equal(TeamRole.Viewer);
+        ReadValue(await CreateMembersController(db).SearchPeople("team-b", query)).Single().Roles.Should().BeEmpty();
     }
 
     [Theory]
@@ -217,7 +251,7 @@ public class TeamsControllerTests
         person.Email.Should().Be("existing@example.test");
         person.IsActive.Should().BeFalse();
         person.Kerberos.Should().Be("existingkerb");
-        person.Role.Should().Be(TeamRole.Editor);
+        person.Roles.Should().Equal(TeamRole.Editor);
         rosetta.LookupCalls.Should().BeEmpty();
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
@@ -240,7 +274,7 @@ public class TeamsControllerTests
         var matches = ReadValue(await controller.SearchPeople("team-a", " shared@example.test "));
 
         matches.Should().HaveCount(10);
-        matches.Should().OnlyContain(person => person.IsActive && person.Role == null);
+        matches.Should().OnlyContain(person => person.IsActive && person.Roles.Count == 0);
         ReadValue(await controller.SearchPeople("team-a", "shared")).Should().BeEmpty();
         ReadValue(await controller.SearchPeople("team-a", "%")).Should().BeEmpty();
         (await controller.SearchPeople("team-a", " ")).Result.Should().BeOfType<BadRequestObjectResult>();
@@ -305,6 +339,7 @@ public class TeamsControllerTests
     [Theory]
     [InlineData(TeamRole.Admin)]
     [InlineData(TeamRole.Editor)]
+    [InlineData(TeamRole.Approver)]
     public async Task Add_member_creates_user_from_complete_directory_data_and_assigns_only_the_requested_team(TeamRole role)
     {
         using var db = TestDbContextFactory.CreateInMemory();
@@ -313,14 +348,14 @@ public class TeamsControllerTests
         await db.SaveChangesAsync();
 
         var member = ReadValue(await CreateMembersController(db).AddMember("team-a",
-            new AddTeamMemberRequest { IamId = " 0000000001 ", Role = role }));
+            new AddTeamMemberRequest { IamId = " 0000000001 ", Roles = [role] }));
 
         db.ChangeTracker.Clear();
         var user = await db.Users.SingleAsync();
         member.Id.Should().Be(user.Id);
         member.Name.Should().Be("Directory Person");
         member.Email.Should().Be("directory@example.test");
-        member.Role.Should().Be(role);
+        member.Roles.Should().Equal(role);
         user.Kerberos.Should().Be("person1");
         user.IsAdmin.Should().BeFalse();
         user.IsActive.Should().BeTrue();
@@ -355,7 +390,7 @@ public class TeamsControllerTests
         await db.SaveChangesAsync();
 
         var member = ReadValue(await CreateMembersController(db).AddMember("team-a",
-            new AddTeamMemberRequest { IamId = user.IamId, Role = TeamRole.Editor }));
+            new AddTeamMemberRequest { IamId = user.IamId, Roles = [TeamRole.Editor] }));
 
         var expectedEmail = string.IsNullOrWhiteSpace(existingEmail) ? "directory@example.test" : existingEmail;
         var expectedKerberos = string.IsNullOrWhiteSpace(existingKerberos) ? "person1" : existingKerberos;
@@ -377,7 +412,7 @@ public class TeamsControllerTests
         user.LastLoginAt.Should().Be(originalTime);
         (await db.TeamPermissions.SingleAsync(permission => permission.Team.Slug == "other")).Role.Should().Be(TeamRole.Viewer);
         var duplicate = await CreateMembersController(db).AddMember("team-a",
-            new AddTeamMemberRequest { IamId = user.IamId, Role = TeamRole.Admin });
+            new AddTeamMemberRequest { IamId = user.IamId, Roles = [TeamRole.Admin] });
         duplicate.Result.Should().BeOfType<ConflictObjectResult>();
         (await db.TeamPermissions.SingleAsync(permission => permission.Team.Slug == "team-a")).Role.Should().Be(TeamRole.Editor);
     }
@@ -400,7 +435,7 @@ public class TeamsControllerTests
         await db.SaveChangesAsync();
 
         var result = await CreateMembersController(db).AddMember("team-a",
-            new AddTeamMemberRequest { IamId = person.IamId, Role = TeamRole.Admin });
+            new AddTeamMemberRequest { IamId = person.IamId, Roles = [TeamRole.Admin] });
 
         result.Result.Should().BeOfType<ConflictObjectResult>();
         db.TeamPermissions.Should().BeEmpty();
@@ -421,7 +456,7 @@ public class TeamsControllerTests
 
         var result = await controller.AddMember("team-a", new AddTeamMemberRequest
         {
-            IamId = match.IamId, Role = TeamRole.Admin,
+            IamId = match.IamId, Roles = [TeamRole.Admin],
         });
 
         result.Result.Should().BeOfType<NotFoundObjectResult>();
@@ -461,7 +496,7 @@ public class TeamsControllerTests
 
             var result = await controller.AddMember("team-a", new AddTeamMemberRequest
             {
-                IamId = "0000000001", Role = TeamRole.Admin,
+                IamId = "0000000001", Roles = [TeamRole.Admin],
             });
 
             result.Result.Should().BeOfType<NotFoundObjectResult>();
@@ -481,7 +516,7 @@ public class TeamsControllerTests
         var rosetta = new FakeRosettaService(db) { Failure = new HttpRequestException("Directory unavailable.") };
         var add = () => CreateMembersController(db, rosetta: rosetta).AddMember("team-a", new AddTeamMemberRequest
         {
-            IamId = "0000000001", Role = TeamRole.Admin,
+            IamId = "0000000001", Roles = [TeamRole.Admin],
         });
 
         await add.Should().ThrowAsync<HttpRequestException>();
@@ -498,32 +533,134 @@ public class TeamsControllerTests
         db.Teams.Add(new Team { Name = "Team A", Slug = "team-a" });
         await db.SaveChangesAsync();
         var controller = CreateMembersController(db);
-        var request = new AddTeamMemberRequest { IamId = "0000000001", Role = TeamRole.Editor };
+        var request = new AddTeamMemberRequest { IamId = "0000000001", Roles = [TeamRole.Editor] };
 
         (await controller.AddMember("team-a", request)).Result.Should().BeOfType<NotFoundObjectResult>();
         (await controller.AddMember("missing", request)).Result.Should().BeOfType<NotFoundObjectResult>();
-        (await controller.AddMember("team-a", new AddTeamMemberRequest { IamId = " ", Role = TeamRole.Editor }))
+        (await controller.AddMember("team-a", new AddTeamMemberRequest { IamId = " ", Roles = [TeamRole.Editor] }))
             .Result.Should().BeOfType<BadRequestObjectResult>();
-        (await controller.AddMember("team-a", new AddTeamMemberRequest { IamId = "12345678901", Role = TeamRole.Editor }))
+        (await controller.AddMember("team-a", new AddTeamMemberRequest { IamId = "12345678901", Roles = [TeamRole.Editor] }))
             .Result.Should().BeOfType<BadRequestObjectResult>();
         db.Users.Should().BeEmpty();
     }
 
     [Theory]
-    [InlineData(null)]
-    [InlineData(TeamRole.Viewer)]
     [InlineData((TeamRole)0)]
     [InlineData((TeamRole)999)]
-    public async Task Add_and_update_reject_missing_legacy_and_undefined_roles(TeamRole? role)
+    public async Task Add_and_update_reject_undefined_roles(TeamRole role)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var controller = CreateMembersController(db);
 
-        (await controller.AddMember("team-a", new AddTeamMemberRequest { IamId = "0000000001", Role = role }))
+        (await controller.AddMember("team-a", new AddTeamMemberRequest { IamId = "0000000001", Roles = [role] }))
             .Result.Should().BeOfType<BadRequestObjectResult>();
-        (await controller.UpdateRole("team-a", 1, new UpdateTeamMemberRoleRequest { Role = role }))
+        (await controller.UpdateRoles("team-a", 1, new UpdateTeamMemberRolesRequest { Roles = [role] }))
             .Result.Should().BeOfType<BadRequestObjectResult>();
         db.TeamPermissions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Add_and_update_reject_missing_empty_and_duplicate_roles_without_changing_membership()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var user = new User { IamId = "0000000001", Name = "Member" };
+        db.TeamPermissions.Add(new TeamPermission
+        {
+            User = user, Team = new Team { Name = "Team A", Slug = "team-a" }, Role = TeamRole.Editor,
+        });
+        await db.SaveChangesAsync();
+        var controller = CreateMembersController(db);
+
+        foreach (var roles in new List<TeamRole>?[] { null, [], [TeamRole.Admin, TeamRole.Admin] })
+        {
+            (await controller.AddMember("team-a", new AddTeamMemberRequest { IamId = user.IamId, Roles = roles }))
+                .Result.Should().BeOfType<BadRequestObjectResult>();
+            (await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest { Roles = roles }))
+                .Result.Should().BeOfType<BadRequestObjectResult>();
+        }
+
+        (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Editor);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Add_member_assigns_multiple_roles_and_rejects_duplicate_membership(bool includeApprover)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        db.Teams.Add(new Team { Name = "Team A", Slug = "team-a" });
+        _people.Add(CreatePerson());
+        await db.SaveChangesAsync();
+        var controller = CreateMembersController(db);
+        List<TeamRole> roles = includeApprover
+            ? [TeamRole.Admin, TeamRole.Editor, TeamRole.Approver]
+            : [TeamRole.Admin, TeamRole.Editor];
+        var request = new AddTeamMemberRequest { IamId = "0000000001", Roles = roles };
+
+        var member = ReadValue(await controller.AddMember("team-a", request));
+
+        member.Roles.Should().BeEquivalentTo(roles);
+        db.Users.Should().ContainSingle();
+        (await db.TeamPermissions.Select(permission => permission.Role).ToListAsync())
+            .Should().BeEquivalentTo(roles);
+        (await controller.AddMember("team-a", request)).Result.Should().BeOfType<ConflictObjectResult>();
+        db.TeamPermissions.Should().HaveCount(roles.Count);
+    }
+
+    [Fact]
+    public async Task Approver_can_be_added_retained_alone_and_removed_from_an_existing_membership()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var user = new User { IamId = "0000000001", Name = "Member" };
+        db.TeamPermissions.Add(new TeamPermission
+        {
+            User = user, Team = new Team { Name = "Team A", Slug = "team-a" }, Role = TeamRole.Editor,
+        });
+        await db.SaveChangesAsync();
+        var controller = CreateMembersController(db);
+
+        ReadValue(await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest
+        {
+            Roles = [TeamRole.Editor, TeamRole.Approver],
+        })).Roles.Should().Equal(TeamRole.Editor, TeamRole.Approver);
+        ReadValue(await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest
+        {
+            Roles = [TeamRole.Approver],
+        })).Roles.Should().Equal(TeamRole.Approver);
+        (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Approver);
+        ReadValue(await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest
+        {
+            Roles = [TeamRole.Editor],
+        })).Roles.Should().Equal(TeamRole.Editor);
+        (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Editor);
+    }
+
+    [Fact]
+    public async Task Legacy_viewer_can_be_retained_or_removed_but_cannot_be_newly_assigned()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var user = new User { IamId = "0000000001", Name = "Viewer" };
+        db.TeamPermissions.Add(new TeamPermission
+        {
+            User = user, Team = new Team { Name = "Team A", Slug = "team-a" }, Role = TeamRole.Viewer,
+        });
+        await db.SaveChangesAsync();
+        var controller = CreateMembersController(db);
+
+        var retained = ReadValue(await controller.UpdateRoles("team-a", user.Id,
+            new UpdateTeamMemberRolesRequest { Roles = [TeamRole.Viewer, TeamRole.Editor] }));
+        retained.Roles.Should().BeEquivalentTo(new[] { TeamRole.Viewer, TeamRole.Editor });
+        var removed = ReadValue(await controller.UpdateRoles("team-a", user.Id,
+            new UpdateTeamMemberRolesRequest { Roles = [TeamRole.Editor] }));
+        removed.Roles.Should().Equal(TeamRole.Editor);
+
+        (await controller.UpdateRoles("team-a", user.Id,
+            new UpdateTeamMemberRolesRequest { Roles = [TeamRole.Viewer, TeamRole.Editor] }))
+            .Result.Should().BeOfType<BadRequestObjectResult>();
+        (await controller.AddMember("team-a",
+            new AddTeamMemberRequest { IamId = "0000000002", Roles = [TeamRole.Viewer] }))
+            .Result.Should().BeOfType<BadRequestObjectResult>();
+        (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Editor);
     }
 
     [Theory]
@@ -535,7 +672,7 @@ public class TeamsControllerTests
     public void Team_role_json_rejects_numeric_tokens_numeric_strings_and_unknown_names(string roleJson)
     {
         var options = TeamJsonOptions();
-        var json = "{\"iamId\":\"0000000001\",\"role\":" + roleJson + "}";
+        var json = "{\"iamId\":\"0000000001\",\"roles\":[" + roleJson + "]}";
 
         var deserialize = () => JsonSerializer.Deserialize<AddTeamMemberRequest>(json, options);
 
@@ -546,6 +683,7 @@ public class TeamsControllerTests
     [InlineData(TeamRole.Admin, "admin")]
     [InlineData(TeamRole.Editor, "editor")]
     [InlineData(TeamRole.Viewer, "viewer")]
+    [InlineData(TeamRole.Approver, "approver")]
     public void Team_role_json_preserves_lowercase_names_including_existing_viewers(TeamRole role, string name)
     {
         var options = TeamJsonOptions();
@@ -554,8 +692,10 @@ public class TeamsControllerTests
         JsonSerializer.Deserialize<TeamRole>($"\"{name}\"", options).Should().Be(role);
     }
 
-    [Fact]
-    public async Task Updating_and_removing_members_preserves_users_and_other_team_memberships()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Updating_and_removing_other_members_preserves_users_and_other_team_memberships(bool confirmSelfAccessChange)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var user = new User { IamId = "0000000001", Name = "Target", IsAdmin = true };
@@ -570,12 +710,20 @@ public class TeamsControllerTests
         await db.SaveChangesAsync();
         var controller = CreateMembersController(db);
 
-        var updated = ReadValue(await controller.UpdateRole("team-a", user.Id,
-            new UpdateTeamMemberRoleRequest { Role = TeamRole.Editor }));
+        var updated = ReadValue(await controller.UpdateRoles("team-a", user.Id,
+            new UpdateTeamMemberRolesRequest
+            {
+                Roles = [TeamRole.Admin, TeamRole.Editor], ConfirmSelfAccessChange = confirmSelfAccessChange,
+            }));
 
-        updated.Role.Should().Be(TeamRole.Editor);
+        updated.Roles.Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor });
+        db.TeamPermissions.Count(permission => permission.Team.Slug == "team-a").Should().Be(2);
+        ReadValue(await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest
+        {
+            Roles = [TeamRole.Editor], ConfirmSelfAccessChange = confirmSelfAccessChange,
+        })).Roles.Should().Equal(TeamRole.Editor);
         user.IsAdmin.Should().BeTrue();
-        (await controller.RemoveMember("team-a", user.Id)).Should().BeOfType<NoContentResult>();
+        (await controller.RemoveMember("team-a", user.Id, confirmSelfAccessChange)).Should().BeOfType<NoContentResult>();
         db.ChangeTracker.Clear();
         (await db.Users.SingleAsync()).IsAdmin.Should().BeTrue();
         var remaining = await db.TeamPermissions.Include(permission => permission.Team).SingleAsync();
@@ -586,7 +734,7 @@ public class TeamsControllerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Self_role_changes_and_removal_are_blocked_including_site_admins(bool isAdmin)
+    public async Task Self_role_changes_can_add_and_remove_roles_without_confirmation_when_retaining_admin(bool isAdmin)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var user = new User { IamId = "0000000001", Name = "Self", IsAdmin = isAdmin };
@@ -595,14 +743,93 @@ public class TeamsControllerTests
             User = user, Team = new Team { Name = "Team A", Slug = "team-a" }, Role = TeamRole.Admin,
         });
         await db.SaveChangesAsync();
-        var controller = CreateMembersController(db, " 0000000001 ");
+        var controller = CreateMembersController(db, user.IamId);
 
-        (await controller.UpdateRole("team-a", user.Id, new UpdateTeamMemberRoleRequest { Role = TeamRole.Editor }))
-            .Result.Should().BeOfType<BadRequestObjectResult>();
-        (await controller.UpdateRole("team-a", user.Id, new UpdateTeamMemberRoleRequest { Role = TeamRole.Admin }))
-            .Result.Should().BeOfType<BadRequestObjectResult>();
-        (await controller.RemoveMember("team-a", user.Id)).Should().BeOfType<BadRequestObjectResult>();
+        ReadValue(await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest
+        {
+            Roles = [TeamRole.Admin, TeamRole.Editor],
+        })).Roles.Should().Equal(TeamRole.Admin, TeamRole.Editor);
+        ReadValue(await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest
+        {
+            Roles = [TeamRole.Admin],
+        })).Roles.Should().Equal(TeamRole.Admin);
         (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Admin);
+    }
+
+    [Fact]
+    public async Task Site_admin_can_add_own_admin_role_without_confirmation()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var user = new User { IamId = "0000000001", Name = "Self", IsAdmin = true };
+        db.TeamPermissions.Add(new TeamPermission
+        {
+            User = user, Team = new Team { Name = "Team A", Slug = "team-a" }, Role = TeamRole.Editor,
+        });
+        await db.SaveChangesAsync();
+
+        ReadValue(await CreateMembersController(db, user.IamId).UpdateRoles("team-a", user.Id,
+            new UpdateTeamMemberRolesRequest { Roles = [TeamRole.Admin, TeamRole.Editor] }))
+            .Roles.Should().Equal(TeamRole.Admin, TeamRole.Editor);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Removing_own_admin_role_requires_confirmation_for_normalized_effective_identity(bool isAdmin)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var user = new User { IamId = "Member1", Name = "Self", IsAdmin = isAdmin };
+        var team = new Team { Name = "Team A", Slug = "team-a" };
+        db.TeamPermissions.AddRange(
+            new TeamPermission { User = user, Team = team, Role = TeamRole.Admin },
+            new TeamPermission { User = user, Team = team, Role = TeamRole.Editor });
+        await db.SaveChangesAsync();
+        var controller = CreateMembersController(db, " member1 ");
+
+        var unconfirmed = await controller.UpdateRoles("team-a", user.Id,
+            new UpdateTeamMemberRolesRequest { Roles = [TeamRole.Editor] });
+
+        unconfirmed.Result.Should().BeOfType<BadRequestObjectResult>();
+        (await db.TeamPermissions.Select(permission => permission.Role).ToListAsync())
+            .Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor });
+        db.ChangeTracker.HasChanges().Should().BeFalse();
+
+        ReadValue(await controller.UpdateRoles("team-a", user.Id, new UpdateTeamMemberRolesRequest
+        {
+            Roles = [TeamRole.Editor], ConfirmSelfAccessChange = true,
+        })).Roles.Should().Equal(TeamRole.Editor);
+        (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Editor);
+        user.IsAdmin.Should().Be(isAdmin);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Removing_own_membership_requires_confirmation_and_preserves_other_teams(bool isAdmin)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var user = new User { IamId = "Member1", Name = "Self", IsAdmin = isAdmin };
+        var team = new Team { Name = "Team A", Slug = "team-a" };
+        db.TeamPermissions.AddRange(
+            new TeamPermission { User = user, Team = team, Role = TeamRole.Admin },
+            new TeamPermission { User = user, Team = team, Role = TeamRole.Editor },
+            new TeamPermission
+            {
+                User = user, Team = new Team { Name = "Other", Slug = "other" }, Role = TeamRole.Admin,
+            });
+        await db.SaveChangesAsync();
+        var controller = CreateMembersController(db, " member1 ");
+
+        (await controller.RemoveMember("team-a", user.Id)).Should().BeOfType<BadRequestObjectResult>();
+        db.TeamPermissions.Should().HaveCount(3);
+        db.ChangeTracker.HasChanges().Should().BeFalse();
+
+        (await controller.RemoveMember("team-a", user.Id, confirmSelfAccessChange: true))
+            .Should().BeOfType<NoContentResult>();
+        db.ChangeTracker.Clear();
+        var remaining = await db.TeamPermissions.Include(permission => permission.Team).SingleAsync();
+        remaining.Team.Slug.Should().Be("other");
+        (await db.Users.SingleAsync()).IsAdmin.Should().Be(isAdmin);
     }
 
     [Fact]
@@ -617,12 +844,13 @@ public class TeamsControllerTests
         db.Teams.Add(new Team { Name = "Team A", Slug = "team-a" });
         await db.SaveChangesAsync();
         var controller = CreateMembersController(db);
-        var update = new UpdateTeamMemberRoleRequest { Role = TeamRole.Admin };
+        var update = new UpdateTeamMemberRolesRequest { Roles = [TeamRole.Admin], ConfirmSelfAccessChange = true };
 
-        (await controller.UpdateRole("team-a", user.Id, update)).Result.Should().BeOfType<NotFoundObjectResult>();
+        (await controller.UpdateRoles("team-a", user.Id, update)).Result.Should().BeOfType<NotFoundObjectResult>();
         (await controller.RemoveMember("team-a", user.Id)).Should().BeOfType<NotFoundObjectResult>();
-        (await CreateMembersController(db, null).UpdateRole("other", user.Id, update)).Result.Should().BeOfType<ForbidResult>();
-        (await CreateMembersController(db, null).RemoveMember("other", user.Id)).Should().BeOfType<ForbidResult>();
+        (await CreateMembersController(db, null).UpdateRoles("other", user.Id, update)).Result.Should().BeOfType<ForbidResult>();
+        (await CreateMembersController(db, null).RemoveMember("other", user.Id, confirmSelfAccessChange: true))
+            .Should().BeOfType<ForbidResult>();
         (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Editor);
     }
 
@@ -648,7 +876,7 @@ public class TeamsControllerTests
         db.FailNextMembershipSave = true;
 
         var result = await CreateMembersController(db).AddMember("team-a",
-            new AddTeamMemberRequest { IamId = "0000000001", Role = TeamRole.Admin });
+            new AddTeamMemberRequest { IamId = "0000000001", Roles = [TeamRole.Admin, TeamRole.Editor] });
 
         db.ChangeTracker.Clear();
         var user = await db.Users.SingleAsync();
@@ -663,7 +891,8 @@ public class TeamsControllerTests
         if (activeUser && !addMembership)
         {
             ReadValue(result).Id.Should().Be(user.Id);
-            (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Admin);
+            (await db.TeamPermissions.Select(permission => permission.Role).ToListAsync())
+                .Should().BeEquivalentTo(new[] { TeamRole.Admin, TeamRole.Editor });
         }
         else
         {
@@ -691,7 +920,7 @@ public class TeamsControllerTests
         db.FailNextMembershipSave = true;
 
         var result = await CreateMembersController(db).AddMember("team-a",
-            new AddTeamMemberRequest { IamId = "0000000001", Role = TeamRole.Admin });
+            new AddTeamMemberRequest { IamId = "0000000001", Roles = [TeamRole.Admin, TeamRole.Editor] });
 
         result.Result.Should().BeOfType<ConflictObjectResult>();
         (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Editor);
@@ -708,7 +937,7 @@ public class TeamsControllerTests
         db.FailNextMembershipSave = true;
 
         var add = () => CreateMembersController(db).AddMember("team-a",
-            new AddTeamMemberRequest { IamId = "0000000001", Role = TeamRole.Admin });
+            new AddTeamMemberRequest { IamId = "0000000001", Roles = [TeamRole.Admin] });
 
         await add.Should().ThrowAsync<DbUpdateException>();
         db.Users.Should().BeEmpty();
@@ -727,14 +956,14 @@ public class TeamsControllerTests
         controller.GetCustomAttribute<ResponseCacheAttribute>()!.NoStore.Should().BeTrue();
         controller.GetCustomAttribute<AutoValidateAntiforgeryTokenAttribute>(inherit: true).Should().NotBeNull();
         controller.GetCustomAttributes<IgnoreAntiforgeryTokenAttribute>(inherit: true).Should().BeEmpty();
-        foreach (var name in new[] { nameof(TeamMembersController.AddMember), nameof(TeamMembersController.UpdateRole), nameof(TeamMembersController.RemoveMember) })
+        foreach (var name in new[] { nameof(TeamMembersController.AddMember), nameof(TeamMembersController.UpdateRoles), nameof(TeamMembersController.RemoveMember) })
         {
             controller.GetMethod(name)!.GetCustomAttributes<IgnoreAntiforgeryTokenAttribute>(inherit: true).Should().BeEmpty();
         }
         controller.GetMethod(nameof(TeamMembersController.AddMember))!
             .GetCustomAttribute<HttpPostAttribute>().Should().NotBeNull();
-        controller.GetMethod(nameof(TeamMembersController.UpdateRole))!
-            .GetCustomAttribute<HttpPutAttribute>()!.Template.Should().Be("{userId:int}/role");
+        controller.GetMethod(nameof(TeamMembersController.UpdateRoles))!
+            .GetCustomAttribute<HttpPutAttribute>()!.Template.Should().Be("{userId:int}/roles");
         controller.GetMethod(nameof(TeamMembersController.RemoveMember))!
             .GetCustomAttribute<HttpDeleteAttribute>()!.Template.Should().Be("{userId:int}");
     }
@@ -789,7 +1018,7 @@ public class TeamsControllerTests
             if (FailNextMembershipSave)
             {
                 FailNextMembershipSave = false;
-                var permission = ChangeTracker.Entries<TeamPermission>().Single(entry => entry.State == EntityState.Added).Entity;
+                var permission = ChangeTracker.Entries<TeamPermission>().First(entry => entry.State == EntityState.Added).Entity;
                 using var concurrentDb = new AppDbContext(_options);
                 var concurrentUser = await concurrentDb.Users.SingleOrDefaultAsync(user => user.IamId == permission.User.IamId, cancellationToken);
                 if (InsertConcurrentUser)

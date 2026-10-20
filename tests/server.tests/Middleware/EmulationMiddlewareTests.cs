@@ -89,7 +89,11 @@ public class EmulationMiddlewareTests
         await fixture.ChangeUsersAsync(async db =>
         {
             var permission = await db.TeamPermissions.SingleAsync(permission => permission.Team.Slug == "target-team");
-            permission.Role = TeamRole.Editor;
+            db.TeamPermissions.Remove(permission);
+            db.TeamPermissions.Add(new TeamPermission
+            {
+                TeamId = permission.TeamId, UserId = permission.UserId, Role = TeamRole.Editor,
+            });
         });
         var login = await fixture.SignInAsync();
 

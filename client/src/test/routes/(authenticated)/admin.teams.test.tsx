@@ -29,7 +29,12 @@ const siteAdmin: User = {
   roles: [],
 };
 
-const existingTeam = { id: 1, name: 'Plant Sciences', slug: 'plant-sciences' };
+const existingTeam = {
+  id: 1,
+  name: 'Plant Sciences',
+  roles: [],
+  slug: 'plant-sciences',
+};
 let cleanup: (() => void) | undefined;
 const originalShowModal = Object.getOwnPropertyDescriptor(
   HTMLDialogElement.prototype,
@@ -112,7 +117,7 @@ describe('site admin teams', () => {
     mockAdminAccess();
     server.use(
       http.get('/api/teams/plant-sciences', () =>
-        HttpResponse.json({ isSiteAdmin: true, role: null, team: existingTeam })
+        HttpResponse.json({ isSiteAdmin: true, roles: [], team: existingTeam })
       )
     );
     const rendered = renderRoute({ initialPath: '/admin' });
@@ -143,7 +148,12 @@ describe('site admin teams', () => {
 
   it('suggests an editable slug, creates with antiforgery protection, and opens the new team', async () => {
     mockAdminAccess();
-    const createdTeam = { id: 2, name: 'Animal Science', slug: 'animal-labs' };
+    const createdTeam = {
+      id: 2,
+      name: 'Animal Science',
+      roles: [],
+      slug: 'animal-labs',
+    };
     let postedBody: unknown;
     let antiforgeryHeader: string | null = null;
     server.use(
@@ -153,7 +163,7 @@ describe('site admin teams', () => {
         return HttpResponse.json(createdTeam, { status: 201 });
       }),
       http.get('/api/teams/animal-labs', () =>
-        HttpResponse.json({ isSiteAdmin: true, role: null, team: createdTeam })
+        HttpResponse.json({ isSiteAdmin: true, roles: [], team: createdTeam })
       )
     );
     const rendered = renderRoute({ initialPath: '/admin/teams' });
@@ -218,7 +228,12 @@ describe('site admin teams', () => {
   it('retains entered values after a slug conflict and allows correction', async () => {
     mockAdminAccess();
     const postedSlugs: string[] = [];
-    const createdTeam = { id: 2, name: 'Plant Sciences', slug: 'plant-labs' };
+    const createdTeam = {
+      id: 2,
+      name: 'Plant Sciences',
+      roles: [],
+      slug: 'plant-labs',
+    };
     server.use(
       http.post('/api/admin/teams', async ({ request }) => {
         const body = (await request.json()) as { slug: string };
@@ -228,7 +243,7 @@ describe('site admin teams', () => {
           : HttpResponse.json(createdTeam, { status: 201 });
       }),
       http.get('/api/teams/plant-labs', () =>
-        HttpResponse.json({ isSiteAdmin: true, role: null, team: createdTeam })
+        HttpResponse.json({ isSiteAdmin: true, roles: [], team: createdTeam })
       )
     );
     ({ cleanup } = renderRoute({ initialPath: '/admin/teams' }));
@@ -273,10 +288,7 @@ describe('site admin teams', () => {
     async (status, message) => {
       mockAdminAccess();
       server.use(
-        http.post(
-          '/api/admin/teams',
-          () => new HttpResponse(null, { status })
-        )
+        http.post('/api/admin/teams', () => new HttpResponse(null, { status }))
       );
       const rendered = renderRoute({ initialPath: '/admin/teams' });
       cleanup = rendered.cleanup;
