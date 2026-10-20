@@ -21,18 +21,22 @@ import {
   createResourceTemplate,
   resourceTemplateErrorMessage,
   resourceTemplateQueryOptions,
-  resourceTemplatesQueryKey,
+  resourceTemplatesKey,
   updateResourceTemplate,
 } from '@/queries/resourceTemplates.ts';
 
 export function ResourceTemplateEditor({
   definition,
   onSaved,
+  teamSlug,
   template,
+  viewOnly = false,
 }: {
   definition: FormDefinition;
   onSaved?: (saved: ResourceTemplate) => void | Promise<void>;
+  teamSlug?: string;
   template?: ResourceTemplate;
+  viewOnly?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [baseline, setBaseline] = useState({ definition, template });
@@ -41,7 +45,19 @@ export function ResourceTemplateEditor({
     () => parseResourceDefaultsJson(currentTemplate?.resourceDefaultsJson),
     [currentTemplate?.resourceDefaultsJson]
   );
-  const isReadOnly = currentTemplate?.isActive === false;
+  const isArchived = currentTemplate?.isActive === false;
+  const isSystemTemplate = Boolean(teamSlug) && currentTemplate?.teamId === null;
+  const isReadOnly = viewOnly || isArchived || isSystemTemplate;
+  const Container = teamSlug ? 'section' : 'main';
+  const Heading = teamSlug ? 'h2' : 'h1';
+  const listLink = teamSlug
+    ? { params: { teamSlug }, to: '/teams/$teamSlug/resource-templates' as const }
+    : { to: '/admin/resource-templates' as const };
+  const editLink = currentTemplate && !isArchived && !isSystemTemplate
+    ? teamSlug
+      ? { params: { teamSlug, templateId: String(currentTemplate.id) }, to: '/teams/$teamSlug/resource-templates/$templateId' as const }
+      : { params: { templateId: String(currentTemplate.id) }, to: '/admin/resource-templates/$templateId' as const }
+    : undefined;
   const [editorView, setEditorView] = useState<'build' | 'preview' | 'defaults'>('build');
   const activeView = isReadOnly && editorView === 'build' ? 'preview' : editorView;
   const [saved, setSaved] = useState(false);
@@ -50,8 +66,8 @@ export function ResourceTemplateEditor({
   const saveMutation = useMutation({
     mutationFn: (request: SaveResourceTemplateRequest) =>
       currentTemplate
-        ? updateResourceTemplate(currentTemplate.id, request)
-        : createResourceTemplate(request),
+        ? updateResourceTemplate(currentTemplate.id, request, teamSlug)
+        : createResourceTemplate(request, teamSlug),
   });
   const defaultValues = {
     definition: baseline.definition,
@@ -125,8 +141,8 @@ export function ResourceTemplateEditor({
             parseResourceDefaultsJson(result.resourceDefaultsJson).defaults
           ),
         });
-        queryClient.setQueryData(resourceTemplateQueryOptions(result.id).queryKey, result);
-        await queryClient.invalidateQueries({ queryKey: resourceTemplatesQueryKey });
+        queryClient.setQueryData(resourceTemplateQueryOptions(result.id, teamSlug).queryKey, result);
+        await queryClient.invalidateQueries({ queryKey: resourceTemplatesKey(teamSlug) });
         setSaved(true);
         await onSaved?.(result);
       } catch {
@@ -152,28 +168,32 @@ export function ResourceTemplateEditor({
   });
 
   return (
-    <main className="content-container py-4 sm:py-8">
+    <Container className={teamSlug ? undefined : 'content-container py-4 sm:py-8'}>
       <nav aria-label="Breadcrumb" className="mb-5 text-sm text-base-content/65">
-        <Link className="hover:text-primary hover:underline" to="/admin">Site admin</Link>
-        {' / '}
-        <Link className="hover:text-primary hover:underline" to="/admin/resource-templates">Resource templates</Link>
+        {!teamSlug && <><Link className="hover:text-primary hover:underline" to="/admin">Site admin</Link>{' / '}</>}
+        <Link className="hover:text-primary hover:underline" {...listLink}>Resource templates</Link>
         {' / '}<span aria-current="page">{isReadOnly ? 'View template' : currentTemplate ? 'Edit template' : 'Create template'}</span>
       </nav>
-      <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
+      <Heading className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
         {isReadOnly ? 'View resource template' : currentTemplate ? 'Edit resource template' : 'Create resource template'}
-      </h1>
+      </Heading>
       <p className="mt-3 max-w-2xl text-base-content/70">
-        {isReadOnly
+        {isArchived
           ? 'Review this archived form and its saved version.'
-          : 'Build the form people will fill out when requesting a resource. This template is available at the site level.'}
+          : isSystemTemplate
+            ? 'Preview this system template and its resource defaults before duplicating it into your team.'
+            : viewOnly
+              ? 'Review this template, try its form, and inspect its resource defaults.'
+            : `Build the form people will fill out when requesting a resource. This template is available ${teamSlug ? 'to your team' : 'at the site level'}.`}
       </p>
       {currentTemplate && (
         <div className="mt-4 space-y-2">
           <span className="badge badge-outline">Version {currentTemplate.formSchemaVersion}</span>
           {isReadOnly ? (
             <div className="space-y-3 rounded-sm border border-base-300 bg-base-200 p-4">
-              <p>Archived templates are read-only. Duplicate this template to make changes.</p>
-              <Link className="link link-primary" to="/admin/resource-templates">Back to resource templates</Link>
+              <p>{isArchived ? 'Archived templates are read-only. Duplicate this template to make changes.' : isSystemTemplate ? 'System templates are read-only. Duplicate this template into your team to make changes.' : 'This is a read-only view. Choose Edit template to make changes.'}</p>
+              {editLink && <Link className="btn btn-primary btn-sm mr-4" search={{}} {...editLink}>Edit template</Link>}
+              <Link className="link link-primary" {...listLink}>Back to resource templates</Link>
             </div>
           ) : (
             <p className="max-w-2xl text-sm text-base-content/65">
@@ -317,6 +337,6 @@ export function ResourceTemplateEditor({
           {(currentDefinition) => <div className="mt-6"><FormPreview definition={currentDefinition} /></div>}
         </form.Subscribe>
       )}
-    </main>
+    </Container>
   );
 }

@@ -139,7 +139,15 @@ describe('site admin users', () => {
   it('lists admins while protecting the current admin and searching only on submission', async () => {
     mockAdminAccess();
     const peopleRequests = vi.fn(() => HttpResponse.json([person]));
-    server.use(http.get('/api/admin/people', peopleRequests));
+    server.use(
+      http.get('/api/admin/people', peopleRequests),
+      http.get('/api/admin/users', () =>
+        HttpResponse.json([
+          { ...currentAdmin, iamId: ` ${siteAdmin.iamId} ` },
+          otherAdmin,
+        ])
+      )
+    );
     ({ cleanup } = renderRoute({ initialPath: '/admin/users' }));
 
     expect(
@@ -442,22 +450,28 @@ describe('site admin users', () => {
     const removeButton = await screen.findByRole('button', {
       name: 'Remove admin access for Avery Admin',
     });
+    removeButton.focus();
     fireEvent.click(removeButton);
-    expect(screen.getByText('Remove admin access?')).toBeInTheDocument();
-    expect(removed).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    let dialog = within(
+      screen.getByRole('dialog', { name: 'Remove admin access?' })
+    );
     expect(
-      screen.queryByRole('button', { name: 'Confirm removal' })
-    ).not.toBeInTheDocument();
+      dialog.getByText(/Avery Admin will no longer be a site admin/)
+    ).toBeInTheDocument();
+    expect(dialog.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    expect(removed).toBe(false);
+    fireEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(removeButton).toHaveFocus();
     expect(removed).toBe(false);
 
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Remove admin access for Avery Admin',
-      })
+    fireEvent.click(removeButton);
+    dialog = within(
+      screen.getByRole('dialog', { name: 'Remove admin access?' })
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm removal' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Confirm removal' }));
     await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(
         screen.queryByRole('row', { name: /Avery Admin/ })
       ).not.toBeInTheDocument();
@@ -467,6 +481,157 @@ describe('site admin users', () => {
     ).toBeInTheDocument();
     expect(removedId).toBe('2');
     expect(antiforgeryHeader).toBe('test-antiforgery-token');
+  });
+
+  it.each(['Escape', 'backdrop'])(
+    'dismisses the removal dialog with %s without submitting and restores focus',
+    async (dismissal) => {
+      mockAdminAccess();
+      const removeRequests = vi.fn(
+        () => new HttpResponse(null, { status: 204 })
+      );
+      server.use(http.delete('/api/admin/users/2', removeRequests));
+      ({ cleanup } = renderRoute({ initialPath: '/admin/users' }));
+      const opener = await screen.findByRole('button', {
+        name: 'Remove admin access for Avery Admin',
+      });
+      opener.focus();
+      fireEvent.click(opener);
+      const dialog = screen.getByRole('dialog', {
+        name: 'Remove admin access?',
+      });
+      expect(dialog).toHaveAttribute('open');
+      fireEvent.click(
+        within(dialog).getByRole('heading', { name: 'Remove admin access?' })
+      );
+      expect(dialog).toBeInTheDocument();
+
+      if (dismissal === 'Escape') {
+        fireEvent(dialog, new Event('cancel', { cancelable: true }));
+      } else {
+        fireEvent.click(dialog);
+      }
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(opener).toHaveFocus();
+      expect(removeRequests).not.toHaveBeenCalled();
+    }
+  );
+
+  it('keeps a failed removal in its dialog and allows retrying the same admin', async () => {
+    mockAdminAccess();
+    let removed = false;
+    const removedIds: (string | readonly string[] | undefined)[] = [];
+    server.use(
+      http.get('/api/admin/users', () =>
+        HttpResponse.json(removed ? [currentAdmin] : [currentAdmin, otherAdmin])
+      ),
+      http.delete('/api/admin/users/:id', ({ params }) => {
+        removedIds.push(params.id);
+        if (removedIds.length === 1) {
+          return new HttpResponse(null, { status: 500 });
+        }
+        removed = true;
+        return new HttpResponse(null, { status: 204 });
+      })
+    );
+    ({ cleanup } = renderRoute({ initialPath: '/admin/users' }));
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Remove admin access for Avery Admin',
+      })
+    );
+    const dialog = within(
+      screen.getByRole('dialog', { name: 'Remove admin access?' })
+    );
+    fireEvent.click(dialog.getByRole('button', { name: 'Confirm removal' }));
+
+    expect(await dialog.findByRole('alert')).toHaveTextContent(
+      'We could not remove admin access. Please try again.'
+    );
+    expect(
+      dialog.getByText(/Avery Admin will no longer be a site admin/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('row', { name: /Avery Admin/ })
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        dialog.getByRole('button', { name: 'Confirm removal' })
+      ).toBeEnabled()
+    );
+    fireEvent.click(dialog.getByRole('button', { name: 'Confirm removal' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('row', { name: /Avery Admin/ })
+      ).not.toBeInTheDocument();
+    });
+    expect(removedIds).toEqual(['2', '2']);
+    expect(
+      screen.getByRole('row', { name: /Taylor Admin/ })
+    ).toBeInTheDocument();
+  });
+
+  it('blocks dismissal and duplicate confirmation while removal is pending', async () => {
+    mockAdminAccess();
+    let removed = false;
+    let releaseRemoval!: () => void;
+    let signalRemovalStarted!: () => void;
+    const pendingResponse = new Promise<void>((resolve) => {
+      releaseRemoval = resolve;
+    });
+    const removalStarted = new Promise<void>((resolve) => {
+      signalRemovalStarted = resolve;
+    });
+    const removeRequests = vi.fn(async () => {
+      signalRemovalStarted();
+      await pendingResponse;
+      removed = true;
+      return new HttpResponse(null, { status: 204 });
+    });
+    server.use(
+      http.get('/api/admin/users', () =>
+        HttpResponse.json(removed ? [currentAdmin] : [currentAdmin, otherAdmin])
+      ),
+      http.delete('/api/admin/users/2', removeRequests)
+    );
+    ({ cleanup } = renderRoute({ initialPath: '/admin/users' }));
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Remove admin access for Avery Admin',
+      })
+    );
+    const element = screen.getByRole('dialog', {
+      name: 'Remove admin access?',
+    });
+    const dialog = within(element);
+
+    try {
+      fireEvent.click(dialog.getByRole('button', { name: 'Confirm removal' }));
+      await removalStarted;
+
+      const removing = await dialog.findByRole('button', { name: 'Removing…' });
+      const cancel = dialog.getByRole('button', { name: 'Cancel' });
+      expect(cancel).toBeDisabled();
+      expect(removing).toBeDisabled();
+      fireEvent.click(cancel);
+      fireEvent.click(removing);
+      fireEvent(element, new Event('cancel', { cancelable: true }));
+      fireEvent.click(element);
+      expect(element).toHaveAttribute('open');
+      expect(element).toBeInTheDocument();
+      expect(removeRequests).toHaveBeenCalledTimes(1);
+
+      releaseRemoval();
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      );
+      expect(removeRequests).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseRemoval();
+    }
   });
 
   it('denies a direct users-page request when the admin access check returns 403', async () => {

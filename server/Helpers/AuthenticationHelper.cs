@@ -10,6 +10,7 @@ public static class AuthenticationHelper
 {
     public const string SiteAdminPolicy = "SiteAdmin";
     public const string TeamAccessPolicy = "TeamAccess";
+    public const string TeamEditorPolicy = "TeamEditor";
     public const string TeamAdminPolicy = "TeamAdmin";
 
     /// <summary>
@@ -43,6 +44,18 @@ public static class AuthenticationHelper
                 var teamSlug = httpContext.Request.RouteValues["teamSlug"] as string;
                 var teamAccessService = httpContext.RequestServices.GetRequiredService<TeamAccessService>();
                 return await teamAccessService.CanAccessTeam(context.User, teamSlug, httpContext.RequestAborted);
+            }));
+            options.AddPolicy(TeamEditorPolicy, policy => policy.RequireAuthenticatedUser().RequireAssertion(async context =>
+            {
+                var httpContext = context.Resource as HttpContext;
+                if (httpContext == null)
+                {
+                    return false;
+                }
+
+                var teamSlug = httpContext.Request.RouteValues["teamSlug"] as string;
+                var teamAccessService = httpContext.RequestServices.GetRequiredService<TeamAccessService>();
+                return await teamAccessService.CanEditTeam(context.User, teamSlug, httpContext.RequestAborted);
             }));
             options.AddPolicy(TeamAdminPolicy, policy => policy.RequireAuthenticatedUser().RequireAssertion(async context =>
             {

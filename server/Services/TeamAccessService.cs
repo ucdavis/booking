@@ -21,8 +21,24 @@ public sealed class TeamAccessService(AppDbContext dbContext)
         return await dbContext.Users.AnyAsync(user => user.IamId == iamId && user.IsActive &&
             (user.IsAdmin || dbContext.TeamPermissions.Any(permission =>
                 permission.UserId == user.Id && permission.Team.Slug == teamSlug &&
-                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor || permission.Role == TeamRole.Viewer))),
+                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor ||
+                    permission.Role == TeamRole.Viewer || permission.Role == TeamRole.Approver))),
             cancellationToken);
+    }
+
+    public async Task<bool> CanEditTeam(
+        ClaimsPrincipal principal, string? teamSlug, CancellationToken cancellationToken = default)
+    {
+        var iamId = GetIamId(principal);
+        if (iamId == null || string.IsNullOrWhiteSpace(teamSlug))
+        {
+            return false;
+        }
+
+        return await dbContext.Users.AnyAsync(user => user.IamId == iamId && user.IsActive &&
+            (user.IsAdmin || dbContext.TeamPermissions.Any(permission =>
+                permission.UserId == user.Id && permission.Team.Slug == teamSlug &&
+                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor))), cancellationToken);
     }
 
     public async Task<bool> CanAdministerTeam(
@@ -50,19 +66,30 @@ public sealed class TeamAccessService(AppDbContext dbContext)
         }
 
         // Site administrators use the all-teams list; this menu contains explicit memberships only.
-        return await dbContext.TeamPermissions.AsNoTracking()
+        var permissions = await dbContext.TeamPermissions.AsNoTracking()
             .Where(permission => permission.User.IamId == iamId && permission.User.IsActive &&
-                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor || permission.Role == TeamRole.Viewer))
+                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor ||
+                    permission.Role == TeamRole.Viewer || permission.Role == TeamRole.Approver))
             .OrderBy(permission => permission.Team.Name)
             .ThenBy(permission => permission.Team.Slug)
-            .Select(permission => new TeamSummaryResponse
+            .Select(permission => new
             {
                 Id = permission.Team.Id,
                 Name = permission.Team.Name,
                 Slug = permission.Team.Slug,
-                Role = permission.Role,
+                permission.Role,
             })
             .ToListAsync(cancellationToken);
+
+        return permissions.GroupBy(permission => new { permission.Id, permission.Name, permission.Slug })
+            .Select(group => new TeamSummaryResponse
+            {
+                Id = group.Key.Id,
+                Name = group.Key.Name,
+                Slug = group.Key.Slug,
+                Roles = group.Select(permission => permission.Role).OrderBy(role => role).ToList(),
+            })
+            .ToList();
     }
 
     public async Task<TeamAccessResponse?> GetAccess(
@@ -85,24 +112,31 @@ public sealed class TeamAccessService(AppDbContext dbContext)
 
         var team = await dbContext.Teams.AsNoTracking()
             .Where(team => team.Slug == teamSlug)
-            .Select(team => new TeamSummaryResponse { Id = team.Id, Name = team.Name, Slug = team.Slug })
+            .Select(team => new { team.Id, team.Name, team.Slug })
             .SingleOrDefaultAsync(cancellationToken);
         if (team == null)
         {
             return null;
         }
 
-        var role = await dbContext.TeamPermissions.AsNoTracking()
+        var roles = await dbContext.TeamPermissions.AsNoTracking()
             .Where(permission => permission.TeamId == team.Id && permission.UserId == user.Id &&
-                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor || permission.Role == TeamRole.Viewer))
-            .Select(permission => (TeamRole?)permission.Role)
-            .SingleOrDefaultAsync(cancellationToken);
-        if (!user.IsAdmin && role == null)
+                (permission.Role == TeamRole.Admin || permission.Role == TeamRole.Editor ||
+                    permission.Role == TeamRole.Viewer || permission.Role == TeamRole.Approver))
+            .OrderBy(permission => permission.Role)
+            .Select(permission => permission.Role)
+            .ToListAsync(cancellationToken);
+        if (!user.IsAdmin && roles.Count == 0)
         {
             return null;
         }
 
-        return new TeamAccessResponse { Team = team, Role = role, IsSiteAdmin = user.IsAdmin };
+        return new TeamAccessResponse
+        {
+            Team = new TeamSummaryResponse { Id = team.Id, Name = team.Name, Slug = team.Slug, Roles = roles },
+            Roles = roles,
+            IsSiteAdmin = user.IsAdmin,
+        };
     }
 
     private static string? GetIamId(ClaimsPrincipal principal)

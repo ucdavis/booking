@@ -1,4 +1,8 @@
-import { queryOptions, type QueryClient } from '@tanstack/react-query';
+import {
+  queryOptions,
+  type MutationFilters,
+  type QueryClient,
+} from '@tanstack/react-query';
 import type { TeamAccess } from '@/features/teams/models/TeamAccess.ts';
 import type { TeamMember } from '@/features/teams/models/TeamMember.ts';
 import type { TeamPaymentsSettings } from '@/features/teams/models/TeamPaymentsSettings.ts';
@@ -79,6 +83,24 @@ const teamMembersUrl = (teamSlug: string) =>
 export const teamMembersQueryKey = (teamSlug: string) =>
   ['teams', 'members', teamSlug] as const;
 
+export const teamMemberMutationKey = (teamSlug: string) =>
+  ['teams', 'member-change', teamSlug] as const;
+
+export const teamSelfAccessMutationFilter = (
+  teamSlug: string
+): MutationFilters => ({
+  mutationKey: teamMemberMutationKey(teamSlug),
+  predicate: (mutation) => {
+    const variables = mutation.state.variables;
+    return (
+      typeof variables === 'object' &&
+      variables !== null &&
+      'changesOwnAccess' in variables &&
+      variables.changesOwnAccess === true
+    );
+  },
+});
+
 export const teamMembersQueryOptions = (teamSlug: string, userId: string) =>
   queryOptions({
     queryFn: ({ signal }) =>
@@ -113,34 +135,61 @@ export const teamPeopleQueryOptions = (
 export const addTeamMember = (
   teamSlug: string,
   iamId: string,
-  role: TeamRole
+  roles: TeamRole[]
 ) =>
   fetchJson<TeamMember>(teamMembersUrl(teamSlug), {
-    body: JSON.stringify({ iamId, role }),
+    body: JSON.stringify({ iamId, roles }),
     method: 'POST',
   });
 
-export const changeTeamMemberRole = (
+export const changeTeamMemberRoles = (
   teamSlug: string,
   userId: number,
-  role: TeamRole
+  roles: TeamRole[],
+  confirmSelfAccessChange = false
 ) =>
-  fetchJson<TeamMember>(`${teamMembersUrl(teamSlug)}/${userId}/role`, {
-    body: JSON.stringify({ role }),
+  fetchJson<TeamMember>(`${teamMembersUrl(teamSlug)}/${userId}/roles`, {
+    body: JSON.stringify({
+      roles,
+      ...(confirmSelfAccessChange ? { confirmSelfAccessChange: true } : {}),
+    }),
     method: 'PUT',
   });
 
-export const removeTeamMember = (teamSlug: string, userId: number) =>
-  fetchJson<void>(`${teamMembersUrl(teamSlug)}/${userId}`, { method: 'DELETE' });
+export const removeTeamMember = (
+  teamSlug: string,
+  userId: number,
+  confirmSelfAccessChange = false
+) =>
+  fetchJson<void>(
+    `${teamMembersUrl(teamSlug)}/${userId}${confirmSelfAccessChange ? '?confirmSelfAccessChange=true' : ''}`,
+    {
+      method: 'DELETE',
+    }
+  );
 
 export async function invalidateTeamMemberQueries(
   queryClient: QueryClient,
-  teamSlug: string
+  teamSlug: string,
+  refetchType: 'active' | 'none' = 'active'
 ) {
+  await queryClient.cancelQueries({ queryKey: ['teams', 'memberships'] });
   await Promise.all([
-    queryClient.invalidateQueries({ queryKey: teamMembersQueryKey(teamSlug) }),
-    queryClient.invalidateQueries({ queryKey: ['teams', 'people', teamSlug] }),
-    queryClient.invalidateQueries({ queryKey: ['teams', 'access', teamSlug] }),
-    queryClient.invalidateQueries({ queryKey: ['teams', 'memberships'] }),
+    queryClient.invalidateQueries({
+      queryKey: teamMembersQueryKey(teamSlug),
+      refetchType,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: ['teams', 'people', teamSlug],
+      refetchType,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: ['teams', 'access', teamSlug],
+      refetchType,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: ['teams', 'memberships'],
+      refetchType,
+    }),
   ]);
 }

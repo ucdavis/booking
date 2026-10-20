@@ -10,5 +10,5 @@ public sealed class AddTeamMemberRequest
     public string IamId { get; init; } = string.Empty;
 
     [Required]
-    public TeamRole? Role { get; init; }
+    public List<TeamRole>? Roles { get; init; }
 }

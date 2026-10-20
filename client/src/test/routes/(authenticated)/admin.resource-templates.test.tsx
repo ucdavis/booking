@@ -81,6 +81,7 @@ function makeTemplate(
     isActive: true,
     name: 'Equipment booking',
     resourceDefaultsJson: null,
+    teamId: null,
     updatedAt: '2026-10-01T12:00:00Z',
     ...overrides,
   };
@@ -613,6 +614,94 @@ describe('site admin resource templates', () => {
     expect(saves[0].body.updatedAt).toBe('2026-10-01T12:00:00Z');
   });
 
+  it('shows descriptions on hover and focus without moving focus, and omits empty tooltips', async () => {
+    mockAdminAccess();
+    const description = 'Request cameras, tripods, and other equipment.';
+    mockTemplateStore([
+      makeTemplate({ description }),
+      makeTemplate({ description: null, id: 2, name: 'No description' }),
+      makeTemplate({ description: '   ', id: 3, name: 'Blank description' }),
+    ]);
+    ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates' }));
+    const name = await screen.findByRole('link', { name: 'Equipment booking' });
+    expect(name).toHaveAccessibleDescription(description);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+    fireEvent.mouseEnter(name);
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip).toHaveTextContent(description);
+    expect(name).toHaveAccessibleDescription(description);
+    fireEvent.mouseLeave(name, { relatedTarget: tooltip });
+    expect(screen.getByRole('tooltip')).toHaveTextContent(description);
+    fireEvent.mouseLeave(tooltip, { relatedTarget: document.body });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+    act(() => name.focus());
+    expect(screen.getByRole('tooltip')).toHaveTextContent(description);
+    expect(screen.getByRole('link', { name: 'Equipment booking' })).toHaveFocus();
+    fireEvent.keyDown(name, { key: 'Escape' });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    expect(name).toHaveFocus();
+    expect(name).toHaveAccessibleDescription(description);
+
+    for (const label of ['No description', 'Blank description']) {
+      const empty = screen.getByRole('link', { name: label });
+      expect(empty).not.toHaveAttribute('aria-describedby');
+      fireEvent.mouseEnter(empty);
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+      act(() => empty.focus());
+      expect(empty).toHaveFocus();
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+      fireEvent.mouseLeave(empty, { relatedTarget: document.body });
+    }
+  });
+
+  it('offers View and Edit for an active template and opens the view read-only', async () => {
+    mockAdminAccess();
+    const { saves } = mockTemplateStore([
+      makeTemplate({ resourceDefaultsJson: JSON.stringify(resourceDefaults) }),
+    ]);
+    const rendered = renderRoute({ initialPath: '/admin/resource-templates' });
+    cleanup = rendered.cleanup;
+    const row = within(
+      await screen.findByRole('row', { name: /Equipment booking/ })
+    );
+    expect(row.getByRole('link', { name: 'Edit Equipment booking' })).toHaveAttribute(
+      'href', '/admin/resource-templates/1'
+    );
+    const view = row.getByRole('link', { name: 'View Equipment booking' });
+    expect(view).toHaveAttribute('href', '/admin/resource-templates/1?view=true');
+    fireEvent.click(view);
+
+    expect(
+      await screen.findByRole('heading', { name: 'View resource template' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Template name' })).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'Active template' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Save template' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Build form' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Input' })).not.toBeInTheDocument();
+    const answer = screen.getByRole('textbox', { name: /Visitor name/ });
+    fireEvent.change(answer, { target: { value: 'Taylor' } });
+    expect(answer).toHaveValue('Taylor');
+    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('09:00');
+    expect(screen.getByLabelText('Monday opening time 1')).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue('25.00');
+    expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toBeDisabled();
+    expect(saves).toHaveLength(0);
+    fireEvent.click(screen.getByRole('link', { name: 'Edit template' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Edit resource template' })
+    ).toBeInTheDocument();
+    expect(rendered.router.state.location.search).not.toHaveProperty('view', true);
+    expect(screen.getByRole('textbox', { name: 'Template name' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Save template' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Build form' })).toBeEnabled();
+    expect(saves).toHaveLength(0);
+  });
+
   it('opens archived forms read-only while allowing an interactive unsaved preview', async () => {
     mockAdminAccess();
     const original = makeTemplate({
@@ -638,6 +727,9 @@ describe('site admin resource templates', () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Save template' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Edit template' })
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole('link', { name: 'Back to resource templates' })
@@ -685,7 +777,7 @@ describe('site admin resource templates', () => {
     );
     expect(
       row.getByRole('link', { name: 'View Equipment booking' })
-    ).toHaveAttribute('href', '/admin/resource-templates/1');
+    ).toHaveAttribute('href', '/admin/resource-templates/1?view=true');
     expect(row.queryByRole('link', { name: /Edit/ })).not.toBeInTheDocument();
     fireEvent.click(
       row.getByRole('button', { name: 'Duplicate Equipment booking' })

@@ -90,10 +90,13 @@ public class AuthenticationHelperTests : IDisposable
     [InlineData(false, true, TeamRole.Admin, "team-a", true)]
     [InlineData(false, true, TeamRole.Editor, "team-a", true)]
     [InlineData(false, true, TeamRole.Viewer, "team-a", true)]
+    [InlineData(false, true, TeamRole.Approver, "team-a", true)]
+    [InlineData(false, true, TeamRole.Approver, "team-b", false)]
     [InlineData(false, true, TeamRole.Admin, "team-b", false)]
     [InlineData(false, true, (TeamRole)999, "team-a", false)]
     [InlineData(false, true, null, "team-a", false)]
     [InlineData(false, false, TeamRole.Admin, "team-a", false)]
+    [InlineData(false, false, TeamRole.Approver, "team-a", false)]
     [InlineData(true, true, null, "team-b", true)]
     [InlineData(true, true, TeamRole.Viewer, "team-b", true)]
     [InlineData(true, false, TeamRole.Admin, "team-a", false)]
@@ -194,17 +197,28 @@ public class AuthenticationHelperTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false, true, TeamRole.Admin, true)]
-    [InlineData(false, true, TeamRole.Editor, false)]
-    [InlineData(false, true, TeamRole.Viewer, false)]
-    [InlineData(false, true, (TeamRole)999, false)]
-    [InlineData(false, true, null, false)]
-    [InlineData(false, false, TeamRole.Admin, false)]
-    [InlineData(true, true, null, true)]
-    [InlineData(true, true, TeamRole.Viewer, true)]
-    [InlineData(true, false, TeamRole.Admin, false)]
-    public async Task Team_admin_policy_requires_an_active_site_admin_or_an_admin_on_the_requested_team(
-        bool isAdmin, bool isActive, TeamRole? role, bool expectedAccess)
+    [InlineData(AuthenticationHelper.TeamAdminPolicy, false, true, TeamRole.Admin, true)]
+    [InlineData(AuthenticationHelper.TeamAdminPolicy, false, true, TeamRole.Editor, false)]
+    [InlineData(AuthenticationHelper.TeamAdminPolicy, false, true, TeamRole.Viewer, false)]
+    [InlineData(AuthenticationHelper.TeamAdminPolicy, false, true, TeamRole.Approver, false)]
+    [InlineData(AuthenticationHelper.TeamAdminPolicy, false, true, (TeamRole)999, false)]
+    [InlineData(AuthenticationHelper.TeamAdminPolicy, false, true, null, false)]
+    [InlineData(AuthenticationHelper.TeamAdminPolicy, false, false, TeamRole.Admin, false)]
+    [InlineData(AuthenticationHelper.TeamAdminPolicy, true, true, null, true)]
+    [InlineData(AuthenticationHelper.TeamAdminPolicy, true, true, TeamRole.Viewer, true)]
+    [InlineData(AuthenticationHelper.TeamAdminPolicy, true, false, TeamRole.Admin, false)]
+    [InlineData(AuthenticationHelper.TeamEditorPolicy, false, true, TeamRole.Admin, true)]
+    [InlineData(AuthenticationHelper.TeamEditorPolicy, false, true, TeamRole.Editor, true)]
+    [InlineData(AuthenticationHelper.TeamEditorPolicy, false, true, TeamRole.Viewer, false)]
+    [InlineData(AuthenticationHelper.TeamEditorPolicy, false, true, TeamRole.Approver, false)]
+    [InlineData(AuthenticationHelper.TeamEditorPolicy, false, true, (TeamRole)999, false)]
+    [InlineData(AuthenticationHelper.TeamEditorPolicy, false, true, null, false)]
+    [InlineData(AuthenticationHelper.TeamEditorPolicy, false, false, TeamRole.Editor, false)]
+    [InlineData(AuthenticationHelper.TeamEditorPolicy, true, true, null, true)]
+    [InlineData(AuthenticationHelper.TeamEditorPolicy, true, true, TeamRole.Viewer, true)]
+    [InlineData(AuthenticationHelper.TeamEditorPolicy, true, false, TeamRole.Admin, false)]
+    public async Task Team_management_policies_require_an_active_user_with_the_required_team_role_or_site_admin_access(
+        string policy, bool isAdmin, bool isActive, TeamRole? role, bool expectedAccess)
     {
         var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var user = new User { IamId = "sandbox-10001", Name = "Member", IsAdmin = isAdmin, IsActive = isActive };
@@ -219,14 +233,49 @@ public class AuthenticationHelperTests : IDisposable
         var principal = CreatePrincipal();
         ((ClaimsIdentity)principal.Identity!).AddClaim(new Claim(ClaimTypes.Role, "Admin"));
 
-        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamAdminPolicy))
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", policy))
             .Succeeded.Should().Be(expectedAccess);
-        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-b", AuthenticationHelper.TeamAdminPolicy))
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-b", policy))
             .Succeeded.Should().Be(isAdmin && isActive);
     }
 
-    [Fact]
-    public async Task Team_admin_policy_requires_route_slug_authenticated_identity_and_http_context()
+    [Theory]
+    [InlineData(TeamRole.Viewer)]
+    [InlineData(TeamRole.Approver)]
+    public async Task Team_policies_union_assigned_roles_and_recheck_each_role_removal(TeamRole remainingRole)
+    {
+        var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = new User { IamId = "sandbox-10001", Name = "Member" };
+        var team = new Team { Name = "Team A", Slug = "team-a" };
+        var admin = new TeamPermission { User = user, Team = team, Role = TeamRole.Admin };
+        var editor = new TeamPermission { User = user, Team = team, Role = TeamRole.Editor };
+        db.TeamPermissions.AddRange(
+            new TeamPermission { User = user, Team = team, Role = remainingRole }, editor, admin);
+        await db.SaveChangesAsync();
+        var principal = CreatePrincipal();
+
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamAdminPolicy))
+            .Succeeded.Should().BeTrue();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamEditorPolicy))
+            .Succeeded.Should().BeTrue();
+        db.TeamPermissions.Remove(admin);
+        await db.SaveChangesAsync();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamAdminPolicy))
+            .Succeeded.Should().BeFalse();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamEditorPolicy))
+            .Succeeded.Should().BeTrue();
+        db.TeamPermissions.Remove(editor);
+        await db.SaveChangesAsync();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamEditorPolicy))
+            .Succeeded.Should().BeFalse();
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a"))
+            .Succeeded.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(AuthenticationHelper.TeamAdminPolicy)]
+    [InlineData(AuthenticationHelper.TeamEditorPolicy)]
+    public async Task Team_management_policies_require_route_slug_authenticated_identity_and_http_context(string policy)
     {
         var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
         db.Users.Add(new User { IamId = "sandbox-10001", Name = "Admin", IsAdmin = true });
@@ -236,16 +285,19 @@ public class AuthenticationHelperTests : IDisposable
         var missingIam = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, "Admin")], "Test"));
         var unauthenticated = new ClaimsPrincipal(new ClaimsIdentity(principal.Claims));
 
-        (await AuthorizeTeam(services, principal, null, AuthenticationHelper.TeamAdminPolicy)).Succeeded.Should().BeFalse();
-        (await AuthorizeTeam(services, principal, " ", AuthenticationHelper.TeamAdminPolicy)).Succeeded.Should().BeFalse();
-        (await AuthorizeTeam(services, missingIam, "team-a", AuthenticationHelper.TeamAdminPolicy)).Succeeded.Should().BeFalse();
-        (await AuthorizeTeam(services, unauthenticated, "team-a", AuthenticationHelper.TeamAdminPolicy)).Succeeded.Should().BeFalse();
-        (await services.GetRequiredService<IAuthorizationService>().AuthorizeAsync(principal, null, AuthenticationHelper.TeamAdminPolicy))
+        (await AuthorizeTeam(services, principal, null, policy)).Succeeded.Should().BeFalse();
+        (await AuthorizeTeam(services, principal, " ", policy)).Succeeded.Should().BeFalse();
+        (await AuthorizeTeam(services, missingIam, "team-a", policy)).Succeeded.Should().BeFalse();
+        (await AuthorizeTeam(services, unauthenticated, "team-a", policy)).Succeeded.Should().BeFalse();
+        (await services.GetRequiredService<IAuthorizationService>().AuthorizeAsync(principal, null, policy))
             .Succeeded.Should().BeFalse();
     }
 
-    [Fact]
-    public async Task Team_admin_policy_observes_demotion_and_user_deactivation_without_a_new_login()
+    [Theory]
+    [InlineData(AuthenticationHelper.TeamAdminPolicy, TeamRole.Editor)]
+    [InlineData(AuthenticationHelper.TeamEditorPolicy, TeamRole.Viewer)]
+    public async Task Team_management_policies_observe_demotion_and_user_deactivation_without_a_new_login(
+        string policy, TeamRole demotedRole)
     {
         var db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var user = new User { IamId = "sandbox-10001", Name = "Member" };
@@ -257,19 +309,20 @@ public class AuthenticationHelperTests : IDisposable
         await db.SaveChangesAsync();
         var principal = CreatePrincipal();
 
-        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamAdminPolicy))
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", policy))
             .Succeeded.Should().BeTrue();
-        permission.Role = TeamRole.Editor;
+        db.TeamPermissions.Remove(permission);
+        db.TeamPermissions.Add(new TeamPermission { User = user, Team = permission.Team, Role = demotedRole });
         await db.SaveChangesAsync();
-        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamAdminPolicy))
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", policy))
             .Succeeded.Should().BeFalse();
         user.IsAdmin = true;
         await db.SaveChangesAsync();
-        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamAdminPolicy))
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", policy))
             .Succeeded.Should().BeTrue();
         user.IsActive = false;
         await db.SaveChangesAsync();
-        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", AuthenticationHelper.TeamAdminPolicy))
+        (await AuthorizeTeam(_scope.ServiceProvider, principal, "team-a", policy))
             .Succeeded.Should().BeFalse();
     }
 

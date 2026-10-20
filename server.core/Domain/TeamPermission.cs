@@ -28,8 +28,8 @@ public class TeamPermission
             value => Enum.Parse<TeamRole>(value, true));
 
         builder.ToTable(table => table.HasCheckConstraint(
-            "CK_TeamPermissions_Role", "[Role] IN ('admin', 'editor', 'viewer')"));
-        builder.HasKey(permission => new { permission.TeamId, permission.UserId });
+            "CK_TeamPermissions_Role", "[Role] IN ('admin', 'editor', 'viewer', 'approver')"));
+        builder.HasKey(permission => new { permission.TeamId, permission.UserId, permission.Role });
 
         builder.HasOne(permission => permission.User)
             .WithMany()

@@ -50,7 +50,7 @@ public sealed class TeamPaymentsController(
         try
         {
             var apiKey = await secretsService.GetSecretAsync(team.PaymentsApiKeySecretName, cancellationToken);
-            if (access.IsSiteAdmin || access.Role == TeamRole.Admin)
+            if (access.IsSiteAdmin || access.Roles.Contains(TeamRole.Admin))
             {
                 maskedApiKey = MaskApiKey(apiKey);
             }

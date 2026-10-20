@@ -9,5 +9,5 @@ public sealed class TeamMemberResponse
     public required string Name { get; init; }
     public string? Email { get; init; }
     public bool IsActive { get; init; }
-    public TeamRole Role { get; init; }
+    public List<TeamRole> Roles { get; init; } = [];
 }

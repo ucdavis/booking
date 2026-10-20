@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { TeamPaymentsSettings } from '@/features/teams/TeamPaymentsSettings.tsx';
-import { TeamRole } from '@/features/teams/models/TeamRole.ts';
+import { TeamRole, teamRoleLabels } from '@/features/teams/models/TeamRole.ts';
 import { teamAccessQueryOptions } from '@/queries/teams.ts';
 import { useUser } from '@/shared/auth/UserContext.tsx';
 
@@ -21,17 +21,14 @@ function TeamOverviewPage() {
     return null;
   }
 
-  const { isSiteAdmin, role, team } = teamQuery.data;
-  const roleLabels = {
-    admin: 'Team administrator',
-    editor: 'Editor',
-    viewer: 'Viewer',
-  };
-  const accessLabel = isSiteAdmin
-    ? 'Site administrator'
-    : role
-      ? roleLabels[role]
-      : 'Team access';
+  const { isSiteAdmin, roles, team } = teamQuery.data;
+  const accessLabels = [
+    ...(isSiteAdmin ? ['Site administrator'] : []),
+    ...roles.map((role) =>
+      role === TeamRole.Admin ? 'Team administrator' : teamRoleLabels[role]
+    ),
+  ];
+  const canManage = isSiteAdmin || roles.includes(TeamRole.Admin);
 
   return (
     <>
@@ -47,13 +44,13 @@ function TeamOverviewPage() {
           <dt className="text-sm font-medium text-base-content/65">
             Your access
           </dt>
-          <dd>{accessLabel}</dd>
+          <dd>{accessLabels.join(', ') || 'Team access'}</dd>
         </dl>
         <p className="mt-6 text-sm text-base-content/65">
           The team name and URL slug were set when this team was created and
           cannot be changed.
         </p>
-        {isSiteAdmin && !role && (
+        {isSiteAdmin && roles.length === 0 && (
           <p className="mt-3 text-sm text-base-content/65">
             You have access through site administration. You do not have a
             separate role on this team.
@@ -61,8 +58,8 @@ function TeamOverviewPage() {
         )}
       </section>
       <TeamPaymentsSettings
-        canManage={isSiteAdmin || role === TeamRole.Admin}
-        key={`${teamSlug}:${user.id}:${isSiteAdmin || role === TeamRole.Admin}`}
+        canManage={canManage}
+        key={`${teamSlug}:${user.id}:${canManage}`}
         teamSlug={teamSlug}
       />
     </>

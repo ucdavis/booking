@@ -1,5 +1,5 @@
 import { UserGroupIcon } from '@heroicons/react/24/outline';
-import { useQuery } from '@tanstack/react-query';
+import { useIsMutating, useQuery } from '@tanstack/react-query';
 import {
   createFileRoute,
   Link,
@@ -10,7 +10,10 @@ import {
 import { useEffect } from 'react';
 import { TeamRole } from '@/features/teams/models/TeamRole.ts';
 import { HttpError } from '@/lib/api.ts';
-import { teamAccessQueryOptions } from '@/queries/teams.ts';
+import {
+  teamAccessQueryOptions,
+  teamSelfAccessMutationFilter,
+} from '@/queries/teams.ts';
 import { NotAuthorizedPage } from '@/shared/auth/NotAuthorizedPage.tsx';
 
 export const Route = createFileRoute('/(authenticated)/teams/$teamSlug')({
@@ -41,8 +44,11 @@ export const Route = createFileRoute('/(authenticated)/teams/$teamSlug')({
 
 function TeamLayout() {
   const { teamSlug } = Route.useParams();
+  const isChangingOwnAccess =
+    useIsMutating(teamSelfAccessMutationFilter(teamSlug)) > 0;
   const teamQuery = useQuery({
     ...teamAccessQueryOptions(teamSlug),
+    enabled: !isChangingOwnAccess,
     refetchOnMount: false,
   });
 
@@ -79,7 +85,7 @@ function TeamLayout() {
     );
   }
 
-  const { isSiteAdmin, role, team } = teamQuery.data;
+  const { isSiteAdmin, roles, team } = teamQuery.data;
 
   return (
     <main className="content-container py-4 sm:py-8">
@@ -124,17 +130,36 @@ function TeamLayout() {
           activeOptions={{ exact: true }}
           activeProps={{ className: 'border-primary text-primary' }}
           className="border-b-2 px-1 py-3 text-sm font-semibold hover:text-primary"
-          inactiveProps={{ className: 'border-transparent text-base-content/70' }}
+          inactiveProps={{
+            className: 'border-transparent text-base-content/70',
+          }}
           params={{ teamSlug: team.slug }}
           to="/teams/$teamSlug"
         >
           Overview
         </Link>
-        {(isSiteAdmin || role === TeamRole.Admin) && (
+        {(isSiteAdmin ||
+          roles.includes(TeamRole.Admin) ||
+          roles.includes(TeamRole.Editor)) && (
           <Link
             activeProps={{ className: 'border-primary text-primary' }}
             className="border-b-2 px-1 py-3 text-sm font-semibold hover:text-primary"
-            inactiveProps={{ className: 'border-transparent text-base-content/70' }}
+            inactiveProps={{
+              className: 'border-transparent text-base-content/70',
+            }}
+            params={{ teamSlug: team.slug }}
+            to="/teams/$teamSlug/resource-templates"
+          >
+            Resource templates
+          </Link>
+        )}
+        {(isSiteAdmin || roles.includes(TeamRole.Admin)) && (
+          <Link
+            activeProps={{ className: 'border-primary text-primary' }}
+            className="border-b-2 px-1 py-3 text-sm font-semibold hover:text-primary"
+            inactiveProps={{
+              className: 'border-transparent text-base-content/70',
+            }}
             params={{ teamSlug: team.slug }}
             to="/teams/$teamSlug/members"
           >

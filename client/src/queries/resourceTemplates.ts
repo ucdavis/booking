@@ -3,37 +3,42 @@ import type { ResourceTemplate } from '@/features/resource-templates/models/Reso
 import type { SaveResourceTemplateRequest } from '@/features/resource-templates/models/SaveResourceTemplateRequest.ts';
 import { fetchJson, HttpError } from '@/lib/api.ts';
 
-const templatesUrl = '/api/admin/resource-templates';
+const templatesUrl = (teamSlug?: string) => teamSlug
+  ? `/api/teams/${encodeURIComponent(teamSlug)}/resource-templates`
+  : '/api/admin/resource-templates';
 export const resourceTemplatesQueryKey = ['admin', 'resource-templates'] as const;
+export const resourceTemplatesKey = (teamSlug?: string) => teamSlug
+  ? ['teams', 'resource-templates', teamSlug] as const
+  : resourceTemplatesQueryKey;
 
 const retry = (failureCount: number, error: Error) =>
   !(error instanceof HttpError && error.status >= 400 && error.status < 500) &&
   failureCount < 2;
 
-export const resourceTemplatesQueryOptions = () =>
+export const resourceTemplatesQueryOptions = (teamSlug?: string) =>
   queryOptions({
     queryFn: ({ signal }) =>
-      fetchJson<ResourceTemplate[]>(templatesUrl, { cache: 'no-store' }, signal),
-    queryKey: resourceTemplatesQueryKey,
+      fetchJson<ResourceTemplate[]>(templatesUrl(teamSlug), { cache: 'no-store' }, signal),
+    queryKey: resourceTemplatesKey(teamSlug),
     retry,
   });
 
-export const resourceTemplateQueryOptions = (id: number) =>
+export const resourceTemplateQueryOptions = (id: number, teamSlug?: string) =>
   queryOptions({
     queryFn: ({ signal }) =>
-      fetchJson<ResourceTemplate>(`${templatesUrl}/${id}`, { cache: 'no-store' }, signal),
-    queryKey: [...resourceTemplatesQueryKey, id] as const,
+      fetchJson<ResourceTemplate>(`${templatesUrl(teamSlug)}/${id}`, { cache: 'no-store' }, signal),
+    queryKey: [...resourceTemplatesKey(teamSlug), id] as const,
     retry,
   });
 
-export const createResourceTemplate = (request: SaveResourceTemplateRequest) =>
-  fetchJson<ResourceTemplate>(templatesUrl, { body: JSON.stringify(request), method: 'POST' });
+export const createResourceTemplate = (request: SaveResourceTemplateRequest, teamSlug?: string) =>
+  fetchJson<ResourceTemplate>(templatesUrl(teamSlug), { body: JSON.stringify(request), method: 'POST' });
 
-export const updateResourceTemplate = (id: number, request: SaveResourceTemplateRequest) =>
-  fetchJson<ResourceTemplate>(`${templatesUrl}/${id}`, { body: JSON.stringify(request), method: 'PUT' });
+export const updateResourceTemplate = (id: number, request: SaveResourceTemplateRequest, teamSlug?: string) =>
+  fetchJson<ResourceTemplate>(`${templatesUrl(teamSlug)}/${id}`, { body: JSON.stringify(request), method: 'PUT' });
 
-export const duplicateResourceTemplate = (id: number) =>
-  fetchJson<ResourceTemplate>(`${templatesUrl}/${id}/duplicate`, { method: 'POST' });
+export const duplicateResourceTemplate = (id: number, teamSlug?: string) =>
+  fetchJson<ResourceTemplate>(`${templatesUrl(teamSlug)}/${id}/duplicate`, { method: 'POST' });
 
 export function resourceTemplateErrorMessage(error: unknown) {
   if (error instanceof HttpError) {
