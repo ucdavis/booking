@@ -6,11 +6,13 @@ import { withFieldGroup } from '@/shared/forms/formContext.tsx';
 export const ResourceDefaultsEditor = withFieldGroup({
   defaultValues: resourceDefaultsFormValues({}),
   props: {
+    context: 'template' as 'template' | 'resource',
     disabled: false,
     readOnly: false,
     unavailableReason: undefined as string | undefined,
   },
   render: function ResourceDefaultsEditor({
+    context,
     disabled,
     group,
     readOnly,
@@ -18,16 +20,19 @@ export const ResourceDefaultsEditor = withFieldGroup({
   }) {
     return (
       <section
-        aria-label="Resource defaults"
+        aria-label={
+          context === 'resource' ? 'Hours and rates' : 'Resource defaults'
+        }
         className="space-y-5 rounded-sm border border-base-300 bg-base-100 p-5"
       >
         <div>
           <h2 className="text-xl font-semibold text-primary">
-            Resource defaults
+            {context === 'resource' ? 'Hours and rates' : 'Resource defaults'}
           </h2>
           <p className="mt-2 text-sm text-base-content/65">
-            Optional starting values for resources. These defaults are saved
-            with the template and included when it is duplicated.
+            {context === 'resource'
+              ? 'Opening hours and billing rates for this resource. Changes are saved with its configuration.'
+              : 'Optional starting values for resources. These defaults are saved with the template and included when it is duplicated.'}
           </p>
         </div>
         {unavailableReason ? (
@@ -37,7 +42,7 @@ export const ResourceDefaultsEditor = withFieldGroup({
           >
             <p>
               These saved defaults use a format this editor cannot change. They
-              will be preserved when you save other template changes.
+              will be preserved when you save other {context} changes.
             </p>
             <p className="text-sm">{unavailableReason}</p>
           </div>

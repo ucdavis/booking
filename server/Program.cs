@@ -54,6 +54,7 @@ try
     // add scoped services here
     builder.Services.AddScoped<IDbInitializer, DbInitializer>();
     builder.Services.AddScoped<IUserService, UserService>();
+    builder.Services.AddScoped<TeamResourceService>();
     builder.Services.AddRosettaClientWithFactory(options => builder.Configuration.GetSection("RosettaClient").Bind(options));
     builder.Services.AddScoped<IRosettaService, RosettaService>();
     builder.Services.AddSecretsService(builder.Configuration);
