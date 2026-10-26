@@ -30,6 +30,7 @@ import { Route as TempAdminResourcesRouteImport } from './routes/temp/admin/reso
 import { Route as authenticatedTeamsTeamSlugRouteImport } from './routes/(authenticated)/teams.$teamSlug'
 import { Route as authenticatedAdminUsersRouteImport } from './routes/(authenticated)/admin.users'
 import { Route as authenticatedAdminTeamsRouteImport } from './routes/(authenticated)/admin.teams'
+import { Route as authenticatedAdminSpacesRouteImport } from './routes/(authenticated)/admin.spaces'
 import { Route as authenticatedTeamsTeamSlugIndexRouteImport } from './routes/(authenticated)/teams.$teamSlug.index'
 import { Route as authenticatedAdminResourceTemplatesIndexRouteImport } from './routes/(authenticated)/admin.resource-templates.index'
 import { Route as authenticatedTeamsTeamSlugResourceTemplatesRouteImport } from './routes/(authenticated)/teams.$teamSlug.resource-templates'
@@ -150,6 +151,12 @@ const authenticatedAdminTeamsRoute = authenticatedAdminTeamsRouteImport.update({
   path: '/teams',
   getParentRoute: () => authenticatedAdminRoute,
 } as any)
+const authenticatedAdminSpacesRoute =
+  authenticatedAdminSpacesRouteImport.update({
+    id: '/spaces',
+    path: '/spaces',
+    getParentRoute: () => authenticatedAdminRoute,
+  } as any)
 const authenticatedTeamsTeamSlugIndexRoute =
   authenticatedTeamsTeamSlugIndexRouteImport.update({
     id: '/',
@@ -237,6 +244,7 @@ export interface FileRoutesByFullPath {
   '/temp/room': typeof TempRoomRoute
   '/': typeof authenticatedIndexRoute
   '/temp': typeof TempIndexRoute
+  '/admin/spaces': typeof authenticatedAdminSpacesRoute
   '/admin/teams': typeof authenticatedAdminTeamsRoute
   '/admin/users': typeof authenticatedAdminUsersRoute
   '/teams/$teamSlug': typeof authenticatedTeamsTeamSlugRouteWithChildren
@@ -270,6 +278,7 @@ export interface FileRoutesByTo {
   '/temp/room': typeof TempRoomRoute
   '/': typeof authenticatedIndexRoute
   '/temp': typeof TempIndexRoute
+  '/admin/spaces': typeof authenticatedAdminSpacesRoute
   '/admin/teams': typeof authenticatedAdminTeamsRoute
   '/admin/users': typeof authenticatedAdminUsersRoute
   '/temp/admin/resources': typeof TempAdminResourcesRoute
@@ -304,6 +313,7 @@ export interface FileRoutesById {
   '/temp/room': typeof TempRoomRoute
   '/(authenticated)/': typeof authenticatedIndexRoute
   '/temp/': typeof TempIndexRoute
+  '/(authenticated)/admin/spaces': typeof authenticatedAdminSpacesRoute
   '/(authenticated)/admin/teams': typeof authenticatedAdminTeamsRoute
   '/(authenticated)/admin/users': typeof authenticatedAdminUsersRoute
   '/(authenticated)/teams/$teamSlug': typeof authenticatedTeamsTeamSlugRouteWithChildren
@@ -340,6 +350,7 @@ export interface FileRouteTypes {
     | '/temp/room'
     | '/'
     | '/temp'
+    | '/admin/spaces'
     | '/admin/teams'
     | '/admin/users'
     | '/teams/$teamSlug'
@@ -373,6 +384,7 @@ export interface FileRouteTypes {
     | '/temp/room'
     | '/'
     | '/temp'
+    | '/admin/spaces'
     | '/admin/teams'
     | '/admin/users'
     | '/temp/admin/resources'
@@ -406,6 +418,7 @@ export interface FileRouteTypes {
     | '/temp/room'
     | '/(authenticated)/'
     | '/temp/'
+    | '/(authenticated)/admin/spaces'
     | '/(authenticated)/admin/teams'
     | '/(authenticated)/admin/users'
     | '/(authenticated)/teams/$teamSlug'
@@ -588,6 +601,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authenticatedAdminTeamsRouteImport
       parentRoute: typeof authenticatedAdminRoute
     }
+    '/(authenticated)/admin/spaces': {
+      id: '/(authenticated)/admin/spaces'
+      path: '/spaces'
+      fullPath: '/admin/spaces'
+      preLoaderRoute: typeof authenticatedAdminSpacesRouteImport
+      parentRoute: typeof authenticatedAdminRoute
+    }
     '/(authenticated)/teams/$teamSlug/': {
       id: '/(authenticated)/teams/$teamSlug/'
       path: '/'
@@ -676,6 +696,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface authenticatedAdminRouteChildren {
+  authenticatedAdminSpacesRoute: typeof authenticatedAdminSpacesRoute
   authenticatedAdminTeamsRoute: typeof authenticatedAdminTeamsRoute
   authenticatedAdminUsersRoute: typeof authenticatedAdminUsersRoute
   authenticatedAdminIndexRoute: typeof authenticatedAdminIndexRoute
@@ -685,6 +706,7 @@ interface authenticatedAdminRouteChildren {
 }
 
 const authenticatedAdminRouteChildren: authenticatedAdminRouteChildren = {
+  authenticatedAdminSpacesRoute: authenticatedAdminSpacesRoute,
   authenticatedAdminTeamsRoute: authenticatedAdminTeamsRoute,
   authenticatedAdminUsersRoute: authenticatedAdminUsersRoute,
   authenticatedAdminIndexRoute: authenticatedAdminIndexRoute,

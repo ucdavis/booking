@@ -1,5 +1,6 @@
 import {
   ArrowRightIcon,
+  BuildingOfficeIcon,
   DocumentTextIcon,
   ShieldCheckIcon,
   UserGroupIcon,
@@ -77,6 +78,25 @@ function SiteAdminPage() {
           </p>
           <span className="mt-6 flex items-center gap-2 font-semibold text-primary">
             Manage teams
+            <ArrowRightIcon
+              aria-hidden="true"
+              className="h-4 w-4 transition-transform group-hover:translate-x-1"
+            />
+          </span>
+        </Link>
+        <Link
+          className="group flex flex-col rounded-sm border border-base-300 bg-base-100 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
+          to="/admin/spaces"
+        >
+          <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <BuildingOfficeIcon aria-hidden="true" className="h-7 w-7" />
+          </span>
+          <h2 className="mt-6 text-xl font-semibold text-primary">Spaces</h2>
+          <p className="mt-3 grow text-base-content/70">
+            Create and update buildings and other named locations.
+          </p>
+          <span className="mt-6 flex items-center gap-2 font-semibold text-primary">
+            Manage spaces
             <ArrowRightIcon
               aria-hidden="true"
               className="h-4 w-4 transition-transform group-hover:translate-x-1"
