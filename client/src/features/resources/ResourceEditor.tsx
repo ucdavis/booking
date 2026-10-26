@@ -28,6 +28,7 @@ import {
   resourcesKey,
   updateResource,
 } from '@/queries/resources.ts';
+import { FieldWrapper } from '@/shared/forms/fieldWrapper.tsx';
 import { useAppForm } from '@/shared/forms/formContext.tsx';
 
 const standardCategories = ['Room', 'Bench', 'Equipment'];
@@ -97,18 +98,14 @@ function resourceFormValues(
     isActive: resource?.isActive ?? true,
     isReservable: resource?.isReservable ?? true,
     name: resource?.name ?? '',
-    newSpace: {
-      address: '',
-      name: '',
-    },
     publicAccess: resource?.publicAccess ?? 'availability',
     resourceDefaults: resourceDefaultsFormValues(configuration.defaults),
     sourceTemplateId: '',
     spaceId: resource
       ? String(resource.spaceId)
-      : options.spaces.length
-        ? ''
-        : 'new',
+      : options.spaces.length === 1
+        ? String(options.spaces[0].id)
+        : '',
   };
 }
 
@@ -180,24 +177,11 @@ export function ResourceEditor({
       fields.capacity =
         'Enter a positive whole number for capacity, or leave it blank.';
     }
-    if (!baseline) {
-      if (value.spaceId === 'new') {
-        if (
-          !value.newSpace.name.trim() ||
-          value.newSpace.name.trim().length > 200
-        ) {
-          fields['newSpace.name'] =
-            'Enter a location name of 200 characters or fewer.';
-        }
-        if (value.newSpace.address.trim().length > 500) {
-          fields['newSpace.address'] =
-            'Enter an address of 500 characters or fewer.';
-        }
-      } else if (
-        !options.spaces.some((space) => String(space.id) === value.spaceId)
-      ) {
-        fields.spaceId = 'Choose an existing location or add a new location.';
-      }
+    if (
+      !baseline &&
+      !options.spaces.some((space) => String(space.id) === value.spaceId)
+    ) {
+      fields.spaceId = 'Choose an available location for this team.';
     }
     if (
       !configuration.detailsUnavailableReason &&
@@ -239,7 +223,14 @@ export function ResourceEditor({
       },
     },
     onSubmit: async ({ value }) => {
-      if (saveFlowRef.current || (!baseline && !selectedTemplate)) {
+      if (
+        saveFlowRef.current ||
+        (!baseline &&
+          (!selectedTemplate ||
+            !options.spaces.some(
+              (space) => String(space.id) === value.spaceId
+            )))
+      ) {
         return;
       }
       saveFlowRef.current = true;
@@ -274,9 +265,7 @@ export function ResourceEditor({
           name: value.name.trim(),
           publicAccess:
             baseline?.parentResourceId != null ? null : value.publicAccess,
-          spaceId:
-            baseline?.spaceId ??
-            (value.spaceId === 'new' ? null : Number(value.spaceId)),
+          spaceId: baseline?.spaceId ?? Number(value.spaceId),
           ...(baseline
             ? {
                 expectedConfigId: baseline.config?.id ?? null,
@@ -284,14 +273,6 @@ export function ResourceEditor({
               }
             : {
                 sourceTemplateId: selectedTemplate!.id,
-                ...(value.spaceId === 'new'
-                  ? {
-                      newSpace: {
-                        address: value.newSpace.address.trim() || null,
-                        name: value.newSpace.name.trim(),
-                      },
-                    }
-                  : {}),
               }),
           ...(configuration.formUnavailableReason || formUnchanged
             ? {}
@@ -363,7 +344,7 @@ export function ResourceEditor({
       <p className="mt-3 max-w-3xl text-base-content/70">
         {baseline
           ? 'Update this resource and its reservation settings. Deactivating it keeps its existing reservations and history.'
-          : 'Start with a resource template, then customize the resource, reservation form, opening hours, and rates.'}
+          : 'Choose a location and a resource template, then customize the resource, reservation form, opening hours, and rates.'}
       </p>
       {baseline?.config && (
         <p className="mt-3 max-w-3xl text-sm text-base-content/65">
@@ -426,16 +407,134 @@ export function ResourceEditor({
           }
         }}
       >
-        <form.Subscribe selector={(state) => state.isSubmitting}>
-          {(isSubmitting) => (
+        <form.Subscribe
+          selector={(state) =>
+            [state.isSubmitting, state.values.spaceId] as const
+          }
+        >
+          {([isSubmitting, spaceId]) => (
             <fieldset className="space-y-6" disabled={isSaving || isSubmitting}>
+              {baseline && (
+                <section
+                  aria-label="Resource location"
+                  className="space-y-4 rounded-sm border border-base-300 bg-base-100 p-5"
+                >
+                  <h3 className="text-xl font-semibold text-primary">
+                    Location
+                  </h3>
+                  <p className="font-semibold">{baseline.space.name}</p>
+                  {(baseline.space.description?.trim() ||
+                    baseline.space.address?.trim()) && (
+                    <div className="space-y-3 rounded-sm bg-base-200/60 p-4 text-sm text-base-content/75">
+                      {baseline.space.description?.trim() && (
+                        <p className="whitespace-pre-line">
+                          {baseline.space.description.trim()}
+                        </p>
+                      )}
+                      {baseline.space.address?.trim() && (
+                        <dl>
+                          <dt className="font-semibold">Address</dt>
+                          <dd className="mt-1 whitespace-pre-line">
+                            {baseline.space.address.trim()}
+                          </dd>
+                        </dl>
+                      )}
+                    </div>
+                  )}
+                  <p className="text-sm text-base-content/65">
+                    The resource stays in its current location.
+                  </p>
+                </section>
+              )}
+              {!baseline && (
+                <section
+                  aria-label="Resource location"
+                  className="space-y-4 rounded-sm border border-base-300 bg-base-100 p-5"
+                >
+                  <h3 className="text-xl font-semibold text-primary">
+                    1. Choose a location
+                  </h3>
+                  {options.spaces.length === 0 ? (
+                    <p className="alert alert-warning" role="status">
+                      No active locations are available for this team. A
+                      location must be made available to the team before a
+                      resource can be created.
+                    </p>
+                  ) : (
+                    <form.AppField name="spaceId">
+                      {(field) => {
+                        const hasError =
+                          field.state.meta.isTouched &&
+                          !field.state.meta.isValid;
+                        const selectedSpace = options.spaces.find(
+                          (space) => String(space.id) === field.state.value
+                        );
+                        const description = selectedSpace?.description?.trim();
+                        const address = selectedSpace?.address?.trim();
+                        return (
+                          <>
+                            <FieldWrapper
+                              controlId="resource-location"
+                              label="Location"
+                            >
+                              <select
+                                aria-describedby={
+                                  hasError
+                                    ? 'resource-location-error'
+                                    : undefined
+                                }
+                                aria-invalid={hasError || undefined}
+                                className={`select select-bordered w-full ${hasError ? 'select-error' : ''}`}
+                                id="resource-location"
+                                name={field.name}
+                                onBlur={field.handleBlur}
+                                onChange={(event) =>
+                                  field.handleChange(event.target.value)
+                                }
+                                required
+                                value={selectedSpace ? field.state.value : ''}
+                              >
+                                <option disabled value="">
+                                  Pick a location
+                                </option>
+                                {options.spaces.map((space) => (
+                                  <option key={space.id} value={space.id}>
+                                    {space.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </FieldWrapper>
+                            {(description || address) && (
+                              <div className="space-y-3 rounded-sm bg-base-200/60 p-4 text-sm text-base-content/75">
+                                {description && (
+                                  <p className="whitespace-pre-line">
+                                    {description}
+                                  </p>
+                                )}
+                                {address && (
+                                  <dl>
+                                    <dt className="font-semibold">Address</dt>
+                                    <dd className="mt-1 whitespace-pre-line">
+                                      {address}
+                                    </dd>
+                                  </dl>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        );
+                      }}
+                    </form.AppField>
+                  )}
+                </section>
+              )}
               {!baseline && (
                 <section
                   aria-label="Resource template"
                   className="space-y-3 rounded-sm border border-base-300 bg-base-100 p-5"
                 >
                   <h3 className="text-xl font-semibold text-primary">
-                    1. Choose a resource template
+                    2. Choose a resource template
                   </h3>
                   {selectedTemplate ? (
                     <>
@@ -470,10 +569,22 @@ export function ResourceEditor({
                               }
                               aria-invalid={hasError || undefined}
                               className="select select-bordered w-full"
+                              disabled={
+                                !options.spaces.some(
+                                  (space) => String(space.id) === spaceId
+                                )
+                              }
                               id="resource-template"
                               name={field.name}
                               onBlur={field.handleBlur}
                               onChange={(event) => {
+                                if (
+                                  !options.spaces.some(
+                                    (space) => String(space.id) === spaceId
+                                  )
+                                ) {
+                                  return;
+                                }
                                 const template = activeTemplates.find(
                                   (item) =>
                                     String(item.id) === event.target.value
@@ -544,7 +655,7 @@ export function ResourceEditor({
                     <h3 className="text-xl font-semibold text-primary">
                       {baseline
                         ? 'Resource details'
-                        : '2. Describe the resource'}
+                        : '3. Describe the resource'}
                     </h3>
                     <div className="grid gap-5 sm:grid-cols-2">
                       <form.AppField name="name">
@@ -633,64 +744,6 @@ export function ResourceEditor({
                         );
                       }}
                     </form.Field>
-                  </section>
-                  <section
-                    aria-label="Resource location"
-                    className="space-y-4 rounded-sm border border-base-300 bg-base-100 p-5"
-                  >
-                    <h3 className="text-xl font-semibold text-primary">
-                      Location
-                    </h3>
-                    {baseline ? (
-                      <p>
-                        {baseline.spaceName}
-                        <span className="mt-1 block text-sm text-base-content/65">
-                          The resource stays in its current location.
-                        </span>
-                      </p>
-                    ) : (
-                      <>
-                        <form.AppField name="spaceId">
-                          {(field) => (
-                            <field.SelectField
-                              label="Location"
-                              options={[
-                                ...options.spaces.map((space) => ({
-                                  label: space.name,
-                                  value: String(space.id),
-                                })),
-                                { label: 'Add a new location', value: 'new' },
-                              ]}
-                              placeholder="Choose a location"
-                            />
-                          )}
-                        </form.AppField>
-                        <form.Subscribe
-                          selector={(state) => state.values.spaceId}
-                        >
-                          {(spaceId) =>
-                            spaceId === 'new' && (
-                              <div className="grid gap-4 sm:grid-cols-2">
-                                <form.AppField name="newSpace.name">
-                                  {(field) => (
-                                    <field.TextField label="Location name" />
-                                  )}
-                                </form.AppField>
-                                <form.AppField name="newSpace.address">
-                                  {(field) => (
-                                    <field.TextField label="Address (optional)" />
-                                  )}
-                                </form.AppField>
-                                <p className="self-center text-sm text-base-content/65">
-                                  The location is created when the resource
-                                  saves successfully.
-                                </p>
-                              </div>
-                            )
-                          }
-                        </form.Subscribe>
-                      </>
-                    )}
                   </section>
                   <section
                     aria-label="Reservation settings"
@@ -847,7 +900,11 @@ export function ResourceEditor({
                     />
                   )}
                   <div className="flex flex-wrap items-center gap-4">
-                    <button className="btn btn-primary" type="submit">
+                    <button
+                      className="btn btn-primary"
+                      disabled={!baseline && options.spaces.length === 0}
+                      type="submit"
+                    >
                       {isSaving || isSubmitting
                         ? 'Saving…'
                         : baseline

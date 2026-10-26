@@ -203,6 +203,15 @@ export function SiteHeader() {
                     <Link
                       activeProps={{ className: 'font-semibold text-primary' }}
                       onClick={() => setAdminMenuOpen(false)}
+                      to="/admin/spaces"
+                    >
+                      Spaces
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      activeProps={{ className: 'font-semibold text-primary' }}
+                      onClick={() => setAdminMenuOpen(false)}
                       to="/admin/resource-templates"
                     >
                       Resource templates

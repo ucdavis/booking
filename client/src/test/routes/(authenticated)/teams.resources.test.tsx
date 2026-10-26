@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ResourceDetail } from '@/features/resources/models/ResourceDetail.ts';
 import type { ResourceOptions } from '@/features/resources/models/ResourceOptions.ts';
 import type { SaveResourceRequest } from '@/features/resources/models/SaveResourceRequest.ts';
+import { resourceOptionsQueryOptions } from '@/queries/resources.ts';
 import { server } from '@/test/mswUtils.ts';
 import { renderRoute } from '@/test/routerUtils.tsx';
 
@@ -59,6 +60,13 @@ function resource(overrides: Partial<ResourceDetail> = {}): ResourceDetail {
     parentResourceId: null,
     publicAccess: 'availability',
     slug: 'microscope',
+    space: {
+      address: '1 Science Way',
+      description: 'Shared teaching and research laboratories.',
+      id: 2,
+      name: 'Teaching laboratory',
+      timeZoneId: 'America/Los_Angeles',
+    },
     spaceId: 2,
     spaceName: 'Teaching laboratory',
     teamId: team.id,
@@ -70,7 +78,8 @@ function resource(overrides: Partial<ResourceDetail> = {}): ResourceDetail {
 const options: ResourceOptions = {
   spaces: [
     {
-      address: null,
+      address: '1 Science Way',
+      description: 'Shared teaching and research laboratories.',
       id: 2,
       name: 'Teaching laboratory',
       timeZoneId: 'America/Los_Angeles',
@@ -273,6 +282,55 @@ describe('team resources', () => {
     );
   });
 
+  it.each([true, false])(
+    'shows the saved read-only location first even when it is unavailable for new resources (details: %s)',
+    async (hasDetails) => {
+      mockAccess();
+      const savedResource = resource();
+      if (!hasDetails) {
+        savedResource.space.address = null;
+        savedResource.space.description = null;
+      }
+      mockResources([savedResource], { ...options, spaces: [] });
+      ({ cleanup } = renderRoute({ initialPath: `${listPath}/1` }));
+      const locationSection = await screen.findByRole('region', {
+        name: 'Resource location',
+      });
+      const location = within(locationSection);
+      expect(location.getByText(savedResource.space.name)).toBeInTheDocument();
+      expect(
+        locationSection.compareDocumentPosition(
+          screen.getByRole('region', { name: 'Resource details' })
+        ) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      expect(
+        location.queryByRole('combobox', { name: 'Location' })
+      ).not.toBeInTheDocument();
+      expect(
+        location.getByText('The resource stays in its current location.')
+      ).toBeInTheDocument();
+      if (hasDetails) {
+        expect(
+          location.getByText(savedResource.space.description!)
+        ).toBeInTheDocument();
+        expect(
+          location.getByText(savedResource.space.address!)
+        ).toBeInTheDocument();
+      } else {
+        expect(location.queryByText('Address')).not.toBeInTheDocument();
+        expect(
+          location.queryByText('Shared teaching and research laboratories.')
+        ).not.toBeInTheDocument();
+      }
+      expect(
+        location.queryByText('America/Los_Angeles')
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/No active locations are available/)
+      ).not.toBeInTheDocument();
+    }
+  );
+
   it('retains entered values after a stale save fails', async () => {
     mockAccess();
     mockResources();
@@ -302,9 +360,9 @@ describe('team resources', () => {
     expect(name).toHaveValue('My unsaved edit');
   });
 
-  it('starts from a template and creates a new location with the resource', async () => {
+  it('defaults to the only available location and creates a resource from its template', async () => {
     mockAccess();
-    const saved = mockResources([], { ...options, spaces: [] });
+    const saved = mockResources([]);
     const requests: SaveResourceRequest[] = [];
     server.use(
       http.post('/api/teams/:teamSlug/resources', async ({ request }) => {
@@ -314,8 +372,9 @@ describe('team resources', () => {
           ...body,
           id: 2,
           name: body.name,
-          spaceId: 3,
-          spaceName: body.newSpace!.name,
+          space: options.spaces[0],
+          spaceId: options.spaces[0].id,
+          spaceName: options.spaces[0].name,
         });
         saved.set(created.id, created);
         return HttpResponse.json(created, { status: 201 });
@@ -326,6 +385,25 @@ describe('team resources', () => {
     const template = await screen.findByRole('combobox', {
       name: 'Resource template',
     });
+    const location = screen.getByRole('combobox', { name: 'Location' });
+    expect(location).toHaveValue('2');
+    expect(template).toBeEnabled();
+    expect(
+      location.compareDocumentPosition(template) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    const locationSection = within(
+      screen.getByRole('region', { name: 'Resource location' })
+    );
+    expect(
+      locationSection.getByText(options.spaces[0].description!)
+    ).toBeInTheDocument();
+    expect(
+      locationSection.getByText(options.spaces[0].address!)
+    ).toBeInTheDocument();
+    expect(
+      locationSection.queryByText('America/Los_Angeles')
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('textbox', { name: 'Resource name' })
     ).not.toBeInTheDocument();
@@ -349,13 +427,17 @@ describe('team resources', () => {
         ).value,
       },
     });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Location name' }), {
-      target: { value: 'Annex laboratory' },
-    });
-    fireEvent.change(
-      screen.getByRole('textbox', { name: 'Address (optional)' }),
-      { target: { value: '1 University Way' } }
-    );
+    expect(location).toHaveValue('2');
+    expect(location).toHaveDisplayValue('Teaching laboratory');
+    expect(
+      within(location).queryByRole('option', { name: 'Add a new location' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('textbox', { name: 'Location name' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('textbox', { name: 'Address (optional)' })
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('textbox', { name: 'Time zone' })
     ).not.toBeInTheDocument();
@@ -369,15 +451,11 @@ describe('team resources', () => {
     expect(requests[0]).toMatchObject({
       category: 'Equipment',
       name: 'New microscope',
-      newSpace: {
-        address: '1 University Way',
-        name: 'Annex laboratory',
-      },
       sourceTemplateId: 1,
-      spaceId: null,
+      spaceId: 2,
     });
     // Unedited configuration is copied from the template by the server.
-    expect(requests[0].newSpace).not.toHaveProperty('timeZoneId');
+    expect(requests[0]).not.toHaveProperty('newSpace');
     expect(requests[0]).not.toHaveProperty('formJson');
     expect(requests[0]).not.toHaveProperty('detailsJson');
     await waitFor(() =>
@@ -388,9 +466,9 @@ describe('team resources', () => {
     ).toHaveValue('New microscope');
   });
 
-  it('requires valid resource and location fields before creating a resource', async () => {
+  it('requires valid resource fields before creating a resource', async () => {
     mockAccess();
-    mockResources([], { ...options, spaces: [] });
+    mockResources([]);
     const create = vi.fn(() => HttpResponse.json(resource(), { status: 201 }));
     server.use(http.post('/api/teams/:teamSlug/resources', create));
     ({ cleanup } = renderRoute({ initialPath: `${listPath}/new` }));
@@ -415,9 +493,220 @@ describe('team resources', () => {
     expect(
       screen.getByRole('textbox', { name: 'Capacity (optional)' })
     ).toHaveAttribute('aria-invalid', 'true');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('chooses a location before the template, displays its details, and preserves the draft after a refresh', async () => {
+    mockAccess();
+    const availableOptions = {
+      ...options,
+      spaces: [
+        ...options.spaces,
+        {
+          ...options.spaces[0],
+          address: '2 Annex Road',
+          description: 'Specialist equipment in the annex.',
+          id: 3,
+          name: 'Annex laboratory',
+        },
+      ],
+    };
+    const saved = mockResources([], availableOptions);
+    const requests: SaveResourceRequest[] = [];
+    server.use(
+      http.post('/api/teams/:teamSlug/resources', async ({ request }) => {
+        const body = (await request.json()) as SaveResourceRequest;
+        requests.push(body);
+        const created = resource({
+          ...body,
+          id: 2,
+          space: availableOptions.spaces[1],
+          spaceId: 3,
+          spaceName: 'Annex laboratory',
+        });
+        saved.set(created.id, created);
+        return HttpResponse.json(created, { status: 201 });
+      })
+    );
+    const rendered = renderRoute({ initialPath: `${listPath}/new` });
+    cleanup = rendered.cleanup;
+    const location = await screen.findByRole('combobox', { name: 'Location' });
+    const template = screen.getByRole('combobox', {
+      name: 'Resource template',
+    });
+    expect(location).toHaveValue('');
+    expect(location).toHaveDisplayValue('Pick a location');
+    expect(template).toBeDisabled();
     expect(
-      screen.getByRole('textbox', { name: 'Location name' })
-    ).toHaveAttribute('aria-invalid', 'true');
+      location.compareDocumentPosition(template) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      within(location)
+        .getAllByRole('option')
+        .map((option) => option.textContent)
+    ).toEqual(['Pick a location', 'Teaching laboratory', 'Annex laboratory']);
+    expect(
+      screen.queryByText('Specialist equipment in the annex.')
+    ).not.toBeInTheDocument();
+    fireEvent.change(location, { target: { value: '3' } });
+    expect(template).toBeEnabled();
+    expect(
+      screen.getByText('Specialist equipment in the annex.')
+    ).toBeInTheDocument();
+    const address = screen.getByText('2 Annex Road');
+    expect(
+      location.compareDocumentPosition(address) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    fireEvent.change(template, { target: { value: '1' } });
+    expect(location).toHaveValue('3');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Resource name' }), {
+      target: { value: 'Annex microscope' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Category' }), {
+      target: { value: 'Equipment' },
+    });
+    expect(requests).toHaveLength(0);
+    fireEvent.change(location, { target: { value: '2' } });
+    expect(screen.getByText('1 Science Way')).toBeInTheDocument();
+    expect(screen.queryByText('2 Annex Road')).not.toBeInTheDocument();
+    fireEvent.change(location, { target: { value: '3' } });
+    await act(async () => {
+      rendered.queryClient.setQueryData(
+        resourceOptionsQueryOptions(team.slug).queryKey,
+        {
+          ...availableOptions,
+          spaces: [
+            ...availableOptions.spaces,
+            {
+              ...options.spaces[0],
+              address: null,
+              description: null,
+              id: 4,
+              name: 'East Hall',
+            },
+          ],
+        }
+      );
+    });
+    await waitFor(() =>
+      expect(
+        within(location).getByRole('option', { name: 'East Hall' })
+      ).toBeInTheDocument()
+    );
+    expect(location).toHaveValue('3');
+    expect(screen.getByText('2 Annex Road')).toBeInTheDocument();
+    fireEvent.change(location, { target: { value: '4' } });
+    expect(screen.queryByText('2 Annex Road')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Specialist equipment in the annex.')
+    ).not.toBeInTheDocument();
+    expect(
+      within(
+        screen.getByRole('region', { name: 'Resource location' })
+      ).queryByText('Address')
+    ).not.toBeInTheDocument();
+    fireEvent.change(location, { target: { value: '3' } });
+    expect(screen.getByRole('textbox', { name: 'Resource name' })).toHaveValue(
+      'Annex microscope'
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Create resource' }));
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]).toMatchObject({ name: 'Annex microscope', spaceId: 3 });
+    expect(requests[0]).not.toHaveProperty('newSpace');
+    await waitFor(() =>
+      expect(rendered.router.state.location.pathname).toBe(`${listPath}/2`)
+    );
+  });
+
+  it('explains when no active locations are available and prevents resource creation', async () => {
+    mockAccess();
+    mockResources([], { ...options, spaces: [] });
+    const create = vi.fn(() => HttpResponse.json(resource(), { status: 201 }));
+    server.use(http.post('/api/teams/:teamSlug/resources', create));
+    ({ cleanup } = renderRoute({ initialPath: `${listPath}/new` }));
+    expect(
+      await screen.findByText(/No active locations are available for this team/)
+    ).toBeInTheDocument();
+    const template = await screen.findByRole('combobox', {
+      name: 'Resource template',
+    });
+    expect(template).toBeDisabled();
+    expect(
+      screen.queryByRole('textbox', { name: 'Resource name' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Create resource' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('textbox', { name: 'Location name' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('textbox', { name: 'Address (optional)' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('option', { name: 'Add a new location' })
+    ).not.toBeInTheDocument();
+    fireEvent.submit(template.closest('form')!);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('requires a new choice if the selected location becomes unavailable while drafting', async () => {
+    mockAccess();
+    const availableOptions = {
+      ...options,
+      spaces: [
+        ...options.spaces,
+        {
+          ...options.spaces[0],
+          address: '2 Annex Road',
+          description: 'Specialist equipment in the annex.',
+          id: 3,
+          name: 'Annex laboratory',
+        },
+      ],
+    };
+    mockResources([], availableOptions);
+    const create = vi.fn(() => HttpResponse.json(resource(), { status: 201 }));
+    server.use(http.post('/api/teams/:teamSlug/resources', create));
+    const rendered = renderRoute({ initialPath: `${listPath}/new` });
+    cleanup = rendered.cleanup;
+    const location = await screen.findByRole('combobox', { name: 'Location' });
+    fireEvent.change(location, { target: { value: '3' } });
+    fireEvent.change(
+      screen.getByRole('combobox', { name: 'Resource template' }),
+      {
+        target: { value: '1' },
+      }
+    );
+    fireEvent.change(screen.getByRole('textbox', { name: 'Resource name' }), {
+      target: { value: 'My draft microscope' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Category' }), {
+      target: { value: 'Equipment' },
+    });
+    await act(async () => {
+      rendered.queryClient.setQueryData(
+        resourceOptionsQueryOptions(team.slug).queryKey,
+        options
+      );
+    });
+    await waitFor(() => expect(location).toHaveDisplayValue('Pick a location'));
+    expect(
+      within(location).queryByRole('option', { name: 'Annex laboratory' })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('2 Annex Road')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Specialist equipment in the annex.')
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Create resource' }));
+    await waitFor(() =>
+      expect(location).toHaveAttribute('aria-invalid', 'true')
+    );
+    expect(screen.getByRole('textbox', { name: 'Resource name' })).toHaveValue(
+      'My draft microscope'
+    );
     expect(create).not.toHaveBeenCalled();
   });
 
