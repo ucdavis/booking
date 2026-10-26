@@ -1,4 +1,5 @@
 import type { ResourceConfig } from './ResourceConfig.ts';
+import type { ResourceSpace } from './ResourceSpace.ts';
 import type { ResourceSummary } from './ResourceSummary.ts';
 
 export interface ResourceDetail extends ResourceSummary {
@@ -9,4 +10,5 @@ export interface ResourceDetail extends ResourceSummary {
   description: string | null;
   followTeamCalendar: boolean;
   publicAccess: 'none' | 'availability' | 'details' | null;
+  space: ResourceSpace;
 }

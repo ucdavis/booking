@@ -344,14 +344,8 @@ export function ResourceEditor({
       <p className="mt-3 max-w-3xl text-base-content/70">
         {baseline
           ? 'Update this resource and its reservation settings. Deactivating it keeps its existing reservations and history.'
-          : 'Start with a resource template, then customize the resource, reservation form, opening hours, and rates.'}
+          : 'Choose a location and a resource template, then customize the resource, reservation form, opening hours, and rates.'}
       </p>
-      {!baseline && options.spaces.length === 0 && (
-        <p className="alert alert-warning mt-5" role="status">
-          No active locations are available for this team. A location must be
-          made available to the team before a resource can be created.
-        </p>
-      )}
       {baseline?.config && (
         <p className="mt-3 max-w-3xl text-sm text-base-content/65">
           Configuration version {baseline.config.version}. Saving form, hours,
@@ -413,16 +407,134 @@ export function ResourceEditor({
           }
         }}
       >
-        <form.Subscribe selector={(state) => state.isSubmitting}>
-          {(isSubmitting) => (
+        <form.Subscribe
+          selector={(state) =>
+            [state.isSubmitting, state.values.spaceId] as const
+          }
+        >
+          {([isSubmitting, spaceId]) => (
             <fieldset className="space-y-6" disabled={isSaving || isSubmitting}>
+              {baseline && (
+                <section
+                  aria-label="Resource location"
+                  className="space-y-4 rounded-sm border border-base-300 bg-base-100 p-5"
+                >
+                  <h3 className="text-xl font-semibold text-primary">
+                    Location
+                  </h3>
+                  <p className="font-semibold">{baseline.space.name}</p>
+                  {(baseline.space.description?.trim() ||
+                    baseline.space.address?.trim()) && (
+                    <div className="space-y-3 rounded-sm bg-base-200/60 p-4 text-sm text-base-content/75">
+                      {baseline.space.description?.trim() && (
+                        <p className="whitespace-pre-line">
+                          {baseline.space.description.trim()}
+                        </p>
+                      )}
+                      {baseline.space.address?.trim() && (
+                        <dl>
+                          <dt className="font-semibold">Address</dt>
+                          <dd className="mt-1 whitespace-pre-line">
+                            {baseline.space.address.trim()}
+                          </dd>
+                        </dl>
+                      )}
+                    </div>
+                  )}
+                  <p className="text-sm text-base-content/65">
+                    The resource stays in its current location.
+                  </p>
+                </section>
+              )}
+              {!baseline && (
+                <section
+                  aria-label="Resource location"
+                  className="space-y-4 rounded-sm border border-base-300 bg-base-100 p-5"
+                >
+                  <h3 className="text-xl font-semibold text-primary">
+                    1. Choose a location
+                  </h3>
+                  {options.spaces.length === 0 ? (
+                    <p className="alert alert-warning" role="status">
+                      No active locations are available for this team. A
+                      location must be made available to the team before a
+                      resource can be created.
+                    </p>
+                  ) : (
+                    <form.AppField name="spaceId">
+                      {(field) => {
+                        const hasError =
+                          field.state.meta.isTouched &&
+                          !field.state.meta.isValid;
+                        const selectedSpace = options.spaces.find(
+                          (space) => String(space.id) === field.state.value
+                        );
+                        const description = selectedSpace?.description?.trim();
+                        const address = selectedSpace?.address?.trim();
+                        return (
+                          <>
+                            <FieldWrapper
+                              controlId="resource-location"
+                              label="Location"
+                            >
+                              <select
+                                aria-describedby={
+                                  hasError
+                                    ? 'resource-location-error'
+                                    : undefined
+                                }
+                                aria-invalid={hasError || undefined}
+                                className={`select select-bordered w-full ${hasError ? 'select-error' : ''}`}
+                                id="resource-location"
+                                name={field.name}
+                                onBlur={field.handleBlur}
+                                onChange={(event) =>
+                                  field.handleChange(event.target.value)
+                                }
+                                required
+                                value={selectedSpace ? field.state.value : ''}
+                              >
+                                <option disabled value="">
+                                  Pick a location
+                                </option>
+                                {options.spaces.map((space) => (
+                                  <option key={space.id} value={space.id}>
+                                    {space.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </FieldWrapper>
+                            {(description || address) && (
+                              <div className="space-y-3 rounded-sm bg-base-200/60 p-4 text-sm text-base-content/75">
+                                {description && (
+                                  <p className="whitespace-pre-line">
+                                    {description}
+                                  </p>
+                                )}
+                                {address && (
+                                  <dl>
+                                    <dt className="font-semibold">Address</dt>
+                                    <dd className="mt-1 whitespace-pre-line">
+                                      {address}
+                                    </dd>
+                                  </dl>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        );
+                      }}
+                    </form.AppField>
+                  )}
+                </section>
+              )}
               {!baseline && (
                 <section
                   aria-label="Resource template"
                   className="space-y-3 rounded-sm border border-base-300 bg-base-100 p-5"
                 >
                   <h3 className="text-xl font-semibold text-primary">
-                    1. Choose a resource template
+                    2. Choose a resource template
                   </h3>
                   {selectedTemplate ? (
                     <>
@@ -457,10 +569,22 @@ export function ResourceEditor({
                               }
                               aria-invalid={hasError || undefined}
                               className="select select-bordered w-full"
+                              disabled={
+                                !options.spaces.some(
+                                  (space) => String(space.id) === spaceId
+                                )
+                              }
                               id="resource-template"
                               name={field.name}
                               onBlur={field.handleBlur}
                               onChange={(event) => {
+                                if (
+                                  !options.spaces.some(
+                                    (space) => String(space.id) === spaceId
+                                  )
+                                ) {
+                                  return;
+                                }
                                 const template = activeTemplates.find(
                                   (item) =>
                                     String(item.id) === event.target.value
@@ -531,7 +655,7 @@ export function ResourceEditor({
                     <h3 className="text-xl font-semibold text-primary">
                       {baseline
                         ? 'Resource details'
-                        : '2. Describe the resource'}
+                        : '3. Describe the resource'}
                     </h3>
                     <div className="grid gap-5 sm:grid-cols-2">
                       <form.AppField name="name">
@@ -621,68 +745,6 @@ export function ResourceEditor({
                       }}
                     </form.Field>
                   </section>
-                  {(baseline || options.spaces.length > 0) && (
-                    <section
-                      aria-label="Resource location"
-                      className="space-y-4 rounded-sm border border-base-300 bg-base-100 p-5"
-                    >
-                      <h3 className="text-xl font-semibold text-primary">
-                        Location
-                      </h3>
-                      {baseline ? (
-                        <p>
-                          {baseline.spaceName}
-                          <span className="mt-1 block text-sm text-base-content/65">
-                            The resource stays in its current location.
-                          </span>
-                        </p>
-                      ) : (
-                        <form.AppField name="spaceId">
-                          {(field) => {
-                            const hasError =
-                              field.state.meta.isTouched &&
-                              !field.state.meta.isValid;
-                            const isAvailable = options.spaces.some(
-                              (space) => String(space.id) === field.state.value
-                            );
-                            return (
-                              <FieldWrapper
-                                controlId="resource-location"
-                                label="Location"
-                              >
-                                <select
-                                  aria-describedby={
-                                    hasError
-                                      ? 'resource-location-error'
-                                      : undefined
-                                  }
-                                  aria-invalid={hasError || undefined}
-                                  className={`select select-bordered w-full ${hasError ? 'select-error' : ''}`}
-                                  id="resource-location"
-                                  name={field.name}
-                                  onBlur={field.handleBlur}
-                                  onChange={(event) =>
-                                    field.handleChange(event.target.value)
-                                  }
-                                  required
-                                  value={isAvailable ? field.state.value : ''}
-                                >
-                                  <option disabled value="">
-                                    Pick a location
-                                  </option>
-                                  {options.spaces.map((space) => (
-                                    <option key={space.id} value={space.id}>
-                                      {space.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              </FieldWrapper>
-                            );
-                          }}
-                        </form.AppField>
-                      )}
-                    </section>
-                  )}
                   <section
                     aria-label="Reservation settings"
                     className="space-y-5 rounded-sm border border-base-300 bg-base-100 p-5"

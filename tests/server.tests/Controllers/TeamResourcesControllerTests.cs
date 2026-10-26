@@ -52,12 +52,50 @@ public class TeamResourcesControllerTests
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
 
-    [Fact]
-    public async Task Options_only_include_active_linked_spaces_and_active_own_or_system_templates()
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("Teaching and meeting spaces", "123 Orchard Road")]
+    public async Task Detail_and_update_return_saved_location_details_even_when_inactive_and_unlinked(string? description, string? address)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var (team, user) = await SeedTeam(db);
+        var space = await SeedSpace(db, null, isActive: false);
+        space.Description = description;
+        space.Address = address;
+        var (resource, config) = await SeedResource(db, team, space, user, isActive: false);
+        db.ChangeTracker.Clear();
+        var controller = CreateController(db);
+
+        ReadOk(await controller.GetOptions(team.Slug)).Spaces.Should().BeEmpty();
+        var detail = ReadOk(await controller.GetResource(team.Slug, resource.Id));
+
+        detail.SpaceId.Should().Be(space.Id);
+        detail.SpaceName.Should().Be(space.Name);
+        detail.Space.Id.Should().Be(space.Id);
+        detail.Space.Name.Should().Be(space.Name);
+        detail.Space.Description.Should().Be(description);
+        detail.Space.Address.Should().Be(address);
+        db.ChangeTracker.Entries().Should().BeEmpty();
+
+        var updated = ReadOk(await controller.UpdateResource(team.Slug, resource.Id,
+            Request(saved: resource, config: config, name: "Updated room", isActive: false)));
+
+        updated.Name.Should().Be("Updated room");
+        updated.Space.Should().BeEquivalentTo(detail.Space);
+        (await db.TeamSpaces.AnyAsync()).Should().BeFalse();
+        (await db.Spaces.SingleAsync()).IsActive.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("Teaching and meeting spaces", "123 Orchard Road")]
+    public async Task Options_only_include_active_linked_spaces_and_active_own_or_system_templates(string? description, string? address)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var (team, _) = await SeedTeam(db);
         var linked = await SeedSpace(db, team);
+        linked.Description = description;
+        linked.Address = address;
         await SeedSpace(db, team, "Inactive location", isActive: false);
         await SeedSpace(db, null, "Unlinked location");
         var own = Template("Own", team.Id);
@@ -70,6 +108,8 @@ public class TeamResourcesControllerTests
         var options = ReadOk(await CreateController(db).GetOptions(team.Slug));
 
         options.Spaces.Select(space => space.Id).Should().Equal(linked.Id);
+        options.Spaces[0].Description.Should().Be(description);
+        options.Spaces[0].Address.Should().Be(address);
         options.Templates.Select(template => template.Id).Should().BeEquivalentTo(new[] { own.Id, system.Id });
         db.ChangeTracker.Entries().Should().BeEmpty();
     }
@@ -84,6 +124,8 @@ public class TeamResourcesControllerTests
         using var db = TestDbContextFactory.CreateInMemory();
         var (team, user) = await SeedTeam(db, role, isAdmin: siteAdmin);
         var space = await SeedSpace(db, team);
+        space.Description = "Teaching and meeting spaces";
+        space.Address = "123 Orchard Road";
         var template = Template("Template", team.Id);
         db.ResourceTemplates.Add(template);
         await db.SaveChangesAsync();
@@ -97,6 +139,10 @@ public class TeamResourcesControllerTests
         created.RouteValues!["teamSlug"].Should().Be(team.Slug);
         created.RouteValues["id"].Should().Be(response.Id);
         response.Name.Should().Be("Meeting room");
+        response.Space.Id.Should().Be(space.Id);
+        response.Space.Name.Should().Be(space.Name);
+        response.Space.Description.Should().Be("Teaching and meeting spaces");
+        response.Space.Address.Should().Be("123 Orchard Road");
         db.ChangeTracker.Clear();
         var resource = await db.Resources.SingleAsync();
         resource.TeamId.Should().Be(team.Id);

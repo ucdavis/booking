@@ -36,7 +36,8 @@ public sealed class TeamResourceService(AppDbContext dbContext)
             .OrderBy(link => link.Space.Name).ThenBy(link => link.SpaceId)
             .Select(link => new ResourceSpaceResponse
             {
-                Id = link.SpaceId, Name = link.Space.Name, Address = link.Space.Address, TimeZoneId = link.Space.TimeZoneId,
+                Id = link.SpaceId, Name = link.Space.Name, Description = link.Space.Description,
+                Address = link.Space.Address, TimeZoneId = link.Space.TimeZoneId,
             }).ToListAsync(cancellationToken);
         var templates = await dbContext.ResourceTemplates.AsNoTracking()
             .Where(template => template.IsActive && (template.TeamId == null || template.TeamId == teamId))
@@ -55,7 +56,7 @@ public sealed class TeamResourceService(AppDbContext dbContext)
     {
         var resource = await dbContext.Resources.AsNoTracking().Include(resource => resource.Space)
             .SingleOrDefaultAsync(resource => resource.TeamId == teamId && resource.Id == id, cancellationToken);
-        return resource == null ? null : ToResponse(resource, await LatestConfig(id, cancellationToken));
+        return resource == null ? null : ToResponse(resource, await LatestConfig(id, cancellationToken), resource.Space);
     }
 
     public async Task<(ResourceDetailResponse? Resource, string? Error, int StatusCode)> SaveResource(
@@ -157,7 +158,7 @@ public sealed class TeamResourceService(AppDbContext dbContext)
         config.Resource = resource;
         dbContext.ResourceConfigs.Add(config);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return (ToResponse(resource, config, space.Name), null, 201);
+        return (ToResponse(resource, config, space), null, 201);
     }
 
     private async Task<(ResourceDetailResponse? Resource, string? Error, int StatusCode)> UpdateResource(
@@ -289,7 +290,7 @@ public sealed class TeamResourceService(AppDbContext dbContext)
         }
         await dbContext.SaveChangesAsync(cancellationToken);
         ApplyMetadata(resource, request, nameKey, now, userId);
-        return (ToResponse(resource, config), null, 200);
+        return (ToResponse(resource, config, resource.Space), null, 200);
     }
 
     private Task<ResourceConfig?> LatestConfig(int id, CancellationToken cancellationToken)
@@ -574,9 +575,14 @@ public sealed class TeamResourceService(AppDbContext dbContext)
         CreatedByUserId = userId, CreatedAt = now, UpdatedAt = now, PublishedByUserId = userId, PublishedAt = now,
     };
 
-    private static ResourceDetailResponse ToResponse(Resource resource, ResourceConfig? config, string? spaceName = null) => new()
+    private static ResourceDetailResponse ToResponse(Resource resource, ResourceConfig? config, Space space) => new()
     {
-        Id = resource.Id, TeamId = resource.TeamId, SpaceId = resource.SpaceId, SpaceName = spaceName ?? resource.Space.Name,
+        Id = resource.Id, TeamId = resource.TeamId, SpaceId = resource.SpaceId, SpaceName = space.Name,
+        Space = new ResourceSpaceResponse
+        {
+            Id = space.Id, Name = space.Name, Description = space.Description,
+            Address = space.Address, TimeZoneId = space.TimeZoneId,
+        },
         Name = resource.Name, Slug = resource.Slug, Category = resource.Category, Capacity = resource.Capacity,
         IsActive = resource.IsActive, IsReservable = resource.IsReservable, UpdatedAt = resource.UpdatedAt,
         ParentResourceId = resource.ParentResourceId, Description = resource.Description, ApprovalMode = resource.ApprovalMode,
