@@ -67,8 +67,8 @@ public sealed class TeamResourceService(AppDbContext dbContext)
             return (null, error, 400);
         }
 
-        // Keep the location, resource and configuration together. Serializable reads also
-        // protect sibling names and parent activation checks against concurrent saves.
+        // Keep resource and configuration changes together. Serializable reads also
+        // protect location availability, sibling names and parent activation checks against concurrent saves.
         await using var transaction = dbContext.Database.IsRelational()
             ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
             : null;
@@ -100,9 +100,9 @@ public sealed class TeamResourceService(AppDbContext dbContext)
         {
             return (null, "A new resource cannot reference an existing saved resource or configuration.", 400);
         }
-        if ((request.SpaceId == null) == (request.NewSpace == null))
+        if (request.SpaceId == null)
         {
-            return (null, "Choose an existing location or enter a new location.", 400);
+            return (null, "Choose an active location associated with this team.", 400);
         }
         var template = await dbContext.ResourceTemplates.AsNoTracking()
             .SingleOrDefaultAsync(template => template.Id == request.SourceTemplateId && template.IsActive &&
@@ -132,48 +132,25 @@ public sealed class TeamResourceService(AppDbContext dbContext)
             return (null, "Choose a public visibility setting for this resource.", 400);
         }
 
-        Space? space;
-        var now = DateTimeOffset.UtcNow;
-        if (request.NewSpace != null)
+        var space = await dbContext.TeamSpaces.AsNoTracking()
+            .Where(link => link.TeamId == teamId && link.SpaceId == request.SpaceId && link.Space.IsActive)
+            .Select(link => link.Space).SingleOrDefaultAsync(cancellationToken);
+        if (space == null)
         {
-            error = ValidateNewSpace(request.NewSpace);
-            if (error != null)
-            {
-                return (null, error, 400);
-            }
-            space = new Space
-            {
-                Name = request.NewSpace.Name.Trim(), Slug = CreateSlug(request.NewSpace.Name),
-                Address = TrimOptional(request.NewSpace.Address), TimeZoneId = "America/Los_Angeles",
-                IsActive = true, IsOfficialFacility = false, CreatedAt = now, UpdatedAt = now,
-            };
+            return (null, "Choose an active location associated with this team.", 400);
         }
-        else
+        if (await DuplicateName(space.Id, null, nameKey, null, cancellationToken))
         {
-            space = await dbContext.TeamSpaces.AsNoTracking()
-                .Where(link => link.TeamId == teamId && link.SpaceId == request.SpaceId && link.Space.IsActive)
-                .Select(link => link.Space).SingleOrDefaultAsync(cancellationToken);
-            if (space == null)
-            {
-                return (null, "Choose an active location associated with this team.", 400);
-            }
-            if (await DuplicateName(space.Id, null, nameKey, null, cancellationToken))
-            {
-                return (null, "A resource with that name already exists at this location, including inactive resources.", 409);
-            }
+            return (null, "A resource with that name already exists at this location, including inactive resources.", 409);
         }
 
+        var now = DateTimeOffset.UtcNow;
         var resource = new Resource
         {
             TeamId = teamId, SpaceId = space.Id, Name = request.Name.Trim(), NameKey = nameKey,
             Category = request.Category.Trim(), Slug = CreateSlug(request.Name), CreatedAt = now,
         };
         ApplyMetadata(resource, request, nameKey, now, userId);
-        if (request.NewSpace != null)
-        {
-            resource.Space = space;
-            dbContext.TeamSpaces.Add(new TeamSpace { TeamId = teamId, Space = space });
-        }
         dbContext.Resources.Add(resource);
         var config = NewConfig(resource.Id, userId, 1, template.Id, formSchemaVersion, formJson,
             detailsSchemaVersion, detailsJson, now);
@@ -201,7 +178,7 @@ public sealed class TeamResourceService(AppDbContext dbContext)
         {
             return (null, StaleMessage, 409);
         }
-        if (request.NewSpace != null || request.SpaceId != null && request.SpaceId != resource.SpaceId)
+        if (request.SpaceId != null && request.SpaceId != resource.SpaceId)
         {
             return (null, "A resource's location cannot be changed here.", 400);
         }
@@ -541,24 +518,6 @@ public sealed class TeamResourceService(AppDbContext dbContext)
         }
         value = child.GetString()!;
         return true;
-    }
-
-    private static string? ValidateNewSpace(NewResourceSpaceRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 200 ||
-            request.Name.Any(char.IsControl) || request.Address?.Length > 500)
-        {
-            return "Enter a location name of no more than 200 characters and an address of no more than 500 characters.";
-        }
-        try
-        {
-            _ = request.Name.Normalize(NormalizationForm.FormD);
-        }
-        catch (ArgumentException)
-        {
-            return "Enter a valid location name.";
-        }
-        return null;
     }
 
     private static bool ValidPublicAccess(string? value) => value == "none" || value == "availability" || value == "details";

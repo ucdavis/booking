@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ResourceDetail } from '@/features/resources/models/ResourceDetail.ts';
 import type { ResourceOptions } from '@/features/resources/models/ResourceOptions.ts';
 import type { SaveResourceRequest } from '@/features/resources/models/SaveResourceRequest.ts';
+import { resourceOptionsQueryOptions } from '@/queries/resources.ts';
 import { server } from '@/test/mswUtils.ts';
 import { renderRoute } from '@/test/routerUtils.tsx';
 
@@ -302,9 +303,9 @@ describe('team resources', () => {
     expect(name).toHaveValue('My unsaved edit');
   });
 
-  it('starts from a template and creates a new location with the resource', async () => {
+  it('defaults to the only available location and creates a resource from its template', async () => {
     mockAccess();
-    const saved = mockResources([], { ...options, spaces: [] });
+    const saved = mockResources([]);
     const requests: SaveResourceRequest[] = [];
     server.use(
       http.post('/api/teams/:teamSlug/resources', async ({ request }) => {
@@ -314,8 +315,8 @@ describe('team resources', () => {
           ...body,
           id: 2,
           name: body.name,
-          spaceId: 3,
-          spaceName: body.newSpace!.name,
+          spaceId: options.spaces[0].id,
+          spaceName: options.spaces[0].name,
         });
         saved.set(created.id, created);
         return HttpResponse.json(created, { status: 201 });
@@ -349,13 +350,18 @@ describe('team resources', () => {
         ).value,
       },
     });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Location name' }), {
-      target: { value: 'Annex laboratory' },
-    });
-    fireEvent.change(
-      screen.getByRole('textbox', { name: 'Address (optional)' }),
-      { target: { value: '1 University Way' } }
-    );
+    const location = screen.getByRole('combobox', { name: 'Location' });
+    expect(location).toHaveValue('2');
+    expect(location).toHaveDisplayValue('Teaching laboratory');
+    expect(
+      within(location).queryByRole('option', { name: 'Add a new location' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('textbox', { name: 'Location name' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('textbox', { name: 'Address (optional)' })
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('textbox', { name: 'Time zone' })
     ).not.toBeInTheDocument();
@@ -369,15 +375,11 @@ describe('team resources', () => {
     expect(requests[0]).toMatchObject({
       category: 'Equipment',
       name: 'New microscope',
-      newSpace: {
-        address: '1 University Way',
-        name: 'Annex laboratory',
-      },
       sourceTemplateId: 1,
-      spaceId: null,
+      spaceId: 2,
     });
     // Unedited configuration is copied from the template by the server.
-    expect(requests[0].newSpace).not.toHaveProperty('timeZoneId');
+    expect(requests[0]).not.toHaveProperty('newSpace');
     expect(requests[0]).not.toHaveProperty('formJson');
     expect(requests[0]).not.toHaveProperty('detailsJson');
     await waitFor(() =>
@@ -390,7 +392,13 @@ describe('team resources', () => {
 
   it('requires valid resource and location fields before creating a resource', async () => {
     mockAccess();
-    mockResources([], { ...options, spaces: [] });
+    mockResources([], {
+      ...options,
+      spaces: [
+        ...options.spaces,
+        { ...options.spaces[0], id: 3, name: 'Annex laboratory' },
+      ],
+    });
     const create = vi.fn(() => HttpResponse.json(resource(), { status: 201 }));
     server.use(http.post('/api/teams/:teamSlug/resources', create));
     ({ cleanup } = renderRoute({ initialPath: `${listPath}/new` }));
@@ -415,9 +423,178 @@ describe('team resources', () => {
     expect(
       screen.getByRole('textbox', { name: 'Capacity (optional)' })
     ).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('combobox', { name: 'Location' })).toHaveAttribute(
+      'aria-invalid',
+      'true'
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('requires a location choice when several are available and preserves it after a refresh', async () => {
+    mockAccess();
+    const availableOptions = {
+      ...options,
+      spaces: [
+        ...options.spaces,
+        { ...options.spaces[0], id: 3, name: 'Annex laboratory' },
+      ],
+    };
+    const saved = mockResources([], availableOptions);
+    const requests: SaveResourceRequest[] = [];
+    server.use(
+      http.post('/api/teams/:teamSlug/resources', async ({ request }) => {
+        const body = (await request.json()) as SaveResourceRequest;
+        requests.push(body);
+        const created = resource({
+          ...body,
+          id: 2,
+          spaceId: 3,
+          spaceName: 'Annex laboratory',
+        });
+        saved.set(created.id, created);
+        return HttpResponse.json(created, { status: 201 });
+      })
+    );
+    const rendered = renderRoute({ initialPath: `${listPath}/new` });
+    cleanup = rendered.cleanup;
+    fireEvent.change(
+      await screen.findByRole('combobox', { name: 'Resource template' }),
+      {
+        target: { value: '1' },
+      }
+    );
+    const location = await screen.findByRole('combobox', { name: 'Location' });
+    expect(location).toHaveValue('');
+    expect(location).toHaveDisplayValue('Pick a location');
+    expect(within(location).getAllByRole('option')).toHaveLength(3);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Resource name' }), {
+      target: { value: 'Annex microscope' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Category' }), {
+      target: { value: 'Equipment' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create resource' }));
+    await waitFor(() =>
+      expect(location).toHaveAttribute('aria-invalid', 'true')
+    );
+    expect(requests).toHaveLength(0);
+    fireEvent.change(location, { target: { value: '3' } });
+    await act(async () => {
+      rendered.queryClient.setQueryData(
+        resourceOptionsQueryOptions(team.slug).queryKey,
+        {
+          ...availableOptions,
+          spaces: [
+            ...availableOptions.spaces,
+            { ...options.spaces[0], id: 4, name: 'East Hall' },
+          ],
+        }
+      );
+    });
+    await waitFor(() =>
+      expect(
+        within(location).getByRole('option', { name: 'East Hall' })
+      ).toBeInTheDocument()
+    );
+    expect(location).toHaveValue('3');
+    expect(screen.getByRole('textbox', { name: 'Resource name' })).toHaveValue(
+      'Annex microscope'
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Create resource' }));
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]).toMatchObject({ name: 'Annex microscope', spaceId: 3 });
+    expect(requests[0]).not.toHaveProperty('newSpace');
+    await waitFor(() =>
+      expect(rendered.router.state.location.pathname).toBe(`${listPath}/2`)
+    );
+  });
+
+  it('explains when no active locations are available and prevents resource creation', async () => {
+    mockAccess();
+    mockResources([], { ...options, spaces: [] });
+    const create = vi.fn(() => HttpResponse.json(resource(), { status: 201 }));
+    server.use(http.post('/api/teams/:teamSlug/resources', create));
+    ({ cleanup } = renderRoute({ initialPath: `${listPath}/new` }));
     expect(
-      screen.getByRole('textbox', { name: 'Location name' })
-    ).toHaveAttribute('aria-invalid', 'true');
+      await screen.findByText(/No active locations are available for this team/)
+    ).toBeInTheDocument();
+    fireEvent.change(
+      await screen.findByRole('combobox', { name: 'Resource template' }),
+      {
+        target: { value: '1' },
+      }
+    );
+    fireEvent.change(
+      await screen.findByRole('textbox', { name: 'Resource name' }),
+      {
+        target: { value: 'Microscope without a location' },
+      }
+    );
+    fireEvent.change(screen.getByRole('combobox', { name: 'Category' }), {
+      target: { value: 'Equipment' },
+    });
+    const createButton = screen.getByRole('button', {
+      name: 'Create resource',
+    });
+    expect(createButton).toBeDisabled();
+    expect(
+      screen.queryByRole('textbox', { name: 'Location name' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('textbox', { name: 'Address (optional)' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('option', { name: 'Add a new location' })
+    ).not.toBeInTheDocument();
+    fireEvent.click(createButton);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('requires a new choice if the selected location becomes unavailable while drafting', async () => {
+    mockAccess();
+    const availableOptions = {
+      ...options,
+      spaces: [
+        ...options.spaces,
+        { ...options.spaces[0], id: 3, name: 'Annex laboratory' },
+      ],
+    };
+    mockResources([], availableOptions);
+    const create = vi.fn(() => HttpResponse.json(resource(), { status: 201 }));
+    server.use(http.post('/api/teams/:teamSlug/resources', create));
+    const rendered = renderRoute({ initialPath: `${listPath}/new` });
+    cleanup = rendered.cleanup;
+    fireEvent.change(
+      await screen.findByRole('combobox', { name: 'Resource template' }),
+      {
+        target: { value: '1' },
+      }
+    );
+    const location = await screen.findByRole('combobox', { name: 'Location' });
+    fireEvent.change(location, { target: { value: '3' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Resource name' }), {
+      target: { value: 'My draft microscope' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Category' }), {
+      target: { value: 'Equipment' },
+    });
+    await act(async () => {
+      rendered.queryClient.setQueryData(
+        resourceOptionsQueryOptions(team.slug).queryKey,
+        options
+      );
+    });
+    await waitFor(() => expect(location).toHaveDisplayValue('Pick a location'));
+    expect(
+      within(location).queryByRole('option', { name: 'Annex laboratory' })
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Create resource' }));
+    await waitFor(() =>
+      expect(location).toHaveAttribute('aria-invalid', 'true')
+    );
+    expect(screen.getByRole('textbox', { name: 'Resource name' })).toHaveValue(
+      'My draft microscope'
+    );
     expect(create).not.toHaveBeenCalled();
   });
 

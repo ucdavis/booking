@@ -41,8 +41,6 @@ public sealed class SaveResourceRequest
     [Range(1, int.MaxValue)]
     public int? SpaceId { get; init; }
 
-    public NewResourceSpaceRequest? NewSpace { get; init; }
-
     [Range(1, int.MaxValue)]
     public int? SourceTemplateId { get; init; }
 

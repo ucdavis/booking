@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Security.Claims;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -105,6 +106,11 @@ public class TeamResourcesControllerTests
         resource.Slug.Should().NotBeNullOrWhiteSpace();
         resource.IsActive.Should().BeTrue();
         resource.UpdatedByUserId.Should().Be(user.Id);
+        (await db.Spaces.CountAsync()).Should().Be(1);
+        var link = await db.TeamSpaces.SingleAsync();
+        link.TeamId.Should().Be(team.Id);
+        link.SpaceId.Should().Be(space.Id);
+        (await db.Spaces.SingleAsync()).UpdatedAt.Should().Be(SavedAt);
         var config = await db.ResourceConfigs.SingleAsync();
         config.ResourceId.Should().Be(resource.Id);
         config.Version.Should().Be(1);
@@ -243,60 +249,78 @@ public class TeamResourcesControllerTests
         (await db.ResourceConfigs.SingleAsync()).DetailsJson.Should().Be("{}");
     }
 
-    [Fact]
-    public async Task Creation_can_save_and_link_a_new_nonofficial_location_with_the_resource()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Save_contract_rejects_inline_space_creation_with_or_without_an_existing_selection(bool hasSelection)
     {
-        using var db = TestDbContextFactory.CreateInMemory();
-        var (team, _) = await SeedTeam(db);
-        var template = Template("Template");
-        db.ResourceTemplates.Add(template);
-        await db.SaveChangesAsync();
-        var location = new NewResourceSpaceRequest
-        {
-            Name = "  Orchard building  ", Address = "  123 Orchard Road  ",
-        };
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var request = JsonSerializer.SerializeToNode(Request(spaceId: hasSelection ? 1 : null, templateId: 2), options)!;
+        request["newSpace"] = JsonSerializer.SerializeToNode(new { Name = "New location", Address = "123 Main St" }, options);
 
-        ReadCreated(await CreateController(db).CreateResource(team.Slug, Request(templateId: template.Id, newSpace: location)));
+        var deserialize = () => request.Deserialize<SaveResourceRequest>(options);
 
-        db.ChangeTracker.Clear();
-        var space = await db.Spaces.SingleAsync();
-        space.Name.Should().Be("Orchard building");
-        space.Address.Should().Be("123 Orchard Road");
-        space.TimeZoneId.Should().Be("America/Los_Angeles");
-        space.IsOfficialFacility.Should().BeFalse();
-        space.IsActive.Should().BeTrue();
-        space.Slug.Should().NotBeNullOrWhiteSpace();
-        var link = await db.TeamSpaces.SingleAsync();
-        link.TeamId.Should().Be(team.Id);
-        link.SpaceId.Should().Be(space.Id);
-        (await db.Resources.SingleAsync()).SpaceId.Should().Be(space.Id);
-        (await db.ResourceConfigs.CountAsync()).Should().Be(1);
+        deserialize.Should().Throw<JsonException>().WithMessage("*newSpace*");
     }
 
     [Theory]
-    [InlineData("location-name")]
-    [InlineData("form")]
-    [InlineData("details")]
-    public async Task Invalid_creation_leaves_no_location_link_resource_or_configuration(string invalidPart)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Creation_rechecks_location_activity_and_team_link_after_options_are_loaded(bool removeLink)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var (team, _) = await SeedTeam(db);
+        var space = await SeedSpace(db, team);
         var template = Template("Template");
         db.ResourceTemplates.Add(template);
         await db.SaveChangesAsync();
-        var request = Request(templateId: template.Id,
-            formJson: invalidPart == "form" ? "{\"fields\":[{\"id\":\"unsupported\",\"type\":\"future\",\"label\":\"Future\"}]}" : null,
-            detailsJson: invalidPart == "details" ? "[]" : null,
-            newSpace: new NewResourceSpaceRequest
-            {
-                Name = invalidPart == "location-name" ? "  " : "New location",
-            });
+        var controller = CreateController(db);
+        ReadOk(await controller.GetOptions(team.Slug)).Spaces.Should().ContainSingle().Which.Id.Should().Be(space.Id);
+        if (removeLink)
+        {
+            db.TeamSpaces.Remove(await db.TeamSpaces.SingleAsync());
+        }
+        else
+        {
+            space.IsActive = false;
+        }
+        await db.SaveChangesAsync();
 
-        (await CreateController(db).CreateResource(team.Slug, request)).Result.Should().BeOfType<BadRequestObjectResult>();
+        var result = await controller.CreateResource(team.Slug, Request(space.Id, template.Id));
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>().Subject.Value
+            .Should().Be("Choose an active location associated with this team.");
+        db.ChangeTracker.Clear();
+        (await db.Spaces.CountAsync()).Should().Be(1);
+        (await db.TeamSpaces.CountAsync()).Should().Be(removeLink ? 0 : 1);
+        (await db.Resources.AnyAsync()).Should().BeFalse();
+        (await db.ResourceConfigs.AnyAsync()).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("form")]
+    [InlineData("details")]
+    public async Task Invalid_configuration_creation_preserves_existing_location_and_link_without_saving_resource(string invalidPart)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var (team, _) = await SeedTeam(db);
+        var space = await SeedSpace(db, team);
+        var template = Template("Template");
+        db.ResourceTemplates.Add(template);
+        await db.SaveChangesAsync();
+        var request = Request(space.Id, template.Id,
+            formJson: invalidPart == "form" ? "{\"fields\":[]}" : null,
+            detailsJson: invalidPart == "details" ? "[]" : null);
+
+        var result = await CreateController(db).CreateResource(team.Slug, request);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>().Subject.Value.Should().Be(invalidPart == "form"
+            ? "Add at least one reservation form field."
+            : "This settings format cannot be edited here. Preserve the saved settings to edit the resource's other fields.");
 
         db.ChangeTracker.Clear();
-        (await db.Spaces.AnyAsync()).Should().BeFalse();
-        (await db.TeamSpaces.AnyAsync()).Should().BeFalse();
+        (await db.Spaces.SingleAsync()).Id.Should().Be(space.Id);
+        (await db.TeamSpaces.SingleAsync()).SpaceId.Should().Be(space.Id);
         (await db.Resources.AnyAsync()).Should().BeFalse();
         (await db.ResourceConfigs.AnyAsync()).Should().BeFalse();
     }
@@ -309,13 +333,21 @@ public class TeamResourcesControllerTests
     [InlineData("no-template")]
     [InlineData("inactive-space")]
     [InlineData("unlinked-space")]
+    [InlineData("other-team-space")]
     [InlineData("missing-space")]
     [InlineData("no-space")]
     public async Task Creation_rejects_unavailable_or_out_of_scope_template_and_location_selections(string selection)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var (team, _) = await SeedTeam(db, isAdmin: true);
-        var space = await SeedSpace(db, selection == "unlinked-space" ? null : team,
+        var linkedTeam = selection == "unlinked-space" ? null : team;
+        if (selection == "other-team-space")
+        {
+            linkedTeam = new Team { Name = "Other team", Slug = "other-team" };
+            db.Teams.Add(linkedTeam);
+            await db.SaveChangesAsync();
+        }
+        var space = await SeedSpace(db, linkedTeam,
             isActive: selection != "inactive-space");
         var template = Template("Template", selection == "other-team-template" ? team.Id + 1 :
             selection == "inactive-system-template" ? null : team.Id,
@@ -591,7 +623,6 @@ public class TeamResourcesControllerTests
 
     [Theory]
     [InlineData("location")]
-    [InlineData("new-location")]
     [InlineData("template")]
     public async Task Update_cannot_change_resource_location_or_source_template(string change)
     {
@@ -606,11 +637,7 @@ public class TeamResourcesControllerTests
         var (resource, config) = await SeedResource(db, team, space, user, template: originalTemplate);
         var request = Request(saved: resource, config: config,
             spaceId: change == "location" ? anotherSpace.Id : null,
-            templateId: change == "template" ? anotherTemplate.Id : null,
-            newSpace: change == "new-location" ? new NewResourceSpaceRequest
-            {
-                Name = "New location",
-            } : null);
+            templateId: change == "template" ? anotherTemplate.Id : null);
 
         (await CreateController(db).UpdateResource(team.Slug, resource.Id, request)).Result.Should().BeOfType<BadRequestObjectResult>();
 
@@ -640,14 +667,14 @@ public class TeamResourcesControllerTests
 
     private static SaveResourceRequest Request(int? spaceId = null, int? templateId = null,
         Resource? saved = null, ResourceConfig? config = null, string name = "Meeting room", bool isActive = true,
-        string? formJson = null, string? detailsJson = null, NewResourceSpaceRequest? newSpace = null) => new()
+        string? formJson = null, string? detailsJson = null) => new()
     {
         Name = name, Category = saved?.Category ?? "room", Description = saved?.Description,
         Capacity = saved?.Capacity, IsActive = isActive, IsReservable = saved?.IsReservable ?? true,
         ApprovalMode = saved?.ApprovalMode ?? "manual", FollowTeamCalendar = saved?.FollowTeamCalendar ?? true,
         PublicAccess = saved == null ? "availability" : saved.PublicAccess,
         AllowReservationSharing = saved?.AllowReservationSharing ?? false,
-        SpaceId = spaceId, NewSpace = newSpace, SourceTemplateId = templateId,
+        SpaceId = spaceId, SourceTemplateId = templateId,
         FormSchemaVersion = formJson == null ? null : config?.FormSchemaVersion ?? 1, FormJson = formJson,
         DetailsSchemaVersion = detailsJson == null ? null : config?.DetailsSchemaVersion ?? 1, DetailsJson = detailsJson,
         UpdatedAt = saved?.UpdatedAt, ExpectedConfigId = config?.Id,

@@ -1,12 +1,15 @@
+using System.Data;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Data;
 using Server.Core.Domain;
 using Server.Helpers;
 using Server.Models.Spaces;
+using Server.Models.Teams;
 
 namespace Server.Controllers;
 
@@ -125,6 +128,164 @@ public sealed class AdminSpacesController(AppDbContext dbContext) : ControllerBa
         }
 
         return Ok(ToResponse(space));
+    }
+
+    [HttpGet("{id:int}/teams")]
+    public async Task<ActionResult<List<SpaceTeamAccessResponse>>> GetTeams(int id, CancellationToken cancellationToken = default)
+    {
+        if (!await dbContext.Spaces.AnyAsync(space => space.Id == id, cancellationToken))
+        {
+            return NotFound("That space could not be found.");
+        }
+
+        var teams = await dbContext.TeamSpaces.AsNoTracking()
+            .Where(link => link.SpaceId == id)
+            .OrderBy(link => link.Team.Name)
+            .ThenBy(link => link.Team.Slug)
+            .Select(link => new SpaceTeamAccessResponse
+            {
+                Team = new TeamSummaryResponse { Id = link.TeamId, Name = link.Team.Name, Slug = link.Team.Slug },
+                ResourceCount = dbContext.Resources.Count(resource => resource.TeamId == link.TeamId && resource.SpaceId == id),
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(teams);
+    }
+
+    [HttpPut("{id:int}/teams/{teamId:int}")]
+    public async Task<ActionResult<SpaceTeamAccessResponse>> AssignTeam(
+        int id, int teamId, CancellationToken cancellationToken = default)
+    {
+        if (!await dbContext.Spaces.AnyAsync(space => space.Id == id, cancellationToken))
+        {
+            return NotFound("That space could not be found.");
+        }
+        var team = await dbContext.Teams.AsNoTracking()
+            .Where(team => team.Id == teamId)
+            .Select(team => new TeamSummaryResponse { Id = team.Id, Name = team.Name, Slug = team.Slug })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (team == null)
+        {
+            return NotFound("That team could not be found.");
+        }
+
+        if (!await dbContext.TeamSpaces.AnyAsync(link => link.SpaceId == id && link.TeamId == teamId, cancellationToken))
+        {
+            var link = new TeamSpace { SpaceId = id, TeamId = teamId };
+            dbContext.TeamSpaces.Add(link);
+            try
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException)
+            {
+                dbContext.Entry(link).State = EntityState.Detached;
+                if (!await dbContext.TeamSpaces.AnyAsync(existing => existing.SpaceId == id && existing.TeamId == teamId, cancellationToken))
+                {
+                    throw;
+                }
+            }
+        }
+
+        return Ok(new SpaceTeamAccessResponse
+        {
+            Team = team,
+            ResourceCount = await dbContext.Resources.CountAsync(resource => resource.TeamId == teamId && resource.SpaceId == id,
+                cancellationToken),
+        });
+    }
+
+    [HttpDelete("{id:int}/teams/{teamId:int}")]
+    public async Task<IActionResult> RemoveTeam(
+        int id, int teamId, [FromQuery] int? confirmedResourceCount = null, CancellationToken cancellationToken = default)
+    {
+        if (confirmedResourceCount < 0)
+        {
+            return BadRequest("The confirmed resource count cannot be negative.");
+        }
+
+        try
+        {
+            return await RemoveTeamAssignment(id, teamId, confirmedResourceCount, cancellationToken);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is SqlException sqlException && sqlException.Number == 1205)
+        {
+            return TeamAssignmentChanged(id, teamId);
+        }
+        catch (SqlException exception) when (exception.Number == 1205)
+        {
+            return TeamAssignmentChanged(id, teamId);
+        }
+    }
+
+    private async Task<IActionResult> RemoveTeamAssignment(
+        int id, int teamId, int? confirmedResourceCount, CancellationToken cancellationToken)
+    {
+        // Resource creation reads the same assignment in a serializable transaction.
+        // Keep the count and removal together so new resources cannot bypass confirmation.
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+            : null;
+        if (!await dbContext.Spaces.AnyAsync(space => space.Id == id, cancellationToken))
+        {
+            return NotFound("That space could not be found.");
+        }
+        if (!await dbContext.Teams.AnyAsync(team => team.Id == teamId, cancellationToken))
+        {
+            return NotFound("That team could not be found.");
+        }
+
+        var link = await dbContext.TeamSpaces.SingleOrDefaultAsync(link => link.SpaceId == id && link.TeamId == teamId,
+            cancellationToken);
+        if (link == null)
+        {
+            return NoContent();
+        }
+        var resourceCount = await dbContext.Resources.CountAsync(resource => resource.TeamId == teamId && resource.SpaceId == id,
+            cancellationToken);
+        if (resourceCount > 0 && confirmedResourceCount != resourceCount)
+        {
+            var resourceLabel = resourceCount == 1 ? "resource" : "resources";
+            return Conflict(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Confirm removing this team's space assignment.",
+                Detail = $"This team has {resourceCount} {resourceLabel} in this space. Removing the assignment prevents new resources " +
+                    "from being created here. Existing resources and reservations are kept, and the team can still manage its existing resources.",
+                Extensions =
+                {
+                    ["code"] = "space_team_resources_confirmation_required",
+                    ["resourceCount"] = resourceCount,
+                },
+            });
+        }
+
+        dbContext.TeamSpaces.Remove(link);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction != null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        return NoContent();
+    }
+
+    private ConflictObjectResult TeamAssignmentChanged(int spaceId, int teamId)
+    {
+        var entry = dbContext.ChangeTracker.Entries<TeamSpace>()
+            .SingleOrDefault(entry => entry.Entity.SpaceId == spaceId && entry.Entity.TeamId == teamId);
+        if (entry != null)
+        {
+            entry.State = EntityState.Detached;
+        }
+
+        return Conflict(new ProblemDetails
+        {
+            Status = StatusCodes.Status409Conflict,
+            Title = "The space assignment could not be removed.",
+            Detail = "Another resource or assignment was saved at the same time. Refresh the team list and try again.",
+            Extensions = { ["code"] = "space_team_access_changed" },
+        });
     }
 
     private Task<bool> SlugExists(string slug, int? excludedId, CancellationToken cancellationToken)

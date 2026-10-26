@@ -1,4 +1,3 @@
-import type { NewResourceSpace } from './NewResourceSpace.ts';
 import type { ResourceDetail } from './ResourceDetail.ts';
 
 export interface SaveResourceRequest {
@@ -16,9 +15,8 @@ export interface SaveResourceRequest {
   isActive: boolean;
   isReservable: boolean;
   name: string;
-  newSpace?: NewResourceSpace | null;
   publicAccess: ResourceDetail['publicAccess'];
   sourceTemplateId?: number | null;
-  spaceId: number | null;
+  spaceId: number;
   updatedAt?: string;
 }

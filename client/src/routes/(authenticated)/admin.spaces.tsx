@@ -4,6 +4,7 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useCallback, useMemo, useState } from 'react';
 import { SpaceEditorDialog } from '@/features/spaces/SpaceEditorDialog.tsx';
+import { SpaceTeamsDialog } from '@/features/spaces/SpaceTeamsDialog.tsx';
 import type { Space } from '@/features/spaces/models/Space.ts';
 import { HttpError } from '@/lib/api.ts';
 import { adminSpacesQueryOptions } from '@/queries/admin-spaces.ts';
@@ -18,6 +19,9 @@ function SiteAdminSpacesPage() {
   const spacesQuery = useQuery(adminSpacesQueryOptions());
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingSpace, setEditingSpace] = useState<Space | null>(null);
+  const [managingTeamsSpace, setManagingTeamsSpace] = useState<Space | null>(
+    null
+  );
   const [notice, setNotice] = useState('');
   const openEditor = useCallback((space: Space | null) => {
     setEditingSpace(space);
@@ -44,14 +48,24 @@ function SiteAdminSpacesPage() {
       },
       {
         cell: ({ row }) => (
-          <button
-            aria-label={`Edit ${row.original.name}`}
-            className="btn btn-ghost btn-sm text-primary"
-            onClick={() => openEditor(row.original)}
-            type="button"
-          >
-            Edit
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              aria-label={`Edit ${row.original.name}`}
+              className="btn btn-ghost btn-sm text-primary"
+              onClick={() => openEditor(row.original)}
+              type="button"
+            >
+              Edit
+            </button>
+            <button
+              aria-label={`Manage teams for ${row.original.name}`}
+              className="btn btn-ghost btn-sm text-primary"
+              onClick={() => setManagingTeamsSpace(row.original)}
+              type="button"
+            >
+              Manage teams
+            </button>
+          </div>
         ),
         enableSorting: false,
         header: 'Actions',
@@ -167,6 +181,13 @@ function SiteAdminSpacesPage() {
             setNotice(`${space.name} ${editingSpace ? 'updated' : 'created'}.`);
           }}
           space={editingSpace}
+        />
+      )}
+      {managingTeamsSpace && (
+        <SpaceTeamsDialog
+          key={managingTeamsSpace.id}
+          onClose={() => setManagingTeamsSpace(null)}
+          space={managingTeamsSpace}
         />
       )}
     </main>

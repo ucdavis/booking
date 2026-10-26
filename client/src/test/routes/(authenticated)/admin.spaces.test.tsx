@@ -16,7 +16,13 @@ import {
   vi,
 } from 'vitest';
 import type { Space } from '@/features/spaces/models/Space.ts';
-import { adminSpacesQueryKey } from '@/queries/admin-spaces.ts';
+import type { SpaceTeamAccess } from '@/features/spaces/models/SpaceTeamAccess.ts';
+import type { TeamSummary } from '@/features/teams/models/TeamSummary.ts';
+import {
+  adminSpacesQueryKey,
+  spaceTeamsQueryOptions,
+} from '@/queries/admin-spaces.ts';
+import { resourceOptionsQueryOptions } from '@/queries/resources.ts';
 import type { User } from '@/queries/user.ts';
 import { server } from '@/test/mswUtils.ts';
 import { renderRoute } from '@/test/routerUtils.tsx';
@@ -38,6 +44,18 @@ const existingSpace: Space = {
   name: 'Science Building',
   referenceNumber: 'SCI-001',
   slug: 'science-building',
+};
+const plantSciences: TeamSummary = {
+  id: 1,
+  name: 'Plant Sciences',
+  roles: [],
+  slug: 'plant-sciences',
+};
+const chemistry: TeamSummary = {
+  id: 2,
+  name: 'Chemistry',
+  roles: [],
+  slug: 'chemistry',
 };
 let cleanup: (() => void) | undefined;
 const originalShowModal = Object.getOwnPropertyDescriptor(
@@ -108,6 +126,26 @@ function mockAdminAccess(spaces: Space[] = [existingSpace]) {
 async function openCreateDialog() {
   fireEvent.click(await screen.findByRole('button', { name: 'Create space' }));
   return within(screen.getByRole('dialog', { name: 'Create a space' }));
+}
+
+function mockTeamAssignments(assignments: SpaceTeamAccess[]) {
+  server.use(
+    http.get('/api/admin/teams', () =>
+      HttpResponse.json([plantSciences, chemistry])
+    ),
+    http.get('/api/admin/spaces/1/teams', () => HttpResponse.json(assignments))
+  );
+}
+
+async function openTeamsDialog() {
+  const button = await screen.findByRole('button', {
+    name: 'Manage teams for Science Building',
+  });
+  button.focus();
+  fireEvent.click(button);
+  return within(
+    screen.getByRole('dialog', { name: 'Manage teams for Science Building' })
+  );
 }
 
 describe('site admin spaces', () => {
@@ -466,6 +504,307 @@ describe('site admin spaces', () => {
     expect(
       screen.queryByRole('button', { name: 'Create space' })
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Manage teams for/ })
+    ).not.toBeInTheDocument();
+  });
+
+  it('assigns an existing team, refreshes resource options, and restores focus when closed', async () => {
+    mockAdminAccess();
+    const assignments: SpaceTeamAccess[] = [
+      { resourceCount: 2, team: plantSciences },
+    ];
+    mockTeamAssignments(assignments);
+    let releaseAssignment!: () => void;
+    const assignmentReady = new Promise<void>((resolve) => {
+      releaseAssignment = resolve;
+    });
+    const assign = vi.fn(async ({ request }: { request: Request }) => {
+      expect(request.headers.get('RequestVerificationToken')).toBe(
+        'test-antiforgery-token'
+      );
+      await assignmentReady;
+      const added = { resourceCount: 0, team: chemistry };
+      assignments.push(added);
+      return HttpResponse.json(added);
+    });
+    server.use(http.put('/api/admin/spaces/1/teams/2', assign));
+    const rendered = renderRoute({ initialPath: '/admin/spaces' });
+    cleanup = rendered.cleanup;
+    const optionsKey = resourceOptionsQueryOptions(chemistry.slug).queryKey;
+    rendered.queryClient.setQueryData(optionsKey, {
+      spaces: [],
+      templates: [],
+    });
+    const dialog = await openTeamsDialog();
+    expect(
+      await dialog.findByRole('row', { name: /Plant Sciences/ })
+    ).toHaveTextContent('2');
+    const team = await dialog.findByRole('combobox', { name: 'Team' });
+    expect(team).toHaveDisplayValue('Pick a team');
+    expect(
+      within(team).queryByRole('option', { name: 'Plant Sciences' })
+    ).not.toBeInTheDocument();
+    fireEvent.change(team, { target: { value: '2' } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Assign team' }));
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(1));
+    expect(dialog.getByRole('button', { name: 'Close' })).toBeDisabled();
+    await act(async () => releaseAssignment());
+    expect(
+      await dialog.findByRole('row', { name: /Chemistry/ })
+    ).toHaveTextContent('0');
+    await waitFor(() =>
+      expect(
+        rendered.queryClient.getQueryState(optionsKey)?.isInvalidated
+      ).toBe(true)
+    );
+    expect(
+      dialog.queryByRole('option', { name: 'Chemistry' })
+    ).not.toBeInTheDocument();
+    fireEvent.click(dialog.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Manage teams for Science Building' })
+    ).toHaveFocus();
+  });
+
+  it('keeps the selected team after a failed assignment and allows retry', async () => {
+    mockAdminAccess();
+    const assignments: SpaceTeamAccess[] = [];
+    mockTeamAssignments(assignments);
+    let attempts = 0;
+    server.use(
+      http.put('/api/admin/spaces/1/teams/2', () => {
+        attempts++;
+        if (attempts === 1) {
+          return new HttpResponse(null, { status: 500 });
+        }
+        const added = { resourceCount: 0, team: chemistry };
+        assignments.push(added);
+        return HttpResponse.json(added);
+      })
+    );
+    ({ cleanup } = renderRoute({ initialPath: '/admin/spaces' }));
+    const dialog = await openTeamsDialog();
+    const team = await dialog.findByRole('combobox', { name: 'Team' });
+    fireEvent.change(team, { target: { value: '2' } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Assign team' }));
+    expect(await dialog.findByRole('alert')).toBeInTheDocument();
+    expect(team).toHaveValue('2');
+    fireEvent.click(dialog.getByRole('button', { name: 'Assign team' }));
+    expect(
+      await dialog.findByRole('row', { name: /Chemistry/ })
+    ).toBeInTheDocument();
+    expect(attempts).toBe(2);
+  });
+
+  it('unlinks a team without resources and refreshes its resource options', async () => {
+    mockAdminAccess();
+    const assignments: SpaceTeamAccess[] = [
+      { resourceCount: 0, team: plantSciences },
+    ];
+    mockTeamAssignments(assignments);
+    const unlink = vi.fn(({ request }: { request: Request }) => {
+      expect(request.headers.get('RequestVerificationToken')).toBe(
+        'test-antiforgery-token'
+      );
+      assignments.splice(0);
+      return new HttpResponse(null, { status: 204 });
+    });
+    server.use(http.delete('/api/admin/spaces/1/teams/1', unlink));
+    const rendered = renderRoute({ initialPath: '/admin/spaces' });
+    cleanup = rendered.cleanup;
+    const optionsKey = resourceOptionsQueryOptions(plantSciences.slug).queryKey;
+    rendered.queryClient.setQueryData(optionsKey, {
+      spaces: [{ ...existingSpace, timeZoneId: 'America/Los_Angeles' }],
+      templates: [],
+    });
+    const dialog = await openTeamsDialog();
+    fireEvent.click(
+      await dialog.findByRole('button', { name: 'Unlink Plant Sciences' })
+    );
+    await waitFor(() => expect(unlink).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(
+        dialog.queryByRole('row', { name: /Plant Sciences/ })
+      ).not.toBeInTheDocument()
+    );
+    await waitFor(() =>
+      expect(
+        rendered.queryClient.getQueryState(optionsKey)?.isInvalidated
+      ).toBe(true)
+    );
+    expect(
+      dialog.queryByRole('button', { name: 'Confirm unlink' })
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog.getByRole('combobox', { name: 'Team' })).getByRole(
+        'option',
+        { name: 'Plant Sciences' }
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('requires a new team selection if another admin assigns the selected team during a refresh', async () => {
+    mockAdminAccess();
+    const assignments: SpaceTeamAccess[] = [];
+    mockTeamAssignments(assignments);
+    const assign = vi.fn(() =>
+      HttpResponse.json({ resourceCount: 0, team: chemistry })
+    );
+    server.use(http.put('/api/admin/spaces/1/teams/2', assign));
+    const rendered = renderRoute({ initialPath: '/admin/spaces' });
+    cleanup = rendered.cleanup;
+    const dialog = await openTeamsDialog();
+    const team = await dialog.findByRole('combobox', { name: 'Team' });
+    fireEvent.change(team, { target: { value: '2' } });
+    assignments.push({ resourceCount: 0, team: chemistry });
+    await act(async () => {
+      await rendered.queryClient.invalidateQueries({
+        queryKey: spaceTeamsQueryOptions(1).queryKey,
+      });
+    });
+    await waitFor(() => expect(team).toHaveDisplayValue('Pick a team'));
+    const assignButton = dialog.getByRole('button', { name: 'Assign team' });
+    expect(assignButton).toBeDisabled();
+    fireEvent.click(assignButton);
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('warns about attached resources, allows cancellation, and unlinks only after confirmation', async () => {
+    mockAdminAccess();
+    const assignments: SpaceTeamAccess[] = [
+      { resourceCount: 3, team: plantSciences },
+    ];
+    mockTeamAssignments(assignments);
+    const unlink = vi.fn(({ request }: { request: Request }) => {
+      expect(
+        new URL(request.url).searchParams.get('confirmedResourceCount')
+      ).toBe('3');
+      assignments.splice(0);
+      return new HttpResponse(null, { status: 204 });
+    });
+    server.use(http.delete('/api/admin/spaces/1/teams/1', unlink));
+    ({ cleanup } = renderRoute({ initialPath: '/admin/spaces' }));
+    const dialog = await openTeamsDialog();
+    fireEvent.click(
+      await dialog.findByRole('button', { name: 'Unlink Plant Sciences' })
+    );
+    expect(await dialog.findByText(/3 resources/)).toBeInTheDocument();
+    expect(dialog.getByText(/can still manage/i)).toBeInTheDocument();
+    expect(unlink).not.toHaveBeenCalled();
+    fireEvent.click(dialog.getByRole('button', { name: 'Cancel unlink' }));
+    expect(
+      dialog.queryByRole('button', { name: 'Confirm unlink' })
+    ).not.toBeInTheDocument();
+    expect(unlink).not.toHaveBeenCalled();
+    fireEvent.click(
+      dialog.getByRole('button', { name: 'Unlink Plant Sciences' })
+    );
+    fireEvent.click(dialog.getByRole('button', { name: 'Confirm unlink' }));
+    await waitFor(() => expect(unlink).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(
+        dialog.queryByRole('row', { name: /Plant Sciences/ })
+      ).not.toBeInTheDocument()
+    );
+  });
+
+  it.each([0, 2])(
+    'requires a fresh warning confirmation when the resource count changes from %i',
+    async (originalCount) => {
+      mockAdminAccess();
+      const assignments: SpaceTeamAccess[] = [
+        { resourceCount: originalCount, team: plantSciences },
+      ];
+      mockTeamAssignments(assignments);
+      const confirmations: (string | null)[] = [];
+      server.use(
+        http.delete('/api/admin/spaces/1/teams/1', ({ request }) => {
+          const count = new URL(request.url).searchParams.get(
+            'confirmedResourceCount'
+          );
+          confirmations.push(count);
+          if (count !== '4') {
+            assignments[0] = { resourceCount: 4, team: plantSciences };
+            return HttpResponse.json(
+              {
+                code: 'space_team_resources_confirmation_required',
+                detail:
+                  'Review the current resources before unlinking this team.',
+                resourceCount: 4,
+                status: 409,
+                title: 'Confirmation required',
+              },
+              {
+                headers: { 'Content-Type': 'application/problem+json' },
+                status: 409,
+              }
+            );
+          }
+          assignments.splice(0);
+          return new HttpResponse(null, { status: 204 });
+        })
+      );
+      ({ cleanup } = renderRoute({ initialPath: '/admin/spaces' }));
+      const dialog = await openTeamsDialog();
+      fireEvent.click(
+        await dialog.findByRole('button', { name: 'Unlink Plant Sciences' })
+      );
+      if (originalCount > 0) {
+        fireEvent.click(dialog.getByRole('button', { name: 'Confirm unlink' }));
+      }
+      expect(await dialog.findByText(/4 resources/)).toBeInTheDocument();
+      expect(confirmations).toHaveLength(1);
+      await waitFor(() =>
+        expect(
+          dialog.getByRole('button', { name: 'Confirm unlink' })
+        ).toBeEnabled()
+      );
+      fireEvent.click(dialog.getByRole('button', { name: 'Confirm unlink' }));
+      await waitFor(() => expect(confirmations).toHaveLength(2));
+      expect(confirmations[1]).toBe('4');
+      await waitFor(() =>
+        expect(
+          dialog.queryByRole('row', { name: /Plant Sciences/ })
+        ).not.toBeInTheDocument()
+      );
+    }
+  );
+
+  it('hides cached team assignments when site admin access is revoked', async () => {
+    mockAdminAccess();
+    mockTeamAssignments([{ resourceCount: 3, team: plantSciences }]);
+    const rendered = renderRoute({ initialPath: '/admin/spaces' });
+    cleanup = rendered.cleanup;
+    const dialog = await openTeamsDialog();
+    await dialog.findByRole('row', { name: /Plant Sciences/ });
+    const assign = vi.fn(() =>
+      HttpResponse.json({ resourceCount: 0, team: chemistry })
+    );
+    const unlink = vi.fn(() => new HttpResponse(null, { status: 204 }));
+    server.use(
+      http.get(
+        '/api/admin/spaces/1/teams',
+        () => new HttpResponse(null, { status: 403 })
+      ),
+      http.put('/api/admin/spaces/1/teams/2', assign),
+      http.delete('/api/admin/spaces/1/teams/1', unlink)
+    );
+    await act(async () => {
+      await rendered.queryClient.invalidateQueries({
+        queryKey: spaceTeamsQueryOptions(1).queryKey,
+      });
+    });
+    expect(await dialog.findByRole('alert')).toBeInTheDocument();
+    expect(
+      dialog.queryByRole('row', { name: /Plant Sciences/ })
+    ).not.toBeInTheDocument();
+    expect(
+      dialog.queryByRole('button', { name: 'Unlink Plant Sciences' })
+    ).not.toBeInTheDocument();
+    expect(assign).not.toHaveBeenCalled();
+    expect(unlink).not.toHaveBeenCalled();
   });
 
   it('removes cached spaces when a refresh denies access', async () => {

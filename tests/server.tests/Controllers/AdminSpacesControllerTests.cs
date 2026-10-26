@@ -11,6 +11,7 @@ using Server.Core.Data;
 using Server.Core.Domain;
 using Server.Helpers;
 using Server.Models.Spaces;
+using Server.Services;
 
 namespace Server.Tests.Controllers;
 
@@ -531,6 +532,274 @@ public class AdminSpacesControllerTests
         await create.Should().ThrowAsync<DbUpdateException>();
     }
 
+    [Fact]
+    public async Task Team_access_lists_only_linked_teams_with_scoped_counts_including_inactive_children()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var space = CreateSpace("Hall", "hall");
+        var otherSpace = CreateSpace("Other Hall", "other-hall");
+        var first = new Team { Name = "Alpha", Slug = "alpha-a" };
+        var second = new Team { Name = "Alpha", Slug = "alpha-z" };
+        var last = new Team { Name = "Zoology", Slug = "zoology" };
+        var unlinked = new Team { Name = "Unlinked", Slug = "unlinked" };
+        db.TeamSpaces.AddRange(
+            new TeamSpace { Team = last, Space = space },
+            new TeamSpace { Team = second, Space = space },
+            new TeamSpace { Team = first, Space = space },
+            new TeamSpace { Team = unlinked, Space = otherSpace });
+        var parent = CreateResource(first, space, "Parent");
+        db.Resources.AddRange(parent,
+            CreateResource(first, space, "Inactive child", isActive: false, parent: parent),
+            CreateResource(first, otherSpace, "Other location resource"),
+            CreateResource(second, space, "Other team resource"),
+            CreateResource(unlinked, space, "Retained unlinked resource"));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = ReadOk(await new AdminSpacesController(db).GetTeams(space.Id));
+
+        result.Select(access => access.Team.Slug).Should().Equal("alpha-a", "alpha-z", "zoology");
+        result.Select(access => access.ResourceCount).Should().Equal(2, 1, 0);
+        result.Should().OnlyContain(access => access.Team.Roles.Count == 0);
+        db.ChangeTracker.Entries().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Assigning_a_team_is_idempotent_and_does_not_activate_spaces_or_grant_membership(bool isActive)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var space = CreateSpace("Hall", "hall", isActive);
+        var team = new Team { Name = "Team", Slug = "team", UpdatedAt = space.UpdatedAt };
+        db.Resources.Add(CreateResource(team, space, "Retained room"));
+        await db.SaveChangesAsync();
+        var originalUpdatedAt = space.UpdatedAt;
+        db.ChangeTracker.Clear();
+        var controller = new AdminSpacesController(db);
+
+        var assigned = ReadOk(await controller.AssignTeam(space.Id, team.Id));
+        var repeated = ReadOk(await controller.AssignTeam(space.Id, team.Id));
+
+        assigned.Team.Id.Should().Be(team.Id);
+        assigned.Team.Name.Should().Be("Team");
+        assigned.ResourceCount.Should().Be(1);
+        repeated.Should().BeEquivalentTo(assigned);
+        (await db.TeamSpaces.CountAsync()).Should().Be(1);
+        (await db.TeamPermissions.AnyAsync()).Should().BeFalse();
+        var savedSpace = await db.Spaces.SingleAsync();
+        savedSpace.IsActive.Should().Be(isActive);
+        savedSpace.UpdatedAt.Should().Be(originalUpdatedAt);
+        (await db.Teams.SingleAsync()).UpdatedAt.Should().Be(originalUpdatedAt);
+        var options = await new TeamResourceService(db).GetOptions(team.Id, CancellationToken.None);
+        options.Spaces.Count.Should().Be(isActive ? 1 : 0);
+    }
+
+    [Fact]
+    public async Task Team_access_returns_not_found_for_missing_spaces_or_teams()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var space = CreateSpace("Hall", "hall");
+        var team = new Team { Name = "Team", Slug = "team" };
+        db.Spaces.Add(space);
+        db.Teams.Add(team);
+        await db.SaveChangesAsync();
+        var controller = new AdminSpacesController(db);
+
+        (await controller.GetTeams(int.MaxValue)).Result.Should().BeOfType<NotFoundObjectResult>();
+        ReadOk(await controller.GetTeams(space.Id)).Should().BeEmpty();
+        (await controller.AssignTeam(int.MaxValue, team.Id)).Result.Should().BeOfType<NotFoundObjectResult>();
+        (await controller.AssignTeam(space.Id, int.MaxValue)).Result.Should().BeOfType<NotFoundObjectResult>();
+        (await controller.RemoveTeam(int.MaxValue, team.Id)).Should().BeOfType<NotFoundObjectResult>();
+        (await controller.RemoveTeam(space.Id, int.MaxValue)).Should().BeOfType<NotFoundObjectResult>();
+
+        (await db.TeamSpaces.AnyAsync()).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Assignment_save_failures_are_only_recovered_when_the_same_link_was_created_concurrently(bool insertConcurrentLink)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase($"TeamSpaceAssignment_{Guid.NewGuid():N}").Options;
+        var space = CreateSpace("Hall", "hall");
+        var team = new Team { Name = "Team", Slug = "team" };
+        using (var seedDb = new AppDbContext(options))
+        {
+            seedDb.Spaces.Add(space);
+            seedDb.Teams.Add(team);
+            await seedDb.SaveChangesAsync();
+        }
+        using var db = new TeamSpaceInsertFailureDbContext(options, insertConcurrentLink);
+        var controller = new AdminSpacesController(db);
+
+        if (insertConcurrentLink)
+        {
+            ReadOk(await controller.AssignTeam(space.Id, team.Id)).Team.Id.Should().Be(team.Id);
+            (await db.TeamSpaces.CountAsync()).Should().Be(1);
+            db.ChangeTracker.HasChanges().Should().BeFalse();
+        }
+        else
+        {
+            var assign = () => controller.AssignTeam(space.Id, team.Id);
+            await assign.Should().ThrowAsync<DbUpdateException>();
+            (await db.TeamSpaces.AnyAsync()).Should().BeFalse();
+        }
+    }
+
+    [Fact]
+    public async Task Removing_an_empty_assignment_is_idempotent_and_preserves_other_assignments()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var space = CreateSpace("Hall", "hall");
+        var otherSpace = CreateSpace("Other Hall", "other-hall");
+        var team = new Team { Name = "Team", Slug = "team" };
+        var otherTeam = new Team { Name = "Other Team", Slug = "other-team" };
+        db.TeamSpaces.AddRange(new TeamSpace { Team = team, Space = space },
+            new TeamSpace { Team = team, Space = otherSpace },
+            new TeamSpace { Team = otherTeam, Space = space });
+        db.Resources.AddRange(CreateResource(team, otherSpace, "Other space room"),
+            CreateResource(otherTeam, space, "Other team room"));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var controller = new AdminSpacesController(db);
+
+        (await controller.RemoveTeam(space.Id, team.Id)).Should().BeOfType<NoContentResult>();
+        (await controller.RemoveTeam(space.Id, team.Id)).Should().BeOfType<NoContentResult>();
+
+        var links = await db.TeamSpaces.ToListAsync();
+        links.Should().HaveCount(2);
+        links.Should().Contain(link => link.TeamId == team.Id && link.SpaceId == otherSpace.Id);
+        links.Should().Contain(link => link.TeamId == otherTeam.Id && link.SpaceId == space.Id);
+        (await db.Resources.CountAsync()).Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0)]
+    [InlineData(2)]
+    public async Task Removing_an_assignment_with_resources_requires_confirmation_of_the_current_count(int? confirmedCount)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var space = CreateSpace("Hall", "hall");
+        var team = new Team { Name = "Team", Slug = "team" };
+        db.TeamSpaces.Add(new TeamSpace { Team = team, Space = space });
+        db.Resources.Add(CreateResource(team, space, "Inactive room", isActive: false));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var result = await new AdminSpacesController(db).RemoveTeam(space.Id, team.Id, confirmedCount);
+
+        var problem = result.Should().BeOfType<ConflictObjectResult>().Subject.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problem.Extensions["code"].Should().Be("space_team_resources_confirmation_required");
+        problem.Extensions["resourceCount"].Should().Be(1);
+        problem.Detail.Should().Contain("can still manage");
+        (await db.TeamSpaces.CountAsync()).Should().Be(1);
+        (await db.Resources.CountAsync()).Should().Be(1);
+        db.ChangeTracker.HasChanges().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_new_resource_after_the_warning_requires_a_new_confirmation()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var space = CreateSpace("Hall", "hall");
+        var team = new Team { Name = "Team", Slug = "team" };
+        db.TeamSpaces.Add(new TeamSpace { Team = team, Space = space });
+        db.Resources.Add(CreateResource(team, space, "First room"));
+        await db.SaveChangesAsync();
+        var controller = new AdminSpacesController(db);
+        var firstWarning = (await controller.RemoveTeam(space.Id, team.Id)).Should().BeOfType<ConflictObjectResult>().Subject.Value
+            .Should().BeOfType<ProblemDetails>().Subject;
+        firstWarning.Extensions["resourceCount"].Should().Be(1);
+        db.Resources.Add(CreateResource(team, space, "New room"));
+        await db.SaveChangesAsync();
+
+        var staleResult = await controller.RemoveTeam(space.Id, team.Id, confirmedResourceCount: 1);
+
+        var updatedWarning = staleResult.Should().BeOfType<ConflictObjectResult>().Subject.Value.Should().BeOfType<ProblemDetails>().Subject;
+        updatedWarning.Extensions["resourceCount"].Should().Be(2);
+        (await db.TeamSpaces.CountAsync()).Should().Be(1);
+        (await controller.RemoveTeam(space.Id, team.Id, confirmedResourceCount: 2)).Should().BeOfType<NoContentResult>();
+        (await db.TeamSpaces.AnyAsync()).Should().BeFalse();
+        (await db.Resources.CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Negative_confirmation_counts_are_rejected_without_removing_the_assignment()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var space = CreateSpace("Hall", "hall");
+        var team = new Team { Name = "Team", Slug = "team" };
+        db.TeamSpaces.Add(new TeamSpace { Team = team, Space = space });
+        await db.SaveChangesAsync();
+
+        (await new AdminSpacesController(db).RemoveTeam(space.Id, team.Id, -1)).Should().BeOfType<BadRequestObjectResult>();
+
+        (await db.TeamSpaces.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Confirmed_unlink_preserves_resource_history_and_relink_restores_creation_options()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var space = CreateSpace("Hall", "hall");
+        var team = new Team { Name = "Team", Slug = "team", UpdatedAt = space.UpdatedAt };
+        var user = new User { IamId = "resource-owner", Name = "Resource owner" };
+        db.Users.Add(user);
+        db.TeamSpaces.Add(new TeamSpace { Team = team, Space = space });
+        db.TeamPermissions.Add(new TeamPermission { Team = team, User = user, Role = TeamRole.Editor });
+        await db.SaveChangesAsync();
+        var resource = CreateResource(team, space, "Existing room");
+        resource.UpdatedByUserId = user.Id;
+        var config = new ResourceConfig
+        {
+            Resource = resource, Version = 1, FormSchemaVersion = 1, FormJson = "{\"fields\":[]}", DetailsJson = "{}",
+            CreatedByUserId = user.Id, PublishedByUserId = user.Id,
+            CreatedAt = space.CreatedAt, UpdatedAt = space.UpdatedAt, PublishedAt = space.UpdatedAt,
+        };
+        var reservation = new ReservationSeries
+        {
+            Resource = resource, ResourceConfig = config, RequesterUserId = user.Id, CreatedByUserId = user.Id,
+            FormResponsesJson = "{}", TimeZoneId = "America/Los_Angeles", SubmissionKey = Guid.NewGuid(), CreatedAt = space.CreatedAt,
+        };
+        db.ReservationSeries.Add(reservation);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var controller = new AdminSpacesController(db);
+        var resourceService = new TeamResourceService(db);
+        (await resourceService.GetOptions(team.Id, CancellationToken.None)).Spaces.Should().ContainSingle();
+
+        (await controller.RemoveTeam(space.Id, team.Id, 1)).Should().BeOfType<NoContentResult>();
+        (await controller.RemoveTeam(space.Id, team.Id)).Should().BeOfType<NoContentResult>();
+
+        (await resourceService.GetOptions(team.Id, CancellationToken.None)).Spaces.Should().BeEmpty();
+        (await resourceService.GetResource(team.Id, resource.Id, CancellationToken.None)).Should().NotBeNull();
+        var savedResource = await db.Resources.SingleAsync();
+        savedResource.SpaceId.Should().Be(space.Id);
+        savedResource.TeamId.Should().Be(team.Id);
+        savedResource.Name.Should().Be("Existing room");
+        savedResource.IsActive.Should().BeTrue();
+        savedResource.UpdatedAt.Should().Be(resource.UpdatedAt);
+        var savedConfig = await db.ResourceConfigs.SingleAsync();
+        savedConfig.Id.Should().Be(config.Id);
+        savedConfig.FormJson.Should().Be(config.FormJson);
+        savedConfig.DetailsJson.Should().Be(config.DetailsJson);
+        savedConfig.PublishedAt.Should().Be(config.PublishedAt);
+        var savedReservation = await db.ReservationSeries.SingleAsync();
+        savedReservation.Id.Should().Be(reservation.Id);
+        savedReservation.ResourceConfigId.Should().Be(config.Id);
+        savedReservation.FormResponsesJson.Should().Be(reservation.FormResponsesJson);
+        savedReservation.SubmissionKey.Should().Be(reservation.SubmissionKey);
+        (await db.Spaces.SingleAsync()).UpdatedAt.Should().Be(space.UpdatedAt);
+        (await db.Teams.SingleAsync()).UpdatedAt.Should().Be(team.UpdatedAt);
+        (await db.TeamPermissions.SingleAsync()).Role.Should().Be(TeamRole.Editor);
+
+        ReadOk(await controller.AssignTeam(space.Id, team.Id)).ResourceCount.Should().Be(1);
+        (await resourceService.GetOptions(team.Id, CancellationToken.None)).Spaces.Should().ContainSingle().Which.Id.Should().Be(space.Id);
+    }
+
     [Theory]
     [InlineData("timeZoneId", "\"UTC\"")]
     [InlineData("teamId", "7")]
@@ -549,7 +818,7 @@ public class AdminSpacesControllerTests
     {
         var controller = typeof(AdminSpacesController);
         controller.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
-            .Should().Contain(attribute => attribute.Policy == AuthenticationHelper.SiteAdminPolicy);
+            .Should().ContainSingle().Which.Policy.Should().Be(AuthenticationHelper.SiteAdminPolicy);
         controller.GetCustomAttribute<RouteAttribute>()!.Template.Should().Be("api/admin/spaces");
         controller.GetCustomAttribute<ResponseCacheAttribute>()!.NoStore.Should().BeTrue();
         controller.GetCustomAttributes<AllowAnonymousAttribute>(inherit: true).Should().BeEmpty();
@@ -564,6 +833,12 @@ public class AdminSpacesControllerTests
             .GetCustomAttribute<HttpPostAttribute>().Should().NotBeNull();
         controller.GetMethod(nameof(AdminSpacesController.UpdateSpace))!
             .GetCustomAttribute<HttpPutAttribute>()!.Template.Should().Be("{id:int}");
+        controller.GetMethod(nameof(AdminSpacesController.GetTeams))!
+            .GetCustomAttribute<HttpGetAttribute>()!.Template.Should().Be("{id:int}/teams");
+        controller.GetMethod(nameof(AdminSpacesController.AssignTeam))!
+            .GetCustomAttribute<HttpPutAttribute>()!.Template.Should().Be("{id:int}/teams/{teamId:int}");
+        controller.GetMethod(nameof(AdminSpacesController.RemoveTeam))!
+            .GetCustomAttribute<HttpDeleteAttribute>()!.Template.Should().Be("{id:int}/teams/{teamId:int}");
     }
 
     private static T ReadOk<T>(ActionResult<T> result)
@@ -576,6 +851,13 @@ public class AdminSpacesControllerTests
     {
         Name = name, Slug = slug, TimeZoneId = "America/Los_Angeles", IsActive = isActive,
         CreatedAt = DateTimeOffset.UtcNow.AddDays(-2), UpdatedAt = DateTimeOffset.UtcNow.AddDays(-1),
+    };
+
+    private static Resource CreateResource(Team team, Space space, string name, bool isActive = true, Resource? parent = null) => new()
+    {
+        Team = team, Space = space, Name = name, NameKey = name.ToUpperInvariant(), Slug = name.ToLowerInvariant().Replace(' ', '-'),
+        Category = "room", IsActive = isActive, ParentResource = parent, PublicAccess = parent == null ? "availability" : null,
+        CreatedAt = space.CreatedAt, UpdatedAt = space.UpdatedAt, UpdatedByUserId = 99,
     };
 
     private sealed class SpaceSaveFailureDbContext : AppDbContext
@@ -609,6 +891,32 @@ public class AdminSpacesControllerTests
             }
 
             throw new DbUpdateException("Simulated space persistence failure.");
+        }
+    }
+
+    private sealed class TeamSpaceInsertFailureDbContext : AppDbContext
+    {
+        private readonly DbContextOptions<AppDbContext> _options;
+        private readonly bool _insertConcurrentLink;
+
+        public TeamSpaceInsertFailureDbContext(DbContextOptions<AppDbContext> options, bool insertConcurrentLink)
+            : base(options)
+        {
+            _options = options;
+            _insertConcurrentLink = insertConcurrentLink;
+        }
+
+        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            var candidate = ChangeTracker.Entries<TeamSpace>().Single(entry => entry.State == EntityState.Added);
+            if (_insertConcurrentLink)
+            {
+                using var concurrentDb = new AppDbContext(_options);
+                concurrentDb.TeamSpaces.Add(new TeamSpace { SpaceId = candidate.Entity.SpaceId, TeamId = candidate.Entity.TeamId });
+                await concurrentDb.SaveChangesAsync(cancellationToken);
+            }
+
+            throw new DbUpdateException("Simulated team space assignment failure.");
         }
     }
 }
