@@ -10,8 +10,9 @@ public sealed class SaveSpaceRequest
     [StringLength(200)]
     public string Name { get; init; } = string.Empty;
 
+    [Required]
     [StringLength(120)]
-    public string? Slug { get; init; }
+    public string Slug { get; init; } = string.Empty;
 
     public string? Description { get; init; }
 

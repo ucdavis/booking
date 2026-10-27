@@ -148,11 +148,7 @@ public sealed class TeamResourceService(AppDbContext dbContext)
             return (null, "A resource with that name already exists at this location, including inactive resources.", 409);
         }
 
-        var slug = request.Slug?.Trim() ?? CreateSlug(request.Name);
-        if (!ValidSlug(slug))
-        {
-            return (null, InvalidSlugMessage, 400);
-        }
+        var slug = request.Slug.Trim();
         if (await DuplicateSlug(teamId, slug, null, cancellationToken))
         {
             return (null, DuplicateSlugMessage, 409);
@@ -212,7 +208,7 @@ public sealed class TeamResourceService(AppDbContext dbContext)
         {
             return (null, "A sibling resource with that name already exists at this location, including inactive resources.", 409);
         }
-        var slug = request.Slug?.Trim() ?? resource.Slug;
+        var slug = request.Slug.Trim();
         if (await DuplicateSlug(teamId, slug, id, cancellationToken))
         {
             return (null, DuplicateSlugMessage, 409);
@@ -388,7 +384,7 @@ public sealed class TeamResourceService(AppDbContext dbContext)
         {
             return "Enter a resource name of no more than 200 characters without control characters.";
         }
-        if (request.Slug != null && !ValidSlug(request.Slug.Trim()))
+        if (string.IsNullOrWhiteSpace(request.Slug) || !ValidSlug(request.Slug.Trim()))
         {
             return InvalidSlugMessage;
         }
@@ -565,14 +561,6 @@ public sealed class TeamResourceService(AppDbContext dbContext)
     private static bool ValidPublicAccess(string? value) => value == "none" || value == "availability" || value == "details";
 
     private static string? TrimOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private static string CreateSlug(string name)
-    {
-        var normalized = Regex.Replace(name.Normalize(NormalizationForm.FormKD), @"[\u0300-\u036f]", string.Empty)
-            .ToLowerInvariant();
-        var slug = Regex.Replace(normalized, "[^a-z0-9]+", "-").Trim('-');
-        return slug[..Math.Min(slug.Length, 120)].TrimEnd('-');
-    }
 
     private static bool ValidSlug(string slug)
         => slug.Length > 0 && slug.Length <= 120 &&

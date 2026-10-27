@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Text.Json;
 using FluentAssertions;
@@ -74,7 +75,7 @@ public class AdminSpacesControllerTests
 
         var result = await controller.CreateSpace(new SaveSpaceRequest
         {
-            Name = "  North Hall  ", Description = "  A teaching space.  ", Address = "  123 Main St  ",
+            Name = "  North Hall  ", Slug = "north-hall", Description = "  A teaching space.  ", Address = "  123 Main St  ",
             IsOfficialFacility = true, IsActive = false, ReferenceNumber = "  FAC-123  ",
         });
 
@@ -126,7 +127,7 @@ public class AdminSpacesControllerTests
         var controller = new AdminSpacesController(db);
         var request = new SaveSpaceRequest
         {
-            Name = "Official Hall", IsOfficialFacility = true, ReferenceNumber = referenceNumber,
+            Name = "Official Hall", Slug = original.Slug, IsOfficialFacility = true, ReferenceNumber = referenceNumber,
         };
 
         (await controller.CreateSpace(request)).Result.Should().BeOfType<BadRequestObjectResult>();
@@ -148,7 +149,7 @@ public class AdminSpacesControllerTests
         var controller = new AdminSpacesController(db);
         var request = new SaveSpaceRequest
         {
-            Name = "Updated Hall", Address = new string('a', addressLength), ReferenceNumber = new string('a', referenceLength),
+            Name = "Updated Hall", Slug = original.Slug, Address = new string('a', addressLength), ReferenceNumber = new string('a', referenceLength),
         };
 
         (await controller.CreateSpace(request)).Result.Should().BeOfType<BadRequestObjectResult>();
@@ -162,26 +163,45 @@ public class AdminSpacesControllerTests
     [InlineData("  North   Hall  ", "north-hall")]
     [InlineData("Café & Conference Hall", "cafe-conference-hall")]
     [InlineData("Ｆｕｌｌ Width", "full-width")]
-    public async Task Create_defaults_an_omitted_slug_from_the_name(string name, string expectedSlug)
+    public async Task Create_uses_the_explicit_slug(string name, string expectedSlug)
     {
         using var db = TestDbContextFactory.CreateInMemory();
 
-        var result = await new AdminSpacesController(db).CreateSpace(new SaveSpaceRequest { Name = name });
+        var result = await new AdminSpacesController(db).CreateSpace(new SaveSpaceRequest { Name = name, Slug = expectedSlug });
 
         result.Result.Should().BeOfType<CreatedAtActionResult>();
         (await db.Spaces.SingleAsync()).Slug.Should().Be(expectedSlug);
     }
 
-    [Fact]
-    public async Task Generated_slug_respects_its_limit_without_ending_in_a_hyphen()
+    [Theory]
+    [InlineData("{\"name\":\"Updated Hall\"}")]
+    [InlineData("{\"name\":\"Updated Hall\",\"slug\":null}")]
+    [InlineData("{\"name\":\"Updated Hall\",\"slug\":\"\"}")]
+    [InlineData("{\"name\":\"Updated Hall\",\"slug\":\"   \"}")]
+    public async Task Create_and_update_require_an_explicit_nonblank_slug(string json)
     {
         using var db = TestDbContextFactory.CreateInMemory();
-        var name = new string('a', 119) + " West Wing";
+        var original = CreateSpace("Original Hall", "original-hall");
+        db.Spaces.Add(original);
+        await db.SaveChangesAsync();
+        var updatedAt = original.UpdatedAt;
+        var controller = new AdminSpacesController(db);
+        var request = JsonSerializer.Deserialize<SaveSpaceRequest>(json,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        var validationResults = new List<ValidationResult>();
 
-        var result = await new AdminSpacesController(db).CreateSpace(new SaveSpaceRequest { Name = name });
+        Validator.TryValidateObject(request, new ValidationContext(request), validationResults, validateAllProperties: true)
+            .Should().BeFalse();
+        validationResults.Should().Contain(result => result.MemberNames.Contains(nameof(SaveSpaceRequest.Slug)));
+        (await controller.CreateSpace(request)).Result.Should().BeOfType<BadRequestObjectResult>();
+        (await controller.UpdateSpace(original.Id, request)).Result.Should().BeOfType<BadRequestObjectResult>();
 
-        result.Result.Should().BeOfType<CreatedAtActionResult>();
-        (await db.Spaces.SingleAsync()).Slug.Should().Be(new string('a', 119));
+        db.ChangeTracker.HasChanges().Should().BeFalse();
+        db.ChangeTracker.Clear();
+        var saved = await db.Spaces.SingleAsync();
+        saved.Name.Should().Be("Original Hall");
+        saved.Slug.Should().Be("original-hall");
+        saved.UpdatedAt.Should().Be(updatedAt);
     }
 
     [Theory]
@@ -197,7 +217,7 @@ public class AdminSpacesControllerTests
     [InlineData("Hall", "north_hall")]
     [InlineData("Hall", "north/hall")]
     [InlineData("Hall", "háll")]
-    public async Task Create_and_update_reject_invalid_identity_without_changes(string name, string? slug)
+    public async Task Create_and_update_reject_invalid_identity_without_changes(string name, string slug)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var original = CreateSpace("Original", "original");
@@ -216,14 +236,14 @@ public class AdminSpacesControllerTests
     }
 
     [Fact]
-    public async Task Create_rejects_a_name_without_an_automatic_slug()
+    public async Task Create_accepts_an_explicit_slug_independent_of_the_name()
     {
         using var db = TestDbContextFactory.CreateInMemory();
 
-        var result = await new AdminSpacesController(db).CreateSpace(new SaveSpaceRequest { Name = "???" });
+        var result = await new AdminSpacesController(db).CreateSpace(new SaveSpaceRequest { Name = "???", Slug = "custom-location" });
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
-        (await db.Spaces.AnyAsync()).Should().BeFalse();
+        result.Result.Should().BeOfType<CreatedAtActionResult>();
+        (await db.Spaces.SingleAsync()).Slug.Should().Be("custom-location");
     }
 
     [Theory]
@@ -275,7 +295,7 @@ public class AdminSpacesControllerTests
         var response = ReadOk(await new AdminSpacesController(db).UpdateSpace(original.Id,
             new SaveSpaceRequest
             {
-                Name = "  New Hall  ", Description = "  Updated description  ", Address = "  Updated address  ",
+                Name = "  New Hall  ", Slug = original.Slug, Description = "  Updated description  ", Address = "  Updated address  ",
                 IsOfficialFacility = false, IsActive = true, ReferenceNumber = "  67890  ",
             }));
 
@@ -344,7 +364,7 @@ public class AdminSpacesControllerTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public async Task Update_clears_blank_optional_fields_and_preserves_an_omitted_slug(string? value)
+    public async Task Update_clears_blank_optional_fields_with_the_explicit_existing_slug(string? value)
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var space = CreateSpace("Hall", "hall");
@@ -357,7 +377,7 @@ public class AdminSpacesControllerTests
 
         var response = ReadOk(await new AdminSpacesController(db).UpdateSpace(space.Id, new SaveSpaceRequest
         {
-            Name = "???", Description = value, Address = value, ReferenceNumber = value,
+            Name = "???", Slug = space.Slug, Description = value, Address = value, ReferenceNumber = value,
             IsOfficialFacility = false, IsActive = false,
         }));
 
@@ -390,7 +410,7 @@ public class AdminSpacesControllerTests
         var controller = new AdminSpacesController(db);
         var request = new SaveSpaceRequest
         {
-            Name = "Replacement", IsOfficialFacility = true, ReferenceNumber = "  FAC-123  ",
+            Name = "Replacement", Slug = "replacement", IsOfficialFacility = true, ReferenceNumber = "  FAC-123  ",
         };
 
         var conflict = ReadConflict(await controller.CreateSpace(request));
@@ -399,7 +419,10 @@ public class AdminSpacesControllerTests
         conflict.Detail.Should().Contain("reference number");
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(conflict));
         json.RootElement.GetProperty("code").GetString().Should().Be("duplicate_reference_number");
-        ReadConflict(await controller.UpdateSpace(original.Id, request)).Extensions["code"]
+        ReadConflict(await controller.UpdateSpace(original.Id, new SaveSpaceRequest
+        {
+            Name = request.Name, Slug = original.Slug, IsOfficialFacility = true, ReferenceNumber = request.ReferenceNumber,
+        })).Extensions["code"]
             .Should().Be("duplicate_reference_number");
 
         db.ChangeTracker.HasChanges().Should().BeFalse();
@@ -420,7 +443,7 @@ public class AdminSpacesControllerTests
 
         var result = await controller.CreateSpace(new SaveSpaceRequest
         {
-            Name = "Unofficial Space", ReferenceNumber = "  FAC-123  ",
+            Name = "Unofficial Space", Slug = "unofficial-space", ReferenceNumber = "  FAC-123  ",
         });
         var response = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject.Value
             .Should().BeOfType<SpaceResponse>().Subject;
@@ -428,7 +451,7 @@ public class AdminSpacesControllerTests
         response.ReferenceNumber.Should().Be("FAC-123");
         ReadOk(await controller.UpdateSpace(official.Id, new SaveSpaceRequest
         {
-            Name = "Renamed Official Hall", IsOfficialFacility = true, ReferenceNumber = "FAC-123",
+            Name = "Renamed Official Hall", Slug = official.Slug, IsOfficialFacility = true, ReferenceNumber = "FAC-123",
         })).ReferenceNumber.Should().Be("FAC-123");
     }
 
@@ -449,7 +472,8 @@ public class AdminSpacesControllerTests
         var controller = new AdminSpacesController(db);
         var request = new SaveSpaceRequest
         {
-            Name = "Candidate Hall", IsOfficialFacility = true, ReferenceNumber = "FAC-123", IsActive = false,
+            Name = "Candidate Hall", Slug = update ? original.Slug : "candidate-hall",
+            IsOfficialFacility = true, ReferenceNumber = "FAC-123", IsActive = false,
         };
 
         var result = update

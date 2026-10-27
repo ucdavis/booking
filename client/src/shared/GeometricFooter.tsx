@@ -1,3 +1,5 @@
+import packageInfo from '../../package.json' with { type: 'json' };
+
 export function GeometricFooter() {
   return (
     <footer
@@ -58,9 +60,14 @@ export function GeometricFooter() {
             src="/caes.svg"
           />
         </a>
-        <p className="text-sm text-base-content">
-          © 2026–2027 Regents of the University of California
-        </p>
+        <div className="space-y-1">
+          <p className="text-sm text-base-content">
+            © 2026–2027 Regents of the University of California
+          </p>
+          <p className="text-xs text-base-content/65">
+            Version {packageInfo.version}
+          </p>
+        </div>
       </div>
 
       <svg

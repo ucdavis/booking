@@ -167,27 +167,54 @@ public class TeamResourcesControllerTests
     }
 
     [Theory]
-    [InlineData("  Caf\u00e9 / Meeting \u2460  ", "cafe-meeting-1")]
-    [InlineData("Room---A & B", "room-a-b")]
-    public async Task Creation_suggests_a_lowercase_hyphenated_slug_from_the_name(string name, string expected)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Missing_or_null_slugs_are_rejected_on_create_and_update(bool omitSlug)
     {
         using var db = TestDbContextFactory.CreateInMemory();
-        var (team, _) = await SeedTeam(db);
+        var (team, user) = await SeedTeam(db);
         var space = await SeedSpace(db, team);
         var template = Template("Template", team.Id);
         db.ResourceTemplates.Add(template);
         await db.SaveChangesAsync();
+        var controller = CreateController(db);
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
 
-        var response = ReadCreated(await CreateController(db).CreateResource(team.Slug,
-            Request(space.Id, template.Id, name: name)));
+        SaveResourceRequest WithoutSlug(SaveResourceRequest request)
+        {
+            var json = JsonSerializer.SerializeToNode(request, options)!.AsObject();
+            if (omitSlug)
+            {
+                json.Remove("slug");
+            }
+            else
+            {
+                json["slug"] = null;
+            }
+            return json.Deserialize<SaveResourceRequest>(options)!;
+        }
 
-        response.Slug.Should().Be(expected);
+        (await controller.CreateResource(team.Slug, WithoutSlug(Request(space.Id, template.Id))))
+            .Result.Should().BeOfType<BadRequestObjectResult>().Subject.Value.Should().Be(
+                "Enter a slug of no more than 120 lowercase letters, numbers, and single hyphens between words.");
+        (await db.Resources.AnyAsync()).Should().BeFalse();
+        (await db.ResourceConfigs.AnyAsync()).Should().BeFalse();
+
+        var (resource, config) = await SeedResource(db, team, space, user);
+        (await controller.UpdateResource(team.Slug, resource.Id,
+            WithoutSlug(Request(saved: resource, config: config, name: "Changed name"))))
+            .Result.Should().BeOfType<BadRequestObjectResult>().Subject.Value.Should().Be(
+                "Enter a slug of no more than 120 lowercase letters, numbers, and single hyphens between words.");
         db.ChangeTracker.Clear();
-        (await db.Resources.SingleAsync()).Slug.Should().Be(expected);
+        var unchanged = await db.Resources.SingleAsync();
+        unchanged.Slug.Should().Be(resource.Slug);
+        unchanged.Name.Should().Be(resource.Name);
+        unchanged.UpdatedAt.Should().Be(SavedAt);
+        (await db.ResourceConfigs.SingleAsync()).Id.Should().Be(config.Id);
     }
 
     [Fact]
-    public async Task Creation_limits_generated_slugs_to_120_characters_and_accepts_a_custom_slug()
+    public async Task Creation_uses_the_explicit_slug_and_accepts_120_characters()
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var (team, _) = await SeedTeam(db);
@@ -198,15 +225,15 @@ public class TeamResourcesControllerTests
         var controller = CreateController(db);
 
         ReadCreated(await controller.CreateResource(team.Slug,
-            Request(space.Id, template.Id, name: new string('A', 119) + " room")))
-            .Slug.Should().Be(new string('a', 119));
+            Request(space.Id, template.Id, name: "Meeting room", slug: " selected-room-1 ")))
+            .Slug.Should().Be("selected-room-1");
         ReadCreated(await controller.CreateResource(team.Slug,
             Request(space.Id, template.Id, name: "Custom room", slug: new string('b', 120))))
             .Slug.Should().Be(new string('b', 120));
     }
 
     [Fact]
-    public async Task Names_without_slug_characters_require_a_custom_slug()
+    public async Task Names_without_slug_characters_accept_an_explicit_slug()
     {
         using var db = TestDbContextFactory.CreateInMemory();
         var (team, _) = await SeedTeam(db);
@@ -216,9 +243,6 @@ public class TeamResourcesControllerTests
         await db.SaveChangesAsync();
         var controller = CreateController(db);
 
-        (await controller.CreateResource(team.Slug, Request(space.Id, template.Id, name: "---")))
-            .Result.Should().BeOfType<BadRequestObjectResult>();
-        (await db.Resources.AnyAsync()).Should().BeFalse();
         ReadCreated(await controller.CreateResource(team.Slug,
             Request(space.Id, template.Id, name: "---", slug: "custom-room-1"))).Slug.Should().Be("custom-room-1");
     }
@@ -243,6 +267,7 @@ public class TeamResourcesControllerTests
 
     [Theory]
     [InlineData("")]
+    [InlineData("   ")]
     [InlineData("Meeting-room")]
     [InlineData("meeting room")]
     [InlineData("meeting_room")]
@@ -331,8 +356,8 @@ public class TeamResourcesControllerTests
         }
         else
         {
-            // An automatically suggested slug has the same team-wide uniqueness requirement.
-            result = await controller.CreateResource(team.Slug, Request(space.Id, template.Id, name: "Existing room"));
+            result = await controller.CreateResource(team.Slug,
+                Request(space.Id, template.Id, name: "Existing room", slug: "existing-room"));
             (await db.Resources.CountAsync()).Should().Be(1);
         }
 
@@ -726,7 +751,7 @@ public class TeamResourcesControllerTests
         var (resource, config) = await SeedResource(db, team, space, user);
         var request = new SaveResourceRequest
         {
-            Name = "Changed", Category = "room",
+            Name = "Changed", Slug = resource.Slug, Category = "room",
             UpdatedAt = missingValue == "timestamp" ? null : resource.UpdatedAt,
             ExpectedConfigId = missingValue == "configuration" ? null : config.Id,
         };
@@ -835,7 +860,7 @@ public class TeamResourcesControllerTests
         var originalSlug = child.Slug;
         var request = new SaveResourceRequest
         {
-            Name = "Renamed child", Category = child.Category, Capacity = child.Capacity,
+            Name = "Renamed child", Slug = child.Slug, Category = child.Category, Capacity = child.Capacity,
             PublicAccess = "details", UpdatedAt = child.UpdatedAt, ExpectedConfigId = config.Id,
         };
 
@@ -966,7 +991,8 @@ public class TeamResourcesControllerTests
         Resource? saved = null, ResourceConfig? config = null, string name = "Meeting room", bool isActive = true,
         string? formJson = null, string? detailsJson = null, string? slug = null) => new()
     {
-        Name = name, Slug = slug, Category = saved?.Category ?? "room", Description = saved?.Description,
+        Name = name, Slug = slug ?? saved?.Slug ?? "meeting-room",
+        Category = saved?.Category ?? "room", Description = saved?.Description,
         Capacity = saved?.Capacity, IsActive = isActive, IsReservable = saved?.IsReservable ?? true,
         ApprovalMode = saved?.ApprovalMode ?? "manual", FollowTeamCalendar = saved?.FollowTeamCalendar ?? true,
         PublicAccess = saved == null ? "availability" : saved.PublicAccess,
