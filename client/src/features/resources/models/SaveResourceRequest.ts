@@ -16,6 +16,7 @@ export interface SaveResourceRequest {
   isReservable: boolean;
   name: string;
   publicAccess: ResourceDetail['publicAccess'];
+  slug: string;
   sourceTemplateId?: number | null;
   spaceId: number;
   updatedAt?: string;

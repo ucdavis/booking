@@ -149,7 +149,7 @@ public class TeamResourcesControllerTests
         resource.SpaceId.Should().Be(space.Id);
         resource.ParentResourceId.Should().BeNull();
         resource.NameKey.Should().Be("MEETING ROOM");
-        resource.Slug.Should().NotBeNullOrWhiteSpace();
+        resource.Slug.Should().Be("meeting-room");
         resource.IsActive.Should().BeTrue();
         resource.UpdatedByUserId.Should().Be(user.Id);
         (await db.Spaces.CountAsync()).Should().Be(1);
@@ -164,6 +164,282 @@ public class TeamResourcesControllerTests
         config.CreatedByUserId.Should().Be(user.Id);
         config.PublishedByUserId.Should().Be(user.Id);
         config.PublishedAt.Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Missing_or_null_slugs_are_rejected_on_create_and_update(bool omitSlug)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var (team, user) = await SeedTeam(db);
+        var space = await SeedSpace(db, team);
+        var template = Template("Template", team.Id);
+        db.ResourceTemplates.Add(template);
+        await db.SaveChangesAsync();
+        var controller = CreateController(db);
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+
+        SaveResourceRequest WithoutSlug(SaveResourceRequest request)
+        {
+            var json = JsonSerializer.SerializeToNode(request, options)!.AsObject();
+            if (omitSlug)
+            {
+                json.Remove("slug");
+            }
+            else
+            {
+                json["slug"] = null;
+            }
+            return json.Deserialize<SaveResourceRequest>(options)!;
+        }
+
+        (await controller.CreateResource(team.Slug, WithoutSlug(Request(space.Id, template.Id))))
+            .Result.Should().BeOfType<BadRequestObjectResult>().Subject.Value.Should().Be(
+                "Enter a slug of no more than 120 lowercase letters, numbers, and single hyphens between words.");
+        (await db.Resources.AnyAsync()).Should().BeFalse();
+        (await db.ResourceConfigs.AnyAsync()).Should().BeFalse();
+
+        var (resource, config) = await SeedResource(db, team, space, user);
+        (await controller.UpdateResource(team.Slug, resource.Id,
+            WithoutSlug(Request(saved: resource, config: config, name: "Changed name"))))
+            .Result.Should().BeOfType<BadRequestObjectResult>().Subject.Value.Should().Be(
+                "Enter a slug of no more than 120 lowercase letters, numbers, and single hyphens between words.");
+        db.ChangeTracker.Clear();
+        var unchanged = await db.Resources.SingleAsync();
+        unchanged.Slug.Should().Be(resource.Slug);
+        unchanged.Name.Should().Be(resource.Name);
+        unchanged.UpdatedAt.Should().Be(SavedAt);
+        (await db.ResourceConfigs.SingleAsync()).Id.Should().Be(config.Id);
+    }
+
+    [Fact]
+    public async Task Creation_uses_the_explicit_slug_and_accepts_120_characters()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var (team, _) = await SeedTeam(db);
+        var space = await SeedSpace(db, team);
+        var template = Template("Template", team.Id);
+        db.ResourceTemplates.Add(template);
+        await db.SaveChangesAsync();
+        var controller = CreateController(db);
+
+        ReadCreated(await controller.CreateResource(team.Slug,
+            Request(space.Id, template.Id, name: "Meeting room", slug: " selected-room-1 ")))
+            .Slug.Should().Be("selected-room-1");
+        ReadCreated(await controller.CreateResource(team.Slug,
+            Request(space.Id, template.Id, name: "Custom room", slug: new string('b', 120))))
+            .Slug.Should().Be(new string('b', 120));
+    }
+
+    [Fact]
+    public async Task Names_without_slug_characters_accept_an_explicit_slug()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var (team, _) = await SeedTeam(db);
+        var space = await SeedSpace(db, team);
+        var template = Template("Template", team.Id);
+        db.ResourceTemplates.Add(template);
+        await db.SaveChangesAsync();
+        var controller = CreateController(db);
+
+        ReadCreated(await controller.CreateResource(team.Slug,
+            Request(space.Id, template.Id, name: "---", slug: "custom-room-1"))).Slug.Should().Be("custom-room-1");
+    }
+
+    [Theory]
+    [InlineData("custom-room-1")]
+    [InlineData("meeting-room")]
+    public async Task Updates_accept_changed_or_unchanged_slugs_without_publishing_configuration(string slug)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var (team, user) = await SeedTeam(db);
+        var space = await SeedSpace(db, team);
+        var (resource, config) = await SeedResource(db, team, space, user);
+
+        ReadOk(await CreateController(db).UpdateResource(team.Slug, resource.Id,
+            Request(saved: resource, config: config, slug: slug))).Slug.Should().Be(slug);
+
+        db.ChangeTracker.Clear();
+        (await db.Resources.SingleAsync()).Slug.Should().Be(slug);
+        (await db.ResourceConfigs.SingleAsync()).Id.Should().Be(config.Id);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("Meeting-room")]
+    [InlineData("meeting room")]
+    [InlineData("meeting_room")]
+    [InlineData("meeting/room")]
+    [InlineData("meeting--room")]
+    [InlineData("-meeting")]
+    [InlineData("meeting-")]
+    [InlineData("caf\u00e9")]
+    public async Task Invalid_custom_slugs_are_rejected_on_create_and_update(string slug)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var (team, user) = await SeedTeam(db);
+        var space = await SeedSpace(db, team);
+        var template = Template("Template", team.Id);
+        db.ResourceTemplates.Add(template);
+        await db.SaveChangesAsync();
+        var controller = CreateController(db);
+
+        (await controller.CreateResource(team.Slug, Request(space.Id, template.Id, slug: slug)))
+            .Result.Should().BeOfType<BadRequestObjectResult>();
+        (await db.Resources.AnyAsync()).Should().BeFalse();
+        var (resource, config) = await SeedResource(db, team, space, user);
+        (await controller.UpdateResource(team.Slug, resource.Id,
+            Request(saved: resource, config: config, name: "Changed name", slug: slug)))
+            .Result.Should().BeOfType<BadRequestObjectResult>();
+        db.ChangeTracker.Clear();
+        var saved = await db.Resources.SingleAsync();
+        saved.Slug.Should().Be("meeting-room");
+        saved.Name.Should().Be("Meeting room");
+        (await db.ResourceConfigs.CountAsync()).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Slugs_longer_than_120_characters_are_rejected(bool update)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var (team, user) = await SeedTeam(db);
+        var space = await SeedSpace(db, team);
+        var template = Template("Template", team.Id);
+        db.ResourceTemplates.Add(template);
+        await db.SaveChangesAsync();
+        var (resource, config) = await SeedResource(db, team, space, user);
+        var controller = CreateController(db);
+        var request = update
+            ? Request(saved: resource, config: config, slug: new string('a', 121))
+            : Request(space.Id, template.Id, name: "Another room", slug: new string('a', 121));
+
+        var result = update
+            ? await controller.UpdateResource(team.Slug, resource.Id, request)
+            : await controller.CreateResource(team.Slug, request);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        db.ChangeTracker.Clear();
+        (await db.Resources.SingleAsync()).Slug.Should().Be("meeting-room");
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Team_slug_conflicts_include_other_locations_and_inactive_resources(bool update, bool isActive)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var (team, user) = await SeedTeam(db);
+        var space = await SeedSpace(db, team);
+        var otherSpace = await SeedSpace(db, team, "Other location");
+        var template = Template("Template", team.Id);
+        db.ResourceTemplates.Add(template);
+        await db.SaveChangesAsync();
+        await SeedResource(db, team, otherSpace, user, "Existing room", isActive: isActive);
+        var controller = CreateController(db);
+
+        ActionResult<ResourceDetailResponse> result;
+        if (update)
+        {
+            var (resource, config) = await SeedResource(db, team, space, user);
+            result = await controller.UpdateResource(team.Slug, resource.Id,
+                Request(saved: resource, config: config, name: "Changed room", slug: "existing-room"));
+            db.ChangeTracker.Clear();
+            var unchanged = await db.Resources.SingleAsync(value => value.Id == resource.Id);
+            unchanged.Slug.Should().Be("meeting-room");
+            unchanged.Name.Should().Be("Meeting room");
+        }
+        else
+        {
+            result = await controller.CreateResource(team.Slug,
+                Request(space.Id, template.Id, name: "Existing room", slug: "existing-room"));
+            (await db.Resources.CountAsync()).Should().Be(1);
+        }
+
+        result.Result.Should().BeOfType<ConflictObjectResult>().Subject.Value.Should().Be(
+            "A resource with that slug already exists in this team, including inactive resources. Choose another slug.");
+        (await db.ResourceConfigs.CountAsync()).Should().Be(update ? 2 : 1);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Different_teams_at_different_locations_can_reuse_a_slug(bool update)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var (team, user) = await SeedTeam(db);
+        var space = await SeedSpace(db, team);
+        var otherTeam = new Team { Name = "Other", Slug = "other" };
+        var template = Template("Template", team.Id);
+        db.Teams.Add(otherTeam);
+        db.ResourceTemplates.Add(template);
+        await db.SaveChangesAsync();
+        var otherSpace = await SeedSpace(db, otherTeam, "Other location");
+        await SeedResource(db, otherTeam, otherSpace, user, "Existing room");
+        var controller = CreateController(db);
+
+        if (update)
+        {
+            var (resource, config) = await SeedResource(db, team, space, user);
+            ReadOk(await controller.UpdateResource(team.Slug, resource.Id,
+                Request(saved: resource, config: config, slug: "existing-room"))).Slug.Should().Be("existing-room");
+        }
+        else
+        {
+            ReadCreated(await controller.CreateResource(team.Slug,
+                Request(space.Id, template.Id, name: "New room", slug: "existing-room"))).Slug.Should().Be("existing-room");
+        }
+
+        db.ChangeTracker.Clear();
+        (await db.Resources.CountAsync(resource => resource.Slug == "existing-room")).Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Different_teams_sharing_a_location_get_a_clear_slug_conflict(bool update, bool isActive)
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var (team, user) = await SeedTeam(db);
+        var space = await SeedSpace(db, team);
+        var otherTeam = new Team { Name = "Other", Slug = "other" };
+        var template = Template("Template", team.Id);
+        db.Teams.Add(otherTeam);
+        db.ResourceTemplates.Add(template);
+        await db.SaveChangesAsync();
+        await SeedResource(db, otherTeam, space, user, "Existing room", isActive: isActive);
+        var controller = CreateController(db);
+
+        ActionResult<ResourceDetailResponse> result;
+        if (update)
+        {
+            var (resource, config) = await SeedResource(db, team, space, user);
+            result = await controller.UpdateResource(team.Slug, resource.Id,
+                Request(saved: resource, config: config, name: "Changed room", slug: "existing-room"));
+            db.ChangeTracker.Clear();
+            var unchanged = await db.Resources.SingleAsync(value => value.Id == resource.Id);
+            unchanged.Slug.Should().Be("meeting-room");
+            unchanged.Name.Should().Be("Meeting room");
+            unchanged.UpdatedAt.Should().Be(SavedAt);
+        }
+        else
+        {
+            result = await controller.CreateResource(team.Slug,
+                Request(space.Id, template.Id, name: "New room", slug: "existing-room"));
+            (await db.Resources.CountAsync()).Should().Be(1);
+        }
+
+        result.Result.Should().BeOfType<ConflictObjectResult>().Subject.Value.Should().Be(
+            "A resource with that slug already exists at this location, including inactive resources. Choose another slug.");
+        (await db.ResourceConfigs.CountAsync()).Should().Be(update ? 2 : 1);
+        (await db.Resources.SingleAsync(resource => resource.TeamId == otherTeam.Id)).Slug.Should().Be("existing-room");
     }
 
     [Theory]
@@ -475,7 +751,7 @@ public class TeamResourcesControllerTests
         var (resource, config) = await SeedResource(db, team, space, user);
         var request = new SaveResourceRequest
         {
-            Name = "Changed", Category = "room",
+            Name = "Changed", Slug = resource.Slug, Category = "room",
             UpdatedAt = missingValue == "timestamp" ? null : resource.UpdatedAt,
             ExpectedConfigId = missingValue == "configuration" ? null : config.Id,
         };
@@ -584,7 +860,7 @@ public class TeamResourcesControllerTests
         var originalSlug = child.Slug;
         var request = new SaveResourceRequest
         {
-            Name = "Renamed child", Category = child.Category, Capacity = child.Capacity,
+            Name = "Renamed child", Slug = child.Slug, Category = child.Category, Capacity = child.Capacity,
             PublicAccess = "details", UpdatedAt = child.UpdatedAt, ExpectedConfigId = config.Id,
         };
 
@@ -713,9 +989,10 @@ public class TeamResourcesControllerTests
 
     private static SaveResourceRequest Request(int? spaceId = null, int? templateId = null,
         Resource? saved = null, ResourceConfig? config = null, string name = "Meeting room", bool isActive = true,
-        string? formJson = null, string? detailsJson = null) => new()
+        string? formJson = null, string? detailsJson = null, string? slug = null) => new()
     {
-        Name = name, Category = saved?.Category ?? "room", Description = saved?.Description,
+        Name = name, Slug = slug ?? saved?.Slug ?? "meeting-room",
+        Category = saved?.Category ?? "room", Description = saved?.Description,
         Capacity = saved?.Capacity, IsActive = isActive, IsReservable = saved?.IsReservable ?? true,
         ApprovalMode = saved?.ApprovalMode ?? "manual", FollowTeamCalendar = saved?.FollowTeamCalendar ?? true,
         PublicAccess = saved == null ? "availability" : saved.PublicAccess,

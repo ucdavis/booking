@@ -352,6 +352,7 @@ describe('team resources', () => {
     expect(requests[0]).toMatchObject({
       expectedConfigId: 10,
       name: 'My unsaved edit',
+      slug: 'microscope',
       updatedAt: resource().updatedAt,
     });
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -412,6 +413,9 @@ describe('team resources', () => {
       await screen.findByRole('textbox', { name: 'Resource name' }),
       { target: { value: 'New microscope' } }
     );
+    expect(screen.getByRole('textbox', { name: 'Resource slug' })).toHaveValue(
+      'new-microscope'
+    );
     const category = screen.getByRole('combobox', { name: 'Category' });
     for (const name of ['Room', 'Bench', 'Equipment', 'Other']) {
       expect(
@@ -451,6 +455,7 @@ describe('team resources', () => {
     expect(requests[0]).toMatchObject({
       category: 'Equipment',
       name: 'New microscope',
+      slug: 'new-microscope',
       sourceTemplateId: 1,
       spaceId: 2,
     });
@@ -464,6 +469,127 @@ describe('team resources', () => {
     expect(
       await screen.findByRole('textbox', { name: 'Resource name' })
     ).toHaveValue('New microscope');
+  });
+
+  it('suggests a normalized resource slug until it is customized and retains it after a conflict', async () => {
+    mockAccess();
+    const saved = mockResources([]);
+    const requests: SaveResourceRequest[] = [];
+    server.use(
+      http.post('/api/teams/:teamSlug/resources', async ({ request }) => {
+        const body = (await request.json()) as SaveResourceRequest;
+        requests.push(body);
+        if (requests.length === 1) {
+          return HttpResponse.json(
+            'This resource slug is already in use by another resource in this team.',
+            { status: 409 }
+          );
+        }
+        const created = resource({ ...body, id: 2 });
+        saved.set(created.id, created);
+        return HttpResponse.json(created, { status: 201 });
+      })
+    );
+    const rendered = renderRoute({ initialPath: `${listPath}/new` });
+    cleanup = rendered.cleanup;
+    fireEvent.change(
+      await screen.findByRole('combobox', { name: 'Resource template' }),
+      { target: { value: '1' } }
+    );
+    const name = await screen.findByRole('textbox', { name: 'Resource name' });
+    const slug = screen.getByRole('textbox', { name: 'Resource slug' });
+    fireEvent.change(name, { target: { value: '  Café Microscope / #2  ' } });
+    expect(slug).toHaveValue('cafe-microscope-2');
+    fireEvent.change(name, { target: { value: 'Café Microscope / #3' } });
+    expect(slug).toHaveValue('cafe-microscope-3');
+    fireEvent.change(slug, { target: { value: 'research-scope' } });
+    fireEvent.change(name, { target: { value: 'Research microscope' } });
+    expect(slug).toHaveValue('research-scope');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Category' }), {
+      target: { value: 'Equipment' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create resource' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'This resource slug is already in use by another resource in this team.'
+    );
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      name: 'Research microscope',
+      slug: 'research-scope',
+    });
+    expect(name).toHaveValue('Research microscope');
+    expect(slug).toHaveValue('research-scope');
+    await waitFor(() => expect(slug).toBeEnabled());
+    fireEvent.change(slug, { target: { value: 'research-scope-2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create resource' }));
+    await waitFor(() => expect(requests).toHaveLength(2));
+    expect(requests[1]).toMatchObject({
+      name: 'Research microscope',
+      slug: 'research-scope-2',
+    });
+    await waitFor(() =>
+      expect(rendered.router.state.location.pathname).toBe(`${listPath}/2`)
+    );
+    expect(
+      await screen.findByRole('textbox', { name: 'Resource slug' })
+    ).toHaveValue('research-scope-2');
+  });
+
+  it('preserves an existing slug when renaming and allows an explicit slug change', async () => {
+    mockAccess();
+    const saved = mockResources();
+    const requests: SaveResourceRequest[] = [];
+    server.use(
+      http.put('/api/teams/:teamSlug/resources/:id', async ({ request }) => {
+        const body = (await request.json()) as SaveResourceRequest;
+        requests.push(body);
+        const updated = resource({ ...body });
+        saved.set(updated.id, updated);
+        return HttpResponse.json(updated);
+      })
+    );
+    ({ cleanup } = renderRoute({ initialPath: `${listPath}/1` }));
+    const name = await screen.findByRole('textbox', { name: 'Resource name' });
+    const slug = screen.getByRole('textbox', { name: 'Resource slug' });
+    expect(slug).toHaveValue('microscope');
+    fireEvent.change(name, { target: { value: 'Renamed microscope' } });
+    expect(slug).toHaveValue('microscope');
+    fireEvent.change(slug, { target: { value: 'imaging-scope-2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]).toMatchObject({
+      expectedConfigId: 10,
+      name: 'Renamed microscope',
+      slug: 'imaging-scope-2',
+      updatedAt: resource().updatedAt,
+    });
+    await waitFor(() => expect(slug).toBeEnabled());
+    expect(slug).toHaveValue('imaging-scope-2');
+  });
+
+  it.each([
+    '',
+    'Microscope',
+    'lab scope',
+    'lab_scope',
+    'lab@scope',
+    '-microscope',
+    'micro--scope',
+    'microscope-',
+    'a'.repeat(121),
+  ])('rejects invalid resource slug %j before saving', async (value) => {
+    mockAccess();
+    mockResources();
+    const update = vi.fn(() => HttpResponse.json(resource()));
+    server.use(http.put('/api/teams/:teamSlug/resources/:id', update));
+    ({ cleanup } = renderRoute({ initialPath: `${listPath}/1` }));
+    const slug = await screen.findByRole('textbox', { name: 'Resource slug' });
+    fireEvent.change(slug, { target: { value } });
+    fireEvent.blur(slug);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(slug).toHaveAttribute('aria-invalid', 'true'));
+    expect(slug).toHaveAccessibleDescription(/slug|lowercase|120/);
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('requires valid resource fields before creating a resource', async () => {

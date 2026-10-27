@@ -1,5 +1,4 @@
 using System.Data;
-using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -59,7 +58,7 @@ public sealed class AdminSpacesController(AppDbContext dbContext) : ControllerBa
     public async Task<ActionResult<SpaceResponse>> CreateSpace(
         [FromBody] SaveSpaceRequest request, CancellationToken cancellationToken = default)
     {
-        var error = ValidateRequest(request, isNew: true, out var name, out var slug);
+        var error = ValidateRequest(request, out var name, out var slug);
         if (error != null)
         {
             return BadRequest(error);
@@ -98,7 +97,7 @@ public sealed class AdminSpacesController(AppDbContext dbContext) : ControllerBa
     public async Task<ActionResult<SpaceResponse>> UpdateSpace(
         int id, [FromBody] SaveSpaceRequest request, CancellationToken cancellationToken = default)
     {
-        var error = ValidateRequest(request, isNew: false, out var name, out _);
+        var error = ValidateRequest(request, out var name, out _);
         if (error != null)
         {
             return BadRequest(error);
@@ -109,7 +108,7 @@ public sealed class AdminSpacesController(AppDbContext dbContext) : ControllerBa
         {
             return NotFound("That space could not be found.");
         }
-        if (request.Slug != null && request.Slug != space.Slug)
+        if (request.Slug != space.Slug)
         {
             return BadRequest("A space's slug cannot be changed after it is created.");
         }
@@ -331,7 +330,7 @@ public sealed class AdminSpacesController(AppDbContext dbContext) : ControllerBa
             Extensions = { ["code"] = code },
         });
 
-    private static string? ValidateRequest(SaveSpaceRequest request, bool isNew, out string name, out string slug)
+    private static string? ValidateRequest(SaveSpaceRequest request, out string name, out string slug)
     {
         name = request.Name?.Trim() ?? string.Empty;
         slug = request.Slug?.Trim() ?? string.Empty;
@@ -353,26 +352,6 @@ public sealed class AdminSpacesController(AppDbContext dbContext) : ControllerBa
         {
             return "A reference number is required for an official facility.";
         }
-        if (!isNew)
-        {
-            return null;
-        }
-
-        if (request.Slug == null)
-        {
-            try
-            {
-                var normalized = Regex.Replace(name.Normalize(NormalizationForm.FormKD), @"[\u0300-\u036f]", string.Empty)
-                    .ToLowerInvariant();
-                slug = Regex.Replace(normalized, "[^a-z0-9]+", "-").Trim('-');
-                slug = slug[..Math.Min(slug.Length, 120)].TrimEnd('-');
-            }
-            catch (ArgumentException)
-            {
-                return "Enter a valid space name.";
-            }
-        }
-
         if (slug.Length == 0 || slug.Length > 120 ||
             !Regex.IsMatch(slug, @"\A[a-z0-9]+(?:-[a-z0-9]+)*\z", RegexOptions.CultureInvariant))
         {

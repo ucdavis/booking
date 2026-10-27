@@ -33,6 +33,17 @@ import { useAppForm } from '@/shared/forms/formContext.tsx';
 
 const standardCategories = ['Room', 'Bench', 'Equipment'];
 
+function suggestSlug(name: string) {
+  return name
+    .normalize('NFKD')
+    .replaceAll(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replaceAll(/[^\da-z]+/g, '-')
+    .replaceAll(/^-+|-+$/g, '')
+    .slice(0, 120)
+    .replaceAll(/-+$/g, '');
+}
+
 function readConfiguration(
   resource?: ResourceDetail,
   template?: ResourceTemplate
@@ -100,6 +111,7 @@ function resourceFormValues(
     name: resource?.name ?? '',
     publicAccess: resource?.publicAccess ?? 'availability',
     resourceDefaults: resourceDefaultsFormValues(configuration.defaults),
+    slug: resource?.slug ?? '',
     sourceTemplateId: '',
     spaceId: resource
       ? String(resource.spaceId)
@@ -134,6 +146,7 @@ export function ResourceEditor({
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const saveFlowRef = useRef(false);
+  const slugEditedRef = useRef(Boolean(resource));
   const activeTemplates = options.templates.filter(
     (template) => template.isActive
   );
@@ -154,6 +167,14 @@ export function ResourceEditor({
     }
     if (!value.name.trim() || value.name.trim().length > 200) {
       fields.name = 'Enter a resource name of 200 characters or fewer.';
+    }
+    if (!value.slug) {
+      fields.slug = 'Enter a resource slug.';
+    } else if (value.slug.length > 120) {
+      fields.slug = 'Use 120 characters or fewer.';
+    } else if (!/^[\da-z]+(?:-[\da-z]+)*$/.test(value.slug)) {
+      fields.slug =
+        'Use lowercase letters, numbers, and single hyphens between words.';
     }
     if (value.category === 'Other') {
       if (
@@ -265,6 +286,7 @@ export function ResourceEditor({
           name: value.name.trim(),
           publicAccess:
             baseline?.parentResourceId != null ? null : value.publicAccess,
+          slug: value.slug,
           spaceId: baseline?.spaceId ?? Number(value.spaceId),
           ...(baseline
             ? {
@@ -694,7 +716,16 @@ export function ResourceEditor({
                         selector={(state) => state.values.category}
                       >
                         {(category) => (
-                          <form.AppField name="name">
+                          <form.AppField
+                            listeners={{
+                              onChange: ({ value }) => {
+                                if (!baseline && !slugEditedRef.current) {
+                                  form.setFieldValue('slug', suggestSlug(value));
+                                }
+                              },
+                            }}
+                            name="name"
+                          >
                             {(field) => (
                               <field.TextField
                                 label="Resource name"
@@ -717,6 +748,47 @@ export function ResourceEditor({
                         )}
                       </form.AppField>
                     </div>
+                    <form.AppField name="slug">
+                      {(field) => {
+                        const hasError =
+                          field.state.meta.isTouched &&
+                          !field.state.meta.isValid;
+                        return (
+                          <FieldWrapper
+                            controlId="resource-slug"
+                            label="Resource slug"
+                          >
+                            <input
+                              aria-describedby={`resource-slug-help${hasError ? ' resource-slug-error' : ''}`}
+                              aria-invalid={hasError || undefined}
+                              autoCapitalize="none"
+                              autoComplete="off"
+                              className={`input input-bordered w-full ${hasError ? 'input-error' : ''}`}
+                              id="resource-slug"
+                              maxLength={120}
+                              name={field.name}
+                              onBlur={field.handleBlur}
+                              onChange={(event) => {
+                                slugEditedRef.current = true;
+                                field.handleChange(event.target.value);
+                              }}
+                              required
+                              spellCheck={false}
+                              type="text"
+                              value={field.state.value}
+                            />
+                            <p
+                              className="mt-2 text-sm text-base-content/65"
+                              id="resource-slug-help"
+                            >
+                              Use lowercase letters, numbers, and single hyphens
+                              between words. You can change the suggested slug.
+                              It must be unique within this team’s resources.
+                            </p>
+                          </FieldWrapper>
+                        );
+                      }}
+                    </form.AppField>
                     <form.Field name="description">
                       {(field) => {
                         const hasError =
