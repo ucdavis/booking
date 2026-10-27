@@ -10,11 +10,10 @@ import {
 import { TanStackRouterDevtoolsInProd } from '@tanstack/react-router-devtools';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 describe('router devtools', () => {
   it('renders the real panel and updates its pathname after navigation', async () => {
-    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     const rootRoute = createRootRoute({
       component: () => (
         <>
@@ -61,7 +60,6 @@ describe('router devtools', () => {
       expect(await within(pathname).findByText('/about')).toBeVisible();
     } finally {
       cleanup();
-      scrollTo.mockRestore();
     }
   });
 });
