@@ -11,6 +11,9 @@ public sealed class SaveResourceRequest
     [StringLength(200)]
     public string Name { get; init; } = string.Empty;
 
+    [StringLength(120)]
+    public string? Slug { get; init; }
+
     [Required]
     [StringLength(50)]
     public string Category { get; init; } = string.Empty;

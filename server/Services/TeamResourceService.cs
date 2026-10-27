@@ -16,6 +16,9 @@ namespace Server.Services;
 public sealed class TeamResourceService(AppDbContext dbContext)
 {
     private const string StaleMessage = "This resource has changed since you opened it. Reload it before saving again.";
+    private const string InvalidSlugMessage = "Enter a slug of no more than 120 lowercase letters, numbers, and single hyphens between words.";
+    private const string DuplicateSlugMessage = "A resource with that slug already exists in this team, including inactive resources. Choose another slug.";
+    private const string DuplicateLocationSlugMessage = "A resource with that slug already exists at this location, including inactive resources. Choose another slug.";
     private static readonly string[] Days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
     public Task<List<ResourceSummaryResponse>> GetResources(int teamId, CancellationToken cancellationToken)
@@ -69,7 +72,7 @@ public sealed class TeamResourceService(AppDbContext dbContext)
         }
 
         // Keep resource and configuration changes together. Serializable reads also
-        // protect location availability, sibling names and parent activation checks against concurrent saves.
+        // protect location availability, sibling names, team slugs and parent activation checks against concurrent saves.
         await using var transaction = dbContext.Database.IsRelational()
             ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
             : null;
@@ -86,11 +89,11 @@ public sealed class TeamResourceService(AppDbContext dbContext)
         }
         catch (DbUpdateException exception) when (IsConcurrentConflict(exception.InnerException))
         {
-            return (null, "Another resource or location was saved at the same time. Reload and check the name before trying again.", 409);
+            return (null, "Another resource or location was saved at the same time. Reload and check the name and slug before trying again.", 409);
         }
         catch (SqlException exception) when (IsConcurrentConflict(exception))
         {
-            return (null, "Another resource or location was saved at the same time. Reload before trying again.", 409);
+            return (null, "Another resource or location was saved at the same time. Reload and check the name and slug before trying again.", 409);
         }
     }
 
@@ -145,11 +148,25 @@ public sealed class TeamResourceService(AppDbContext dbContext)
             return (null, "A resource with that name already exists at this location, including inactive resources.", 409);
         }
 
+        var slug = request.Slug?.Trim() ?? CreateSlug(request.Name);
+        if (!ValidSlug(slug))
+        {
+            return (null, InvalidSlugMessage, 400);
+        }
+        if (await DuplicateSlug(teamId, slug, null, cancellationToken))
+        {
+            return (null, DuplicateSlugMessage, 409);
+        }
+        if (await DuplicateLocationSlug(space.Id, slug, null, cancellationToken))
+        {
+            return (null, DuplicateLocationSlugMessage, 409);
+        }
+
         var now = DateTimeOffset.UtcNow;
         var resource = new Resource
         {
             TeamId = teamId, SpaceId = space.Id, Name = request.Name.Trim(), NameKey = nameKey,
-            Category = request.Category.Trim(), Slug = CreateSlug(request.Name), CreatedAt = now,
+            Category = request.Category.Trim(), Slug = slug, CreatedAt = now,
         };
         ApplyMetadata(resource, request, nameKey, now, userId);
         dbContext.Resources.Add(resource);
@@ -194,6 +211,15 @@ public sealed class TeamResourceService(AppDbContext dbContext)
         if (await DuplicateName(resource.SpaceId, resource.ParentResourceId, nameKey, id, cancellationToken))
         {
             return (null, "A sibling resource with that name already exists at this location, including inactive resources.", 409);
+        }
+        var slug = request.Slug?.Trim() ?? resource.Slug;
+        if (await DuplicateSlug(teamId, slug, id, cancellationToken))
+        {
+            return (null, DuplicateSlugMessage, 409);
+        }
+        if (await DuplicateLocationSlug(resource.SpaceId, slug, id, cancellationToken))
+        {
+            return (null, DuplicateLocationSlugMessage, 409);
         }
         var error = await ValidateActivation(resource, request.IsActive, cancellationToken);
         if (error != null)
@@ -251,6 +277,7 @@ public sealed class TeamResourceService(AppDbContext dbContext)
             var updated = await original.ExecuteUpdateAsync(setters => setters
                 .SetProperty(current => current.Name, request.Name.Trim())
                 .SetProperty(current => current.NameKey, nameKey)
+                .SetProperty(current => current.Slug, slug)
                 .SetProperty(current => current.Category, request.Category.Trim())
                 .SetProperty(current => current.Description, TrimOptional(request.Description))
                 .SetProperty(current => current.Capacity, request.Capacity)
@@ -275,6 +302,7 @@ public sealed class TeamResourceService(AppDbContext dbContext)
                 return (null, StaleMessage, 409);
             }
             ApplyMetadata(tracked, request, nameKey, now, userId);
+            tracked.Slug = slug;
         }
         if (formChanged || detailsChanged)
         {
@@ -290,6 +318,7 @@ public sealed class TeamResourceService(AppDbContext dbContext)
         }
         await dbContext.SaveChangesAsync(cancellationToken);
         ApplyMetadata(resource, request, nameKey, now, userId);
+        resource.Slug = slug;
         return (ToResponse(resource, config, resource.Space), null, 200);
     }
 
@@ -300,6 +329,14 @@ public sealed class TeamResourceService(AppDbContext dbContext)
     private Task<bool> DuplicateName(int spaceId, int? parentId, string nameKey, int? exceptId, CancellationToken cancellationToken)
         => dbContext.Resources.AnyAsync(resource => resource.SpaceId == spaceId && resource.ParentResourceId == parentId &&
             resource.NameKey == nameKey && (exceptId == null || resource.Id != exceptId), cancellationToken);
+
+    private Task<bool> DuplicateSlug(int teamId, string slug, int? exceptId, CancellationToken cancellationToken)
+        => dbContext.Resources.AnyAsync(resource => resource.TeamId == teamId && resource.Slug == slug &&
+            (exceptId == null || resource.Id != exceptId), cancellationToken);
+
+    private Task<bool> DuplicateLocationSlug(int spaceId, string slug, int? exceptId, CancellationToken cancellationToken)
+        => dbContext.Resources.AnyAsync(resource => resource.SpaceId == spaceId && resource.Slug == slug &&
+            (exceptId == null || resource.Id != exceptId), cancellationToken);
 
     private async Task<string?> ValidateActivation(Resource resource, bool isActive, CancellationToken cancellationToken)
     {
@@ -350,6 +387,10 @@ public sealed class TeamResourceService(AppDbContext dbContext)
         if (nameKey.Length > 200 || nameKey.Any(char.IsControl))
         {
             return "Enter a resource name of no more than 200 characters without control characters.";
+        }
+        if (request.Slug != null && !ValidSlug(request.Slug.Trim()))
+        {
+            return InvalidSlugMessage;
         }
         if (string.IsNullOrWhiteSpace(request.Category) || request.Category.Trim().Length > 50)
         {
@@ -527,25 +568,15 @@ public sealed class TeamResourceService(AppDbContext dbContext)
 
     private static string CreateSlug(string name)
     {
-        var normalized = name.Normalize(NormalizationForm.FormD);
-        var builder = new StringBuilder();
-        foreach (var character in normalized)
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark)
-            {
-                continue;
-            }
-            var lower = char.ToLowerInvariant(character);
-            builder.Append(lower >= 'a' && lower <= 'z' || lower >= '0' && lower <= '9' ? lower : '-');
-        }
-        var prefix = Regex.Replace(builder.ToString(), "-+", "-").Trim('-');
-        if (prefix.Length == 0)
-        {
-            prefix = "resource";
-        }
-        prefix = prefix[..Math.Min(prefix.Length, 80)].TrimEnd('-');
-        return $"{prefix}-{Guid.NewGuid():N}";
+        var normalized = Regex.Replace(name.Normalize(NormalizationForm.FormKD), @"[\u0300-\u036f]", string.Empty)
+            .ToLowerInvariant();
+        var slug = Regex.Replace(normalized, "[^a-z0-9]+", "-").Trim('-');
+        return slug[..Math.Min(slug.Length, 120)].TrimEnd('-');
     }
+
+    private static bool ValidSlug(string slug)
+        => slug.Length > 0 && slug.Length <= 120 &&
+            Regex.IsMatch(slug, @"\A[a-z0-9]+(?:-[a-z0-9]+)*\z", RegexOptions.CultureInvariant);
 
     private static bool IsConcurrentConflict(Exception? exception)
         => exception is SqlException sql && (sql.Number == 2601 || sql.Number == 2627 || sql.Number == 1205);
