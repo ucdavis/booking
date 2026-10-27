@@ -176,7 +176,10 @@ function hasSupportedShape(value: Record<string, unknown>): boolean {
   return true;
 }
 
-export function parseResourceDefaultsJson(source: string | null | undefined): {
+export function parseResourceDefaultsJson(
+  source: string | null | undefined,
+  context: 'template' | 'resource' = 'template'
+): {
   defaults: ResourceDefaults;
   unavailableReason?: string;
 } {
@@ -185,7 +188,7 @@ export function parseResourceDefaultsJson(source: string | null | undefined): {
   }
   const unavailable = (reason: string) => ({
     defaults: {} as ResourceDefaults,
-    unavailableReason: `${reason} The saved defaults will be preserved when you save the template.`,
+    unavailableReason: `${reason} The saved defaults will be preserved when you save the ${context}.`,
   });
   if (source.length > maxJsonLength) {
     return unavailable(

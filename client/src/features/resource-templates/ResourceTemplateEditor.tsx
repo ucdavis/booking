@@ -311,6 +311,7 @@ export function ResourceTemplateEditor({
               )}
               {activeView === 'defaults' && (
                 <ResourceDefaultsEditor
+                  context="template"
                   disabled={isSaving || isSubmitting}
                   fields="resourceDefaults"
                   form={form}
