@@ -658,9 +658,6 @@ export function ResourceEditor({
                         : '3. Describe the resource'}
                     </h3>
                     <div className="grid gap-5 sm:grid-cols-2">
-                      <form.AppField name="name">
-                        {(field) => <field.TextField label="Resource name" />}
-                      </form.AppField>
                       <form.AppField name="category">
                         {(field) => (
                           <field.SelectField
@@ -690,6 +687,26 @@ export function ResourceEditor({
                             </form.AppField>
                           )
                         }
+                      </form.Subscribe>
+                    </div>
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      <form.Subscribe
+                        selector={(state) => state.values.category}
+                      >
+                        {(category) => (
+                          <form.AppField name="name">
+                            {(field) => (
+                              <field.TextField
+                                label="Resource name"
+                                placeholder={
+                                  category === 'Room'
+                                    ? 'Enter a room name or number'
+                                    : 'Enter the resource name'
+                                }
+                              />
+                            )}
+                          </form.AppField>
+                        )}
                       </form.Subscribe>
                       <form.AppField name="capacity">
                         {(field) => (
