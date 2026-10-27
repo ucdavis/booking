@@ -109,11 +109,11 @@ export function ResourcesPage({ teamSlug }: { teamSlug: string }) {
         </div>
       ) : resources.length === 0 ? (
         <div className="mt-6 rounded-sm border border-dashed border-base-300 p-8">
-          <h3 className="text-lg font-semibold">No resources yet</h3>
-          <p className="mt-2 text-base-content/70">
-            Create your first resource from a team or system template. You can
-            add its location as part of setup.
-          </p>
+            <h3 className="text-lg font-semibold">No resources yet</h3>
+            <p className="mt-2 text-base-content/70">
+                Create your first resource from a team or system template. Choose one of the
+                locations that a site administrator has made available to your team.
+            </p>
         </div>
       ) : filtered.length === 0 ? (
         <p className="py-8" role="status">
