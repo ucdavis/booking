@@ -161,6 +161,32 @@ public class TeamsControllerTests
     }
 
     [Fact]
+    public async Task GetSpaces_lists_only_attached_spaces_including_inactive_and_checks_access()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var team = new Team { Name = "Biology", Slug = "biology" };
+        var member = new User { IamId = "member-iam", Name = "Member" };
+        db.TeamPermissions.Add(new TeamPermission { Team = team, User = member, Role = TeamRole.Viewer });
+        db.TeamSpaces.AddRange(
+            new TeamSpace { Team = team, Space = new Space { Name = "Zoology", Slug = "zoology", TimeZoneId = "America/Los_Angeles" } },
+            new TeamSpace { Team = team, Space = new Space { Name = "Archive", Slug = "archive", TimeZoneId = "America/Los_Angeles", IsActive = false } },
+            new TeamSpace { Team = new Team { Name = "Other", Slug = "other" }, Space = new Space { Name = "Other space", Slug = "other-space", TimeZoneId = "America/Los_Angeles" } });
+        db.Spaces.Add(new Space { Name = "Unattached", Slug = "unattached", TimeZoneId = "America/Los_Angeles" });
+        await db.SaveChangesAsync();
+        var controller = CreateController(db);
+
+        var spaces = ReadValue(await controller.GetSpaces("biology"));
+
+        spaces.Select(space => space.Name).Should().Equal("Archive", "Zoology");
+        spaces[0].IsActive.Should().BeFalse();
+        (await controller.GetSpaces("other")).Result.Should().BeOfType<NotFoundObjectResult>();
+        (await controller.GetSpaces("missing")).Result.Should().BeOfType<NotFoundObjectResult>();
+        member.IsActive = false;
+        await db.SaveChangesAsync();
+        (await controller.GetSpaces("biology")).Result.Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    [Fact]
     public void Team_routes_require_authentication_and_slug_access_without_aliasing_the_list_route()
     {
         var controller = typeof(TeamsController);
@@ -173,6 +199,9 @@ public class TeamsControllerTests
         var landing = controller.GetMethod(nameof(TeamsController.GetTeam))!;
         landing.GetCustomAttribute<HttpGetAttribute>()!.Template.Should().Be("{teamSlug}");
         landing.GetCustomAttribute<AuthorizeAttribute>()!.Policy.Should().Be(AuthenticationHelper.TeamAccessPolicy);
+        var spaces = controller.GetMethod(nameof(TeamsController.GetSpaces))!;
+        spaces.GetCustomAttribute<HttpGetAttribute>()!.Template.Should().Be("{teamSlug}/spaces");
+        spaces.GetCustomAttribute<AuthorizeAttribute>()!.Policy.Should().Be(AuthenticationHelper.TeamAccessPolicy);
         controller.GetCustomAttribute<ResponseCacheAttribute>()!.NoStore.Should().BeTrue();
     }
 
@@ -1047,7 +1076,7 @@ public class TeamsControllerTests
     }
 
     private static TeamsController CreateController(AppDbContext db)
-        => new(new TeamAccessService(db))
+        => new(new TeamAccessService(db), db)
         {
             ControllerContext = new ControllerContext
             {

@@ -471,10 +471,10 @@ export function ResourceEditor({
               {!baseline && (
                 <section
                   aria-label="Resource location"
-                  className="space-y-4 rounded-sm border border-base-300 bg-base-100 p-5"
+                  className="space-y-4"
                 >
                   <h3 className="text-xl font-semibold text-primary">
-                    1. Choose a location
+                    1. Choose a space
                   </h3>
                   {options.spaces.length === 0 ? (
                     <p className="alert alert-warning" role="status">
@@ -488,62 +488,68 @@ export function ResourceEditor({
                         const hasError =
                           field.state.meta.isTouched &&
                           !field.state.meta.isValid;
-                        const selectedSpace = options.spaces.find(
-                          (space) => String(space.id) === field.state.value
-                        );
-                        const description = selectedSpace?.description?.trim();
-                        const address = selectedSpace?.address?.trim();
                         return (
-                          <>
-                            <FieldWrapper
-                              controlId="resource-location"
-                              label="Location"
-                            >
-                              <select
-                                aria-describedby={
-                                  hasError
-                                    ? 'resource-location-error'
-                                    : undefined
-                                }
-                                aria-invalid={hasError || undefined}
-                                className={`select select-bordered w-full ${hasError ? 'select-error' : ''}`}
-                                id="resource-location"
-                                name={field.name}
-                                onBlur={field.handleBlur}
-                                onChange={(event) =>
-                                  field.handleChange(event.target.value)
-                                }
-                                required
-                                value={selectedSpace ? field.state.value : ''}
+                          <fieldset
+                            aria-describedby={
+                              hasError ? 'resource-location-error' : undefined
+                            }
+                            aria-invalid={hasError || undefined}
+                            className="space-y-3"
+                          >
+                            <legend className="sr-only">Location</legend>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              {options.spaces.map((space) => {
+                                const selected =
+                                  String(space.id) === field.state.value;
+                                return (
+                                  <label
+                                    className={`flex cursor-pointer items-start gap-3 rounded-sm border p-4 transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary ${selected ? 'border-primary bg-primary/5' : 'border-base-300 bg-base-200 hover:border-primary/40'}`}
+                                    key={space.id}
+                                  >
+                                    <input
+                                      aria-label={space.name}
+                                      checked={selected}
+                                      className="radio radio-primary radio-sm mt-1 shrink-0"
+                                      name={field.name}
+                                      onBlur={field.handleBlur}
+                                      onChange={() =>
+                                        field.handleChange(String(space.id))
+                                      }
+                                      required
+                                      type="radio"
+                                      value={String(space.id)}
+                                    />
+                                    <span className="block min-w-0 space-y-2 break-words">
+                                      <span className="block font-semibold text-primary">
+                                        {space.name}
+                                      </span>
+                                      {space.description?.trim() && (
+                                        <span className="block text-sm whitespace-pre-line text-base-content/75">
+                                          {space.description.trim()}
+                                        </span>
+                                      )}
+                                      {space.address?.trim() && (
+                                        <span className="block text-sm whitespace-pre-line text-base-content/65">
+                                          {space.address.trim()}
+                                        </span>
+                                      )}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            {hasError && (
+                              <p
+                                className="text-sm text-error"
+                                id="resource-location-error"
+                                role="alert"
                               >
-                                <option disabled value="">
-                                  Pick a location
-                                </option>
-                                {options.spaces.map((space) => (
-                                  <option key={space.id} value={space.id}>
-                                    {space.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </FieldWrapper>
-                            {(description || address) && (
-                              <div className="space-y-3 rounded-sm bg-base-200/60 p-4 text-sm text-base-content/75">
-                                {description && (
-                                  <p className="whitespace-pre-line">
-                                    {description}
-                                  </p>
-                                )}
-                                {address && (
-                                  <dl>
-                                    <dt className="font-semibold">Address</dt>
-                                    <dd className="mt-1 whitespace-pre-line">
-                                      {address}
-                                    </dd>
-                                  </dl>
-                                )}
-                              </div>
+                                {field.state.meta.errors
+                                  .filter(Boolean)
+                                  .join(', ')}
+                              </p>
                             )}
-                          </>
+                          </fieldset>
                         );
                       }}
                     </form.AppField>
@@ -553,7 +559,7 @@ export function ResourceEditor({
               {!baseline && (
                 <section
                   aria-label="Resource template"
-                  className="space-y-3 rounded-sm border border-base-300 bg-base-100 p-5"
+                  className="space-y-3"
                 >
                   <h3 className="text-xl font-semibold text-primary">
                     2. Choose a resource template
@@ -720,7 +726,10 @@ export function ResourceEditor({
                             listeners={{
                               onChange: ({ value }) => {
                                 if (!baseline && !slugEditedRef.current) {
-                                  form.setFieldValue('slug', suggestSlug(value));
+                                  form.setFieldValue(
+                                    'slug',
+                                    suggestSlug(value)
+                                  );
                                 }
                               },
                             }}
@@ -982,6 +991,7 @@ export function ResourceEditor({
                     <ResourceDefaultsEditor
                       context="resource"
                       disabled={isSaving || isSubmitting}
+                      embedded={false}
                       fields="resourceDefaults"
                       form={form}
                       readOnly={false}

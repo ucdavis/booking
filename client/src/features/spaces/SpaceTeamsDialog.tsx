@@ -6,40 +6,15 @@ import type { TeamSummary } from '@/features/teams/models/TeamSummary.ts';
 import { HttpError } from '@/lib/api.ts';
 import {
   assignSpaceTeam,
+  confirmationResourceCount,
   spaceTeamsQueryOptions,
   unlinkSpaceTeam,
 } from '@/queries/admin-spaces.ts';
 import { adminTeamsQueryOptions } from '@/queries/admin.ts';
+import { teamSpacesQueryOptions } from '@/queries/teams.ts';
 import { resourceOptionsQueryOptions } from '@/queries/resources.ts';
 import { FieldWrapper } from '@/shared/forms/fieldWrapper.tsx';
 import { useAppForm } from '@/shared/forms/formContext.tsx';
-
-function confirmationResourceCount(error: unknown): number | undefined {
-  if (!(error instanceof HttpError) || error.status !== 409) {
-    return undefined;
-  }
-  let details = error.body;
-  if (typeof details === 'string') {
-    try {
-      details = JSON.parse(details);
-    } catch {
-      return undefined;
-    }
-  }
-  if (
-    details !== null &&
-    typeof details === 'object' &&
-    'code' in details &&
-    details.code === 'space_team_resources_confirmation_required' &&
-    'resourceCount' in details &&
-    typeof details.resourceCount === 'number' &&
-    Number.isSafeInteger(details.resourceCount) &&
-    details.resourceCount >= 0
-  ) {
-    return details.resourceCount;
-  }
-  return undefined;
-}
 
 export function SpaceTeamsDialog({
   onClose,
@@ -74,6 +49,9 @@ export function SpaceTeamsDialog({
 
   async function refreshTeamAccess(team: TeamSummary) {
     await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: teamSpacesQueryOptions(team.slug).queryKey,
+      }),
       queryClient.invalidateQueries({
         queryKey: spaceTeamsQueryOptions(space.id).queryKey,
       }),

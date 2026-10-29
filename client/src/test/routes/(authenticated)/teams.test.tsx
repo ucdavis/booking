@@ -935,3 +935,162 @@ describe('team administration navigation and access', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('team attached spaces', () => {
+  const space = {
+    address: '1 Shields Avenue',
+    description: null,
+    id: 7,
+    isActive: true,
+    isOfficialFacility: false,
+    name: 'Plant Sciences Building',
+    referenceNumber: null,
+    slug: 'plant-sciences-building',
+  };
+
+  it('lists attached spaces and inactive status for a viewer without attach controls', async () => {
+    mockUser();
+    mockTeamAccess();
+    server.use(http.get('/api/teams/:teamSlug/spaces', () =>
+      HttpResponse.json([{ ...space, isActive: false }])
+    ));
+    cleanup = renderRoute({ initialPath: '/teams/plant-sciences' }).cleanup;
+    const section = within(await screen.findByRole('region', { name: 'Attached spaces' }));
+    expect(await section.findByText(space.name)).toBeInTheDocument();
+    expect(section.getByText('Inactive')).toBeInTheDocument();
+    expect(section.queryByRole('button', { name: 'Attach space' })).not.toBeInTheDocument();
+    expect(section.queryByRole('button', { name: `Unlink ${space.name}` })).not.toBeInTheDocument();
+  });
+
+  it('lets a site admin attach an available space and updates the list', async () => {
+    mockUser(true);
+    mockTeamAccess(null);
+    let attached = false;
+    const attach = vi.fn(() => {
+      attached = true;
+      return HttpResponse.json({ resourceCount: 0, team: firstTeam });
+    });
+    server.use(
+      http.get('/api/teams/:teamSlug/spaces', () => HttpResponse.json(attached ? [space] : [])),
+      http.get('/api/admin/spaces', () => HttpResponse.json([space])),
+      http.get('/api/antiforgery', () => HttpResponse.json({ requestToken: 'space-token' })),
+      http.put('/api/admin/spaces/7/teams/1', attach)
+    );
+    cleanup = renderRoute({ initialPath: '/teams/plant-sciences' }).cleanup;
+    const section = within(await screen.findByRole('region', { name: 'Attached spaces' }));
+    expect(await section.findByText('No spaces are attached to this team.')).toBeInTheDocument();
+    fireEvent.click(section.getByRole('button', { name: 'Attach space' }));
+    await section.findByRole('option', { name: space.name });
+    fireEvent.change(section.getByLabelText('Space'), { target: { value: '7' } });
+    fireEvent.click(section.getByRole('button', { name: 'Attach space' }));
+    expect(await section.findByText('Space attached.')).toBeInTheDocument();
+    expect(section.getByText(space.name)).toBeInTheDocument();
+    expect(attach).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the selection when attaching fails and allows retry', async () => {
+    mockUser(true);
+    mockTeamAccess(null);
+    server.use(
+      http.get('/api/admin/spaces', () => HttpResponse.json([space])),
+      http.get('/api/antiforgery', () => HttpResponse.json({ requestToken: 'space-token' })),
+      http.put('/api/admin/spaces/7/teams/1', () => new HttpResponse(null, { status: 500 }))
+    );
+    cleanup = renderRoute({ initialPath: '/teams/plant-sciences' }).cleanup;
+    const section = within(await screen.findByRole('region', { name: 'Attached spaces' }));
+    fireEvent.click(section.getByRole('button', { name: 'Attach space' }));
+    await section.findByRole('option', { name: space.name });
+    fireEvent.change(section.getByLabelText('Space'), { target: { value: '7' } });
+    fireEvent.click(section.getByRole('button', { name: 'Attach space' }));
+    expect(await section.findByRole('alert')).toHaveTextContent('We could not attach this space.');
+    expect(section.getByLabelText('Space')).toHaveValue('7');
+    expect(section.getByRole('button', { name: 'Attach space' })).toBeEnabled();
+  });
+
+  it('unlinks a space without resources and refreshes the attached list', async () => {
+    mockUser(true);
+    mockTeamAccess(null);
+    let attached = true;
+    const remove = vi.fn(() => {
+      attached = false;
+      return new HttpResponse(null, { status: 204 });
+    });
+    server.use(
+      http.get('/api/teams/:teamSlug/spaces', () => HttpResponse.json(attached ? [space] : [])),
+      http.get('/api/antiforgery', () => HttpResponse.json({ requestToken: 'space-token' })),
+      http.delete('/api/admin/spaces/7/teams/1', remove)
+    );
+    cleanup = renderRoute({ initialPath: '/teams/plant-sciences' }).cleanup;
+    const section = within(await screen.findByRole('region', { name: 'Attached spaces' }));
+    fireEvent.click(await section.findByRole('button', { name: `Unlink ${space.name}` }));
+    expect(await section.findByText(`${space.name} unlinked.`)).toBeInTheDocument();
+    expect(section.getByText('No spaces are attached to this team.')).toBeInTheDocument();
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires confirmation with the latest resource count before unlinking', async () => {
+    mockUser(true);
+    mockTeamAccess(null);
+    let attached = true;
+    const counts: Array<string | null> = [];
+    server.use(
+      http.get('/api/teams/:teamSlug/spaces', () => HttpResponse.json(attached ? [space] : [])),
+      http.get('/api/antiforgery', () => HttpResponse.json({ requestToken: 'space-token' })),
+      http.delete('/api/admin/spaces/7/teams/1', ({ request }) => {
+        const count = new URL(request.url).searchParams.get('confirmedResourceCount');
+        counts.push(count);
+        if (count !== '3') {
+          return HttpResponse.json({ code: 'space_team_resources_confirmation_required', resourceCount: count === null ? 2 : 3 }, { status: 409 });
+        }
+        attached = false;
+        return new HttpResponse(null, { status: 204 });
+      })
+    );
+    cleanup = renderRoute({ initialPath: '/teams/plant-sciences' }).cleanup;
+    const section = within(await screen.findByRole('region', { name: 'Attached spaces' }));
+    fireEvent.click(await section.findByRole('button', { name: `Unlink ${space.name}` }));
+    expect(await section.findByText('This team has 2 resources in this space.')).toBeInTheDocument();
+    expect(section.getByText(/Existing resources and reservation records remain/)).toBeInTheDocument();
+    expect(section.getByRole('button', { name: 'Cancel unlink' })).toHaveFocus();
+    fireEvent.click(section.getByRole('button', { name: 'Confirm unlink' }));
+    expect(await section.findByText('This team has 3 resources in this space.')).toBeInTheDocument();
+    expect(section.getByText(/The resource count changed/)).toBeInTheDocument();
+    fireEvent.click(section.getByRole('button', { name: 'Confirm unlink' }));
+    expect(await section.findByText(`${space.name} unlinked.`)).toBeInTheDocument();
+    expect(counts).toEqual([null, '2', '3']);
+  });
+
+  it('allows canceling an unlink confirmation without removing the space', async () => {
+    mockUser(true);
+    mockTeamAccess(null);
+    const remove = vi.fn(() => HttpResponse.json({ code: 'space_team_resources_confirmation_required', resourceCount: 1 }, { status: 409 }));
+    server.use(
+      http.get('/api/teams/:teamSlug/spaces', () => HttpResponse.json([space])),
+      http.get('/api/antiforgery', () => HttpResponse.json({ requestToken: 'space-token' })),
+      http.delete('/api/admin/spaces/7/teams/1', remove)
+    );
+    cleanup = renderRoute({ initialPath: '/teams/plant-sciences' }).cleanup;
+    const section = within(await screen.findByRole('region', { name: 'Attached spaces' }));
+    fireEvent.click(await section.findByRole('button', { name: `Unlink ${space.name}` }));
+    fireEvent.click(await section.findByRole('button', { name: 'Cancel unlink' }));
+    expect(section.queryByRole('button', { name: 'Confirm unlink' })).not.toBeInTheDocument();
+    expect(section.getByText(space.name)).toBeInTheDocument();
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the space listed when unlinking is denied', async () => {
+    mockUser(true);
+    mockTeamAccess(null);
+    server.use(
+      http.get('/api/teams/:teamSlug/spaces', () => HttpResponse.json([space])),
+      http.get('/api/antiforgery', () => HttpResponse.json({ requestToken: 'space-token' })),
+      http.delete('/api/admin/spaces/7/teams/1', () => new HttpResponse(null, { status: 403 }))
+    );
+    cleanup = renderRoute({ initialPath: '/teams/plant-sciences' }).cleanup;
+    const section = within(await screen.findByRole('region', { name: 'Attached spaces' }));
+    fireEvent.click(await section.findByRole('button', { name: `Unlink ${space.name}` }));
+    expect(await section.findByRole('alert')).toHaveTextContent('Only site administrators can unlink spaces.');
+    expect(section.getByText(space.name)).toBeInTheDocument();
+  });
+
+});

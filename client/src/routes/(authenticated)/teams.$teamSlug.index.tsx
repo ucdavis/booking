@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
+import { TeamSpaces } from '@/features/teams/TeamSpaces.tsx';
 import { TeamPaymentsSettings } from '@/features/teams/TeamPaymentsSettings.tsx';
 import { TeamRole, teamRoleLabels } from '@/features/teams/models/TeamRole.ts';
 import { teamAccessQueryOptions } from '@/queries/teams.ts';
@@ -31,8 +32,8 @@ function TeamOverviewPage() {
   const canManage = isSiteAdmin || roles.includes(TeamRole.Admin);
 
   return (
-    <>
-      <section className="max-w-3xl rounded-sm border border-base-300 bg-base-100 p-6 shadow-sm sm:p-8">
+    <div className="grid items-start gap-6 lg:grid-cols-2">
+      <section className="min-w-0 rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm sm:p-8">
         <h2 className="text-xl font-semibold text-primary">Team overview</h2>
         <dl className="mt-6 grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
           <dt className="text-sm font-medium text-base-content/65">
@@ -57,11 +58,16 @@ function TeamOverviewPage() {
           </p>
         )}
       </section>
+      <TeamSpaces
+        canAttach={isSiteAdmin}
+        key={`${teamSlug}:${user.id}:${isSiteAdmin}`}
+        team={team}
+      />
       <TeamPaymentsSettings
         canManage={canManage}
         key={`${teamSlug}:${user.id}:${canManage}`}
         teamSlug={teamSlug}
       />
-    </>
+    </div>
   );
 }

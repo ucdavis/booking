@@ -8,12 +8,14 @@ export const ResourceDefaultsEditor = withFieldGroup({
   props: {
     context: 'template' as 'template' | 'resource',
     disabled: false,
+    embedded: false,
     readOnly: false,
     unavailableReason: undefined as string | undefined,
   },
   render: function ResourceDefaultsEditor({
     context,
     disabled,
+    embedded,
     group,
     readOnly,
     unavailableReason,
@@ -23,7 +25,11 @@ export const ResourceDefaultsEditor = withFieldGroup({
         aria-label={
           context === 'resource' ? 'Hours and rates' : 'Resource defaults'
         }
-        className="space-y-5 rounded-sm border border-base-300 bg-base-100 p-5"
+        className={
+          embedded
+            ? 'space-y-5'
+            : 'space-y-5 rounded-sm border border-base-300 bg-base-100 p-5'
+        }
       >
         <div>
           <h2 className="text-xl font-semibold text-primary">

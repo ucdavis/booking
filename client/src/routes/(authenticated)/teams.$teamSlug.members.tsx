@@ -326,7 +326,7 @@ function TeamMembersPage() {
 
   return (
     <section>
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold text-primary">Team members</h2>
           <p className="mt-3 max-w-2xl text-base-content/70">
@@ -335,7 +335,7 @@ function TeamMembersPage() {
           </p>
         </div>
         <button
-          className="btn btn-primary shrink-0"
+          className="btn btn-primary shrink-0 self-start"
           disabled={isBusy}
           onClick={() => {
             setNotice('');
@@ -399,7 +399,7 @@ function TeamMembersPage() {
 
       <section
         aria-label="Team members"
-        className="mt-8 rounded-sm border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6"
+        className="mt-8 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
       >
         {membersQuery.data.length === 0 ? (
           <p className="py-8 text-center text-base-content/70">

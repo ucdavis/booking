@@ -1,4 +1,4 @@
-import { PlusIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { PlusIcon } from '@heroicons/react/24/outline';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -69,13 +69,7 @@ function SiteAdminTeamsPage() {
 
       <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-3 text-primary">
-            <UserGroupIcon aria-hidden="true" className="h-6 w-6" />
-            <p className="text-sm font-semibold tracking-wide uppercase">
-              Booking administration
-            </p>
-          </div>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
+          <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
             Teams
           </h1>
           <p className="mt-3 max-w-2xl text-base-content/70">
@@ -95,7 +89,7 @@ function SiteAdminTeamsPage() {
 
       <section
         aria-label="All teams"
-        className="mt-8 rounded-sm border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6"
+        className="mt-8 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
       >
         {teamsQuery.isPending ? (
           <p className="py-8 text-center text-base-content/70" role="status">

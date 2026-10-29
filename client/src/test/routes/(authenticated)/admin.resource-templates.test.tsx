@@ -206,6 +206,30 @@ function mockTemplateStore(initial: ResourceTemplate[] = [makeTemplate()]) {
 }
 
 describe('site admin resource templates', () => {
+  it('supports keyboard navigation between editor tabs without losing template details', async () => {
+    mockAdminAccess();
+    mockTemplateStore([]);
+    ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/new' }));
+    const name = await screen.findByRole('textbox', { name: 'Template name' });
+    fireEvent.change(name, { target: { value: 'Camera checkout' } });
+    const build = screen.getByRole('tab', { name: 'Build form' });
+    build.focus();
+    fireEvent.keyDown(build, { key: 'ArrowRight' });
+    const preview = screen.getByRole('tab', { name: 'Preview form' });
+    expect(preview).toHaveFocus();
+    expect(preview).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: 'Preview form' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Form preview' })).toBeInTheDocument();
+    fireEvent.keyDown(preview, { key: 'End' });
+    const defaults = screen.getByRole('tab', { name: 'Resource defaults' });
+    expect(defaults).toHaveFocus();
+    expect(defaults).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(defaults, { key: 'Home' });
+    expect(build).toHaveFocus();
+    expect(build).toHaveAttribute('aria-selected', 'true');
+    expect(name).toHaveValue('Camera checkout');
+  });
+
   it.each([
     {
       action: 'Create template',
@@ -326,7 +350,7 @@ describe('site admin resource templates', () => {
       target: { value: 'Contact name' },
     });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Required' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     fireEvent.click(
       screen.getByRole('checkbox', { name: 'Include default opening hours' })
     );
@@ -387,7 +411,7 @@ describe('site admin resource templates', () => {
         },
       ],
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('09:00');
     expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue(
       '25.00'
@@ -449,7 +473,7 @@ describe('site admin resource templates', () => {
     expect(
       await screen.findByRole('textbox', { name: 'Template name' })
     ).toHaveValue('Updated equipment booking');
-    fireEvent.click(screen.getByRole('button', { name: 'Preview form' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview form' }));
     expect(screen.getByRole('textbox', { name: /Visitor name/ })).toHaveAttribute(
       'maxLength',
       '40'
@@ -461,7 +485,7 @@ describe('site admin resource templates', () => {
     expect(screen.getByText('Bring your campus ID.')).toBeInTheDocument();
 
     const versionTwoJson = templates.get(2)!.formJson;
-    fireEvent.click(screen.getByRole('button', { name: 'Build form' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Build form' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Label' }), {
       target: { value: 'Booking purpose' },
     });
@@ -520,14 +544,14 @@ describe('site admin resource templates', () => {
       '/admin/resource-templates/2'
     );
     expect(screen.getByText('Version 1')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue(
       '25.00'
     );
     fireEvent.change(screen.getByRole('textbox', { name: 'Amount (USD) 1' }), {
       target: { value: '50.00' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Build form' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Build form' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Template name' }), {
       target: { value: 'Camera booking' },
     });
@@ -564,7 +588,7 @@ describe('site admin resource templates', () => {
     ]);
     ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
     const active = await screen.findByRole('checkbox', { name: 'Active template' });
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
 
     fireEvent.click(active);
     expect(templates.get(1)!.isActive).toBe(true);
@@ -579,7 +603,7 @@ describe('site admin resource templates', () => {
     expect(archivedActive).not.toBeChecked();
     expect(screen.getByRole('textbox', { name: 'Template name' })).toBeDisabled();
     expect(
-      screen.getByRole('button', { name: 'Resource defaults', pressed: true })
+      screen.getByRole('tab', { name: 'Resource defaults', selected: true })
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('09:00');
     expect(screen.getByLabelText('Monday opening time 1')).toBeDisabled();
@@ -603,7 +627,7 @@ describe('site admin resource templates', () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        'Archived templates are read-only. Duplicate this template to make changes.'
+        'Duplicate this archived template to make changes.'
       )
     ).toBeInTheDocument();
     expect(JSON.parse(templates.get(1)!.formJson)).toEqual(definition);
@@ -679,12 +703,12 @@ describe('site admin resource templates', () => {
     expect(screen.getByRole('textbox', { name: 'Template name' })).toBeDisabled();
     expect(screen.getByRole('checkbox', { name: 'Active template' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Save template' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Build form' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Build form' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add Input' })).not.toBeInTheDocument();
     const answer = screen.getByRole('textbox', { name: /Visitor name/ });
     fireEvent.change(answer, { target: { value: 'Taylor' } });
     expect(answer).toHaveValue('Taylor');
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('09:00');
     expect(screen.getByLabelText('Monday opening time 1')).toBeDisabled();
     expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue('25.00');
@@ -698,7 +722,7 @@ describe('site admin resource templates', () => {
     expect(rendered.router.state.location.search).not.toHaveProperty('view', true);
     expect(screen.getByRole('textbox', { name: 'Template name' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Save template' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Build form' })).toBeEnabled();
+    expect(screen.getByRole('tab', { name: 'Build form' })).toBeEnabled();
     expect(saves).toHaveLength(0);
   });
 
@@ -735,7 +759,7 @@ describe('site admin resource templates', () => {
       screen.getByRole('link', { name: 'Back to resource templates' })
     ).toHaveAttribute('href', '/admin/resource-templates');
     expect(
-      screen.queryByRole('button', { name: 'Build form' })
+      screen.queryByRole('tab', { name: 'Build form' })
     ).not.toBeInTheDocument();
     const answer = screen.getByRole('textbox', { name: /Visitor name/ });
     expect(answer).toBeEnabled();
@@ -744,7 +768,7 @@ describe('site admin resource templates', () => {
     expect(
       screen.getByRole('button', { name: 'Try validation' })
     ).toBeEnabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('09:00');
     expect(screen.getByLabelText('Monday opening time 1')).toBeDisabled();
     expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue(
@@ -757,7 +781,7 @@ describe('site admin resource templates', () => {
     expect(
       screen.getByRole('checkbox', { name: 'Include default billing rates' })
     ).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Preview form' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview form' }));
     expect(screen.getByRole('textbox', { name: /Visitor name/ })).toBeEnabled();
     expect(saves).toHaveLength(0);
     expect(templates.get(1)).toEqual(original);
@@ -861,7 +885,7 @@ describe('site admin resource templates', () => {
     cleanup = rendered.cleanup;
 
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Resource defaults' })
+      await screen.findByRole('tab', { name: 'Resource defaults' })
     );
     fireEvent.change(screen.getByLabelText('Monday opening time 1'), {
       target: { value: '10:00' },
@@ -876,8 +900,8 @@ describe('site admin resource templates', () => {
       target: { value: '40.00' },
     });
     expect(screen.getByText('You have unsaved changes.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Preview form' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview form' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('10:00');
     expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue(
       '40.00'
@@ -912,7 +936,7 @@ describe('site admin resource templates', () => {
     rendered = renderRoute({ initialPath: '/admin/resource-templates/2' });
     cleanup = rendered.cleanup;
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Resource defaults' })
+      await screen.findByRole('tab', { name: 'Resource defaults' })
     );
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('10:00');
     expect(screen.getByLabelText('Monday closing time 1')).toHaveValue('18:00');
@@ -932,7 +956,7 @@ describe('site admin resource templates', () => {
       )
     );
     expect(await screen.findByText('Version 5')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(
       screen.getByRole('checkbox', { name: 'Include default opening hours' })
     ).not.toBeChecked();
@@ -965,7 +989,7 @@ describe('site admin resource templates', () => {
     const rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
     cleanup = rendered.cleanup;
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Resource defaults' })
+      await screen.findByRole('tab', { name: 'Resource defaults' })
     );
     fireEvent.change(screen.getByRole('combobox', { name: 'Monday hours' }), {
       target: { value: 'unspecified' },
@@ -973,8 +997,8 @@ describe('site admin resource templates', () => {
     expect(
       screen.queryByLabelText('Monday opening time 1')
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Preview form' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview form' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByRole('combobox', { name: 'Monday hours' })).toHaveValue(
       'unspecified'
     );
@@ -994,7 +1018,7 @@ describe('site admin resource templates', () => {
       ...resourceDefaults,
       openingHours: { sunday: [] },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByRole('combobox', { name: 'Monday hours' })).toHaveValue(
       'unspecified'
     );
@@ -1016,7 +1040,7 @@ describe('site admin resource templates', () => {
         initialPath: '/admin/resource-templates/1',
       }));
       fireEvent.click(
-        await screen.findByRole('button', { name: 'Resource defaults' })
+        await screen.findByRole('tab', { name: 'Resource defaults' })
       );
       if (invalidHours === 'reversed') {
         fireEvent.change(screen.getByLabelText('Monday closing time 1'), {
@@ -1027,16 +1051,16 @@ describe('site admin resource templates', () => {
           screen.getByRole('button', { name: 'Add Monday hours' })
         );
       }
-      fireEvent.click(screen.getByRole('button', { name: 'Preview form' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Preview form' }));
       expect(
         screen.queryByLabelText('Monday closing time 1')
       ).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
 
       expect(
-        await screen.findByRole('button', {
+        await screen.findByRole('tab', {
           name: 'Resource defaults',
-          pressed: true,
+          selected: true,
         })
       ).toBeInTheDocument();
       const closingTime = screen.getByLabelText('Monday closing time 1');
@@ -1107,21 +1131,21 @@ describe('site admin resource templates', () => {
         initialPath: '/admin/resource-templates/1',
       }));
       fireEvent.click(
-        await screen.findByRole('button', { name: 'Resource defaults' })
+        await screen.findByRole('tab', { name: 'Resource defaults' })
       );
       fireEvent.change(screen.getByRole('textbox', { name: field }), {
         target: { value },
       });
-      fireEvent.click(screen.getByRole('button', { name: 'Build form' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Build form' }));
       expect(
         screen.queryByRole('textbox', { name: field })
       ).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
 
       expect(
-        await screen.findByRole('button', {
+        await screen.findByRole('tab', {
           name: 'Resource defaults',
-          pressed: true,
+          selected: true,
         })
       ).toBeInTheDocument();
       expect(screen.getAllByRole('alert')[0]).toHaveTextContent(/rate/i);
@@ -1163,7 +1187,7 @@ describe('site admin resource templates', () => {
     ]);
     ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Resource defaults' })
+      await screen.findByRole('tab', { name: 'Resource defaults' })
     );
     fireEvent.change(screen.getByRole('textbox', { name: 'Rate name 1' }), {
       target: { value: '' },
@@ -1222,7 +1246,7 @@ describe('site admin resource templates', () => {
     ]);
     ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Resource defaults' })
+      await screen.findByRole('tab', { name: 'Resource defaults' })
     );
     fireEvent.change(screen.getByLabelText('Monday closing time 1'), {
       target: { value: '08:00' },
@@ -1290,7 +1314,7 @@ describe('site admin resource templates', () => {
         initialPath: '/admin/resource-templates/1',
       }));
       fireEvent.click(
-        await screen.findByRole('button', { name: 'Resource defaults' })
+        await screen.findByRole('tab', { name: 'Resource defaults' })
       );
       expect(
         screen.getByText(
@@ -1365,7 +1389,7 @@ describe('site admin resource templates', () => {
     const rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
     cleanup = rendered.cleanup;
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Resource defaults' })
+      await screen.findByRole('tab', { name: 'Resource defaults' })
     );
     fireEvent.change(screen.getByLabelText('Monday opening time 1'), {
       target: { value: '10:00' },

@@ -15,10 +15,12 @@ const fieldTypes: FormField['type'][] = [
 
 export function FormBuilder({
   disabled = false,
+  embedded = false,
   onChange,
   value,
 }: {
   disabled?: boolean;
+  embedded?: boolean;
   onChange: (value: FormDefinition) => void;
   value: FormDefinition;
 }) {
@@ -86,105 +88,14 @@ export function FormBuilder({
         </div>
       ) : (
         <div className="grid items-start gap-5 xl:grid-cols-2">
-          <ol aria-label="Form fields" className="space-y-3">
-            {value.fields.map((field, index) => (
-              <li
-                className={`rounded-sm border p-4 ${selectedField?.id === field.id ? 'border-primary bg-primary/5' : 'border-base-300 bg-base-100'}`}
-                key={field.id}
-                onDragOver={(event) => {
-                  if (!disabled && draggedId) {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = 'move';
-                  }
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  if (draggedId) {
-                    moveField(draggedId, index);
-                  }
-                  setDraggedId(null);
-                }}
-              >
-                <div className="flex items-start gap-2">
-                  <button
-                    aria-label={`Drag ${field.label || fieldTypeLabels[field.type]} to reorder`}
-                    className="btn btn-ghost btn-sm cursor-grab"
-                    disabled={disabled}
-                    draggable={!disabled}
-                    onDragEnd={() => setDraggedId(null)}
-                    onDragStart={(event) => {
-                      setDraggedId(field.id);
-                      event.dataTransfer.setData('text/plain', field.id);
-                      event.dataTransfer.effectAllowed = 'move';
-                    }}
-                    tabIndex={-1}
-                    type="button"
-                  >
-                    <span aria-hidden="true">⠿</span>
-                  </button>
-                  <button
-                    aria-pressed={selectedField?.id === field.id}
-                    className="min-w-0 flex-1 rounded text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
-                    disabled={disabled}
-                    onClick={() => setSelectedId(field.id)}
-                    type="button"
-                  >
-                    <span className="block text-xs font-semibold tracking-wide text-base-content/60">
-                      {index + 1}. {fieldTypeLabels[field.type]}
-                    </span>
-                    <span className="mt-1 block truncate font-medium">
-                      {field.label || 'Untitled field'}
-                    </span>
-                    {field.validation?.required && (
-                      <span className="mt-1 block text-xs text-base-content/60">
-                        Required
-                      </span>
-                    )}
-                  </button>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-1">
-                  <button
-                    aria-label={`Move ${field.label} up`}
-                    className="btn btn-ghost btn-xs"
-                    disabled={disabled || index === 0}
-                    onClick={() => moveField(field.id, index - 1)}
-                    type="button"
-                  >
-                    Move up
-                  </button>
-                  <button
-                    aria-label={`Move ${field.label} down`}
-                    className="btn btn-ghost btn-xs"
-                    disabled={disabled || index === value.fields.length - 1}
-                    onClick={() => moveField(field.id, index + 1)}
-                    type="button"
-                  >
-                    Move down
-                  </button>
-                  <button
-                    aria-label={`Remove ${field.label || fieldTypeLabels[field.type]}`}
-                    className="btn btn-ghost btn-xs text-error"
-                    disabled={disabled}
-                    onClick={() => {
-                      onChange({
-                        fields: value.fields.filter(
-                          (current) => current.id !== field.id
-                        ),
-                      });
-                      setAnnouncement(
-                        `${field.label || fieldTypeLabels[field.type]} removed.`
-                      );
-                    }}
-                    type="button"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ol>
           {selectedField && (
-            <div className="rounded-sm border border-base-300 bg-base-100 p-5">
+            <div
+              className={
+                embedded
+                  ? 'min-w-0'
+                  : 'rounded-sm border border-base-300 bg-base-100 p-5'
+              }
+            >
               <FormFieldEditor
                 disabled={disabled}
                 field={selectedField}
@@ -199,6 +110,106 @@ export function FormBuilder({
               />
             </div>
           )}
+          <div className="space-y-4">
+            <h3 className="text-xl font-semibold text-primary">Form order</h3>
+            <ol aria-label="Form fields" className="space-y-3">
+              {value.fields.map((field, index) => (
+                <li
+                  className={`rounded-sm border p-4 ${selectedField?.id === field.id ? 'border-primary bg-primary/5' : 'border-base-300 bg-base-100'}`}
+                  key={field.id}
+                  onDragOver={(event) => {
+                    if (!disabled && draggedId) {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = 'move';
+                    }
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (draggedId) {
+                      moveField(draggedId, index);
+                    }
+                    setDraggedId(null);
+                  }}
+                >
+                  <div className="flex items-start gap-2">
+                    <button
+                      aria-label={`Drag ${field.label || fieldTypeLabels[field.type]} to reorder`}
+                      className="btn btn-ghost btn-sm cursor-grab"
+                      disabled={disabled}
+                      draggable={!disabled}
+                      onDragEnd={() => setDraggedId(null)}
+                      onDragStart={(event) => {
+                        setDraggedId(field.id);
+                        event.dataTransfer.setData('text/plain', field.id);
+                        event.dataTransfer.effectAllowed = 'move';
+                      }}
+                      tabIndex={-1}
+                      type="button"
+                    >
+                      <span aria-hidden="true">⠿</span>
+                    </button>
+                    <button
+                      aria-pressed={selectedField?.id === field.id}
+                      className="min-w-0 flex-1 rounded text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+                      disabled={disabled}
+                      onClick={() => setSelectedId(field.id)}
+                      type="button"
+                    >
+                      <span className="block text-xs font-semibold tracking-wide text-base-content/60">
+                        {index + 1}. {fieldTypeLabels[field.type]}
+                      </span>
+                      <span className="mt-1 block truncate font-medium">
+                        {field.label || 'Untitled field'}
+                      </span>
+                      {field.validation?.required && (
+                        <span className="mt-1 block text-xs text-base-content/60">
+                          Required
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    <button
+                      aria-label={`Move ${field.label} up`}
+                      className="btn btn-ghost btn-xs"
+                      disabled={disabled || index === 0}
+                      onClick={() => moveField(field.id, index - 1)}
+                      type="button"
+                    >
+                      Move up
+                    </button>
+                    <button
+                      aria-label={`Move ${field.label} down`}
+                      className="btn btn-ghost btn-xs"
+                      disabled={disabled || index === value.fields.length - 1}
+                      onClick={() => moveField(field.id, index + 1)}
+                      type="button"
+                    >
+                      Move down
+                    </button>
+                    <button
+                      aria-label={`Remove ${field.label || fieldTypeLabels[field.type]}`}
+                      className="btn btn-ghost btn-xs text-error"
+                      disabled={disabled}
+                      onClick={() => {
+                        onChange({
+                          fields: value.fields.filter(
+                            (current) => current.id !== field.id
+                          ),
+                        });
+                        setAnnouncement(
+                          `${field.label || fieldTypeLabels[field.type]} removed.`
+                        );
+                      }}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
         </div>
       )}
       <p aria-live="polite" className="sr-only">

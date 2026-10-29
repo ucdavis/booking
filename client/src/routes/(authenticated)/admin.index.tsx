@@ -2,9 +2,8 @@ import {
   ArrowRightIcon,
   BuildingOfficeIcon,
   DocumentTextIcon,
-  ShieldCheckIcon,
   UserGroupIcon,
-  UsersIcon,
+  TrophyIcon,
 } from '@heroicons/react/24/outline';
 import { createFileRoute, Link } from '@tanstack/react-router';
 
@@ -26,13 +25,7 @@ function SiteAdminPage() {
         <span aria-current="page">Site admin</span>
       </nav>
 
-      <div className="flex items-center gap-3 text-primary">
-        <ShieldCheckIcon aria-hidden="true" className="h-6 w-6" />
-        <p className="text-sm font-semibold tracking-wide uppercase">
-          Booking administration
-        </p>
-      </div>
-      <h1 className="mt-3 text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
+      <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
         Site administration
       </h1>
       <p className="mt-3 max-w-2xl text-lg text-base-content/70">
@@ -44,13 +37,11 @@ function SiteAdminPage() {
         className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3"
       >
         <Link
-          className="group flex flex-col rounded-sm border border-base-300 bg-base-100 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
+          className="group flex flex-col rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
           to="/admin/users"
         >
-          <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <UsersIcon aria-hidden="true" className="h-7 w-7" />
-          </span>
-          <h2 className="mt-6 text-xl font-semibold text-primary">
+          <TrophyIcon aria-hidden="true" className="h-7 w-7 text-primary" />
+          <h2 className="mt-4 text-xl font-semibold text-primary">
             Site admin users
           </h2>
           <p className="mt-3 grow text-base-content/70">
@@ -66,13 +57,11 @@ function SiteAdminPage() {
           </span>
         </Link>
         <Link
-          className="group flex flex-col rounded-sm border border-base-300 bg-base-100 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
+          className="group flex flex-col rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
           to="/admin/teams"
         >
-          <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <UserGroupIcon aria-hidden="true" className="h-7 w-7" />
-          </span>
-          <h2 className="mt-6 text-xl font-semibold text-primary">Teams</h2>
+          <UserGroupIcon aria-hidden="true" className="h-7 w-7 text-primary" />
+          <h2 className="mt-4 text-xl font-semibold text-primary">Teams</h2>
           <p className="mt-3 grow text-base-content/70">
             View all teams, open team administration, and create new teams.
           </p>
@@ -85,13 +74,11 @@ function SiteAdminPage() {
           </span>
         </Link>
         <Link
-          className="group flex flex-col rounded-sm border border-base-300 bg-base-100 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
+          className="group flex flex-col rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
           to="/admin/spaces"
         >
-          <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <BuildingOfficeIcon aria-hidden="true" className="h-7 w-7" />
-          </span>
-          <h2 className="mt-6 text-xl font-semibold text-primary">Spaces</h2>
+          <BuildingOfficeIcon aria-hidden="true" className="h-7 w-7 text-primary" />
+          <h2 className="mt-4 text-xl font-semibold text-primary">Spaces</h2>
           <p className="mt-3 grow text-base-content/70">
             Create and update buildings and other named locations.
           </p>
@@ -104,13 +91,11 @@ function SiteAdminPage() {
           </span>
         </Link>
         <Link
-          className="group flex flex-col rounded-sm border border-base-300 bg-base-100 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
+          className="group flex flex-col rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
           to="/admin/resource-templates"
         >
-          <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <DocumentTextIcon aria-hidden="true" className="h-7 w-7" />
-          </span>
-          <h2 className="mt-6 text-xl font-semibold text-primary">Resource templates</h2>
+          <DocumentTextIcon aria-hidden="true" className="h-7 w-7 text-primary" />
+          <h2 className="mt-4 text-xl font-semibold text-primary">Resource templates</h2>
           <p className="mt-3 grow text-base-content/70">Build and preview reusable request forms, manage templates, and duplicate existing forms.</p>
           <span className="mt-6 flex items-center gap-2 font-semibold text-primary">
             Manage resource templates

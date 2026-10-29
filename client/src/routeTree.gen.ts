@@ -9,48 +9,53 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as authenticatedRouteRouteImport } from './routes/(authenticated)/route'
 import { Route as AboutRouteImport } from './routes/about'
-import { Route as authenticatedIndexRouteImport } from './routes/(authenticated)/index'
-import { Route as authenticatedAdminRouteImport } from './routes/(authenticated)/admin'
-import { Route as authenticatedFetchRouteImport } from './routes/(authenticated)/fetch'
-import { Route as authenticatedFormRouteImport } from './routes/(authenticated)/form'
-import { Route as authenticatedMeRouteImport } from './routes/(authenticated)/me'
-import { Route as authenticatedNotificationRouteImport } from './routes/(authenticated)/notification'
-import { Route as authenticatedStylesRouteImport } from './routes/(authenticated)/styles'
-import { Route as authenticatedTableExportRouteImport } from './routes/(authenticated)/table-export'
+import { Route as authenticatedRouteRouteImport } from './routes/(authenticated)/route'
 import { Route as TempIndexRouteImport } from './routes/temp/index'
-import { Route as TempBuildingRouteImport } from './routes/temp/building'
-import { Route as TempReservationsRouteImport } from './routes/temp/reservations'
+import { Route as authenticatedIndexRouteImport } from './routes/(authenticated)/index'
 import { Route as TempRoomRouteImport } from './routes/temp/room'
-import { Route as authenticatedAdminIndexRouteImport } from './routes/(authenticated)/admin.index'
-import { Route as authenticatedAdminSpacesRouteImport } from './routes/(authenticated)/admin.spaces'
-import { Route as authenticatedAdminTeamsRouteImport } from './routes/(authenticated)/admin.teams'
-import { Route as authenticatedAdminUsersRouteImport } from './routes/(authenticated)/admin.users'
-import { Route as authenticatedTeamsTeamSlugRouteImport } from './routes/(authenticated)/teams.$teamSlug'
-import { Route as TempAdminResourcesRouteImport } from './routes/temp/admin/resources'
+import { Route as TempReservationsRouteImport } from './routes/temp/reservations'
+import { Route as TempBuildingRouteImport } from './routes/temp/building'
+import { Route as authenticatedTableExportRouteImport } from './routes/(authenticated)/table-export'
+import { Route as authenticatedStylesRouteImport } from './routes/(authenticated)/styles'
+import { Route as authenticatedNotificationRouteImport } from './routes/(authenticated)/notification'
+import { Route as authenticatedMeRouteImport } from './routes/(authenticated)/me'
+import { Route as authenticatedFormRouteImport } from './routes/(authenticated)/form'
+import { Route as authenticatedFetchRouteImport } from './routes/(authenticated)/fetch'
+import { Route as authenticatedAdminRouteImport } from './routes/(authenticated)/admin'
 import { Route as TempResourcesIndexRouteImport } from './routes/temp/resources/index'
+import { Route as authenticatedAdminIndexRouteImport } from './routes/(authenticated)/admin.index'
 import { Route as TempResourcesResourceIdRouteImport } from './routes/temp/resources/$resourceId'
-import { Route as authenticatedAdminResourceTemplatesIndexRouteImport } from './routes/(authenticated)/admin.resource-templates.index'
-import { Route as authenticatedAdminResourceTemplatesTemplateIdRouteImport } from './routes/(authenticated)/admin.resource-templates.$templateId'
-import { Route as authenticatedAdminResourceTemplatesNewRouteImport } from './routes/(authenticated)/admin.resource-templates.new'
+import { Route as TempAdminResourcesRouteImport } from './routes/temp/admin/resources'
+import { Route as authenticatedTeamsTeamSlugRouteImport } from './routes/(authenticated)/teams.$teamSlug'
+import { Route as authenticatedAdminUsersRouteImport } from './routes/(authenticated)/admin.users'
+import { Route as authenticatedAdminTeamsRouteImport } from './routes/(authenticated)/admin.teams'
+import { Route as authenticatedAdminSpacesRouteImport } from './routes/(authenticated)/admin.spaces'
 import { Route as authenticatedTeamsTeamSlugIndexRouteImport } from './routes/(authenticated)/teams.$teamSlug.index'
-import { Route as authenticatedTeamsTeamSlugMembersRouteImport } from './routes/(authenticated)/teams.$teamSlug.members'
+import { Route as authenticatedAdminResourceTemplatesIndexRouteImport } from './routes/(authenticated)/admin.resource-templates.index'
 import { Route as authenticatedTeamsTeamSlugResourceTemplatesRouteImport } from './routes/(authenticated)/teams.$teamSlug.resource-templates'
-import { Route as authenticatedTeamsTeamSlugResourceTemplatesIndexRouteImport } from './routes/(authenticated)/teams.$teamSlug.resource-templates.index'
-import { Route as authenticatedTeamsTeamSlugResourceTemplatesTemplateIdRouteImport } from './routes/(authenticated)/teams.$teamSlug.resource-templates.$templateId'
-import { Route as authenticatedTeamsTeamSlugResourceTemplatesNewRouteImport } from './routes/(authenticated)/teams.$teamSlug.resource-templates.new'
+import { Route as authenticatedTeamsTeamSlugMembersRouteImport } from './routes/(authenticated)/teams.$teamSlug.members'
+import { Route as authenticatedAdminResourceTemplatesNewRouteImport } from './routes/(authenticated)/admin.resource-templates.new'
+import { Route as authenticatedAdminResourceTemplatesTemplateIdRouteImport } from './routes/(authenticated)/admin.resource-templates.$templateId'
 import { Route as authenticatedTeamsTeamSlugResourcesIndexRouteImport } from './routes/(authenticated)/teams.$teamSlug.resources.index'
-import { Route as authenticatedTeamsTeamSlugResourcesResourceIdRouteImport } from './routes/(authenticated)/teams.$teamSlug.resources.$resourceId'
+import { Route as authenticatedTeamsTeamSlugResourceTemplatesIndexRouteImport } from './routes/(authenticated)/teams.$teamSlug.resource-templates.index'
 import { Route as authenticatedTeamsTeamSlugResourcesNewRouteImport } from './routes/(authenticated)/teams.$teamSlug.resources.new'
+import { Route as authenticatedTeamsTeamSlugResourcesResourceIdRouteImport } from './routes/(authenticated)/teams.$teamSlug.resources.$resourceId'
+import { Route as authenticatedTeamsTeamSlugResourceTemplatesNewRouteImport } from './routes/(authenticated)/teams.$teamSlug.resource-templates.new'
+import { Route as authenticatedTeamsTeamSlugResourceTemplatesTemplateIdRouteImport } from './routes/(authenticated)/teams.$teamSlug.resource-templates.$templateId'
 
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const authenticatedRouteRoute = authenticatedRouteRouteImport.update({
   id: '/(authenticated)',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AboutRoute = AboutRouteImport.update({
-  id: '/about',
-  path: '/about',
+const TempIndexRoute = TempIndexRouteImport.update({
+  id: '/temp/',
+  path: '/temp/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const authenticatedIndexRoute = authenticatedIndexRouteImport.update({
@@ -58,24 +63,30 @@ const authenticatedIndexRoute = authenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => authenticatedRouteRoute,
 } as any)
-const authenticatedAdminRoute = authenticatedAdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
-  getParentRoute: () => authenticatedRouteRoute,
+const TempRoomRoute = TempRoomRouteImport.update({
+  id: '/temp/room',
+  path: '/temp/room',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const authenticatedFetchRoute = authenticatedFetchRouteImport.update({
-  id: '/fetch',
-  path: '/fetch',
-  getParentRoute: () => authenticatedRouteRoute,
+const TempReservationsRoute = TempReservationsRouteImport.update({
+  id: '/temp/reservations',
+  path: '/temp/reservations',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const authenticatedFormRoute = authenticatedFormRouteImport.update({
-  id: '/form',
-  path: '/form',
-  getParentRoute: () => authenticatedRouteRoute,
+const TempBuildingRoute = TempBuildingRouteImport.update({
+  id: '/temp/building',
+  path: '/temp/building',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const authenticatedMeRoute = authenticatedMeRouteImport.update({
-  id: '/me',
-  path: '/me',
+const authenticatedTableExportRoute =
+  authenticatedTableExportRouteImport.update({
+    id: '/table-export',
+    path: '/table-export',
+    getParentRoute: () => authenticatedRouteRoute,
+  } as any)
+const authenticatedStylesRoute = authenticatedStylesRouteImport.update({
+  id: '/styles',
+  path: '/styles',
   getParentRoute: () => authenticatedRouteRoute,
 } as any)
 const authenticatedNotificationRoute =
@@ -84,40 +95,60 @@ const authenticatedNotificationRoute =
     path: '/notification',
     getParentRoute: () => authenticatedRouteRoute,
   } as any)
-const authenticatedStylesRoute = authenticatedStylesRouteImport.update({
-  id: '/styles',
-  path: '/styles',
+const authenticatedMeRoute = authenticatedMeRouteImport.update({
+  id: '/me',
+  path: '/me',
   getParentRoute: () => authenticatedRouteRoute,
 } as any)
-const authenticatedTableExportRoute =
-  authenticatedTableExportRouteImport.update({
-    id: '/table-export',
-    path: '/table-export',
-    getParentRoute: () => authenticatedRouteRoute,
-  } as any)
-const TempIndexRoute = TempIndexRouteImport.update({
-  id: '/temp/',
-  path: '/temp/',
-  getParentRoute: () => rootRouteImport,
+const authenticatedFormRoute = authenticatedFormRouteImport.update({
+  id: '/form',
+  path: '/form',
+  getParentRoute: () => authenticatedRouteRoute,
 } as any)
-const TempBuildingRoute = TempBuildingRouteImport.update({
-  id: '/temp/building',
-  path: '/temp/building',
-  getParentRoute: () => rootRouteImport,
+const authenticatedFetchRoute = authenticatedFetchRouteImport.update({
+  id: '/fetch',
+  path: '/fetch',
+  getParentRoute: () => authenticatedRouteRoute,
 } as any)
-const TempReservationsRoute = TempReservationsRouteImport.update({
-  id: '/temp/reservations',
-  path: '/temp/reservations',
-  getParentRoute: () => rootRouteImport,
+const authenticatedAdminRoute = authenticatedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => authenticatedRouteRoute,
 } as any)
-const TempRoomRoute = TempRoomRouteImport.update({
-  id: '/temp/room',
-  path: '/temp/room',
+const TempResourcesIndexRoute = TempResourcesIndexRouteImport.update({
+  id: '/temp/resources/',
+  path: '/temp/resources/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const authenticatedAdminIndexRoute = authenticatedAdminIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => authenticatedAdminRoute,
+} as any)
+const TempResourcesResourceIdRoute = TempResourcesResourceIdRouteImport.update({
+  id: '/temp/resources/$resourceId',
+  path: '/temp/resources/$resourceId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TempAdminResourcesRoute = TempAdminResourcesRouteImport.update({
+  id: '/temp/admin/resources',
+  path: '/temp/admin/resources',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const authenticatedTeamsTeamSlugRoute =
+  authenticatedTeamsTeamSlugRouteImport.update({
+    id: '/teams/$teamSlug',
+    path: '/teams/$teamSlug',
+    getParentRoute: () => authenticatedRouteRoute,
+  } as any)
+const authenticatedAdminUsersRoute = authenticatedAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => authenticatedAdminRoute,
+} as any)
+const authenticatedAdminTeamsRoute = authenticatedAdminTeamsRouteImport.update({
+  id: '/teams',
+  path: '/teams',
   getParentRoute: () => authenticatedAdminRoute,
 } as any)
 const authenticatedAdminSpacesRoute =
@@ -126,59 +157,22 @@ const authenticatedAdminSpacesRoute =
     path: '/spaces',
     getParentRoute: () => authenticatedAdminRoute,
   } as any)
-const authenticatedAdminTeamsRoute = authenticatedAdminTeamsRouteImport.update({
-  id: '/teams',
-  path: '/teams',
-  getParentRoute: () => authenticatedAdminRoute,
-} as any)
-const authenticatedAdminUsersRoute = authenticatedAdminUsersRouteImport.update({
-  id: '/users',
-  path: '/users',
-  getParentRoute: () => authenticatedAdminRoute,
-} as any)
-const authenticatedTeamsTeamSlugRoute =
-  authenticatedTeamsTeamSlugRouteImport.update({
-    id: '/teams/$teamSlug',
-    path: '/teams/$teamSlug',
-    getParentRoute: () => authenticatedRouteRoute,
+const authenticatedTeamsTeamSlugIndexRoute =
+  authenticatedTeamsTeamSlugIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => authenticatedTeamsTeamSlugRoute,
   } as any)
-const TempAdminResourcesRoute = TempAdminResourcesRouteImport.update({
-  id: '/temp/admin/resources',
-  path: '/temp/admin/resources',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TempResourcesIndexRoute = TempResourcesIndexRouteImport.update({
-  id: '/temp/resources/',
-  path: '/temp/resources/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TempResourcesResourceIdRoute = TempResourcesResourceIdRouteImport.update({
-  id: '/temp/resources/$resourceId',
-  path: '/temp/resources/$resourceId',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const authenticatedAdminResourceTemplatesIndexRoute =
   authenticatedAdminResourceTemplatesIndexRouteImport.update({
     id: '/resource-templates/',
     path: '/resource-templates/',
     getParentRoute: () => authenticatedAdminRoute,
   } as any)
-const authenticatedAdminResourceTemplatesTemplateIdRoute =
-  authenticatedAdminResourceTemplatesTemplateIdRouteImport.update({
-    id: '/resource-templates/$templateId',
-    path: '/resource-templates/$templateId',
-    getParentRoute: () => authenticatedAdminRoute,
-  } as any)
-const authenticatedAdminResourceTemplatesNewRoute =
-  authenticatedAdminResourceTemplatesNewRouteImport.update({
-    id: '/resource-templates/new',
-    path: '/resource-templates/new',
-    getParentRoute: () => authenticatedAdminRoute,
-  } as any)
-const authenticatedTeamsTeamSlugIndexRoute =
-  authenticatedTeamsTeamSlugIndexRouteImport.update({
-    id: '/',
-    path: '/',
+const authenticatedTeamsTeamSlugResourceTemplatesRoute =
+  authenticatedTeamsTeamSlugResourceTemplatesRouteImport.update({
+    id: '/resource-templates',
+    path: '/resource-templates',
     getParentRoute: () => authenticatedTeamsTeamSlugRoute,
   } as any)
 const authenticatedTeamsTeamSlugMembersRoute =
@@ -187,10 +181,22 @@ const authenticatedTeamsTeamSlugMembersRoute =
     path: '/members',
     getParentRoute: () => authenticatedTeamsTeamSlugRoute,
   } as any)
-const authenticatedTeamsTeamSlugResourceTemplatesRoute =
-  authenticatedTeamsTeamSlugResourceTemplatesRouteImport.update({
-    id: '/resource-templates',
-    path: '/resource-templates',
+const authenticatedAdminResourceTemplatesNewRoute =
+  authenticatedAdminResourceTemplatesNewRouteImport.update({
+    id: '/resource-templates/new',
+    path: '/resource-templates/new',
+    getParentRoute: () => authenticatedAdminRoute,
+  } as any)
+const authenticatedAdminResourceTemplatesTemplateIdRoute =
+  authenticatedAdminResourceTemplatesTemplateIdRouteImport.update({
+    id: '/resource-templates/$templateId',
+    path: '/resource-templates/$templateId',
+    getParentRoute: () => authenticatedAdminRoute,
+  } as any)
+const authenticatedTeamsTeamSlugResourcesIndexRoute =
+  authenticatedTeamsTeamSlugResourcesIndexRouteImport.update({
+    id: '/resources/',
+    path: '/resources/',
     getParentRoute: () => authenticatedTeamsTeamSlugRoute,
   } as any)
 const authenticatedTeamsTeamSlugResourceTemplatesIndexRoute =
@@ -199,22 +205,10 @@ const authenticatedTeamsTeamSlugResourceTemplatesIndexRoute =
     path: '/',
     getParentRoute: () => authenticatedTeamsTeamSlugResourceTemplatesRoute,
   } as any)
-const authenticatedTeamsTeamSlugResourceTemplatesTemplateIdRoute =
-  authenticatedTeamsTeamSlugResourceTemplatesTemplateIdRouteImport.update({
-    id: '/$templateId',
-    path: '/$templateId',
-    getParentRoute: () => authenticatedTeamsTeamSlugResourceTemplatesRoute,
-  } as any)
-const authenticatedTeamsTeamSlugResourceTemplatesNewRoute =
-  authenticatedTeamsTeamSlugResourceTemplatesNewRouteImport.update({
-    id: '/new',
-    path: '/new',
-    getParentRoute: () => authenticatedTeamsTeamSlugResourceTemplatesRoute,
-  } as any)
-const authenticatedTeamsTeamSlugResourcesIndexRoute =
-  authenticatedTeamsTeamSlugResourcesIndexRouteImport.update({
-    id: '/resources/',
-    path: '/resources/',
+const authenticatedTeamsTeamSlugResourcesNewRoute =
+  authenticatedTeamsTeamSlugResourcesNewRouteImport.update({
+    id: '/resources/new',
+    path: '/resources/new',
     getParentRoute: () => authenticatedTeamsTeamSlugRoute,
   } as any)
 const authenticatedTeamsTeamSlugResourcesResourceIdRoute =
@@ -223,11 +217,17 @@ const authenticatedTeamsTeamSlugResourcesResourceIdRoute =
     path: '/resources/$resourceId',
     getParentRoute: () => authenticatedTeamsTeamSlugRoute,
   } as any)
-const authenticatedTeamsTeamSlugResourcesNewRoute =
-  authenticatedTeamsTeamSlugResourcesNewRouteImport.update({
-    id: '/resources/new',
-    path: '/resources/new',
-    getParentRoute: () => authenticatedTeamsTeamSlugRoute,
+const authenticatedTeamsTeamSlugResourceTemplatesNewRoute =
+  authenticatedTeamsTeamSlugResourceTemplatesNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => authenticatedTeamsTeamSlugResourceTemplatesRoute,
+  } as any)
+const authenticatedTeamsTeamSlugResourceTemplatesTemplateIdRoute =
+  authenticatedTeamsTeamSlugResourceTemplatesTemplateIdRouteImport.update({
+    id: '/$templateId',
+    path: '/$templateId',
+    getParentRoute: () => authenticatedTeamsTeamSlugResourceTemplatesRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -243,7 +243,7 @@ export interface FileRoutesByFullPath {
   '/temp/reservations': typeof TempReservationsRoute
   '/temp/room': typeof TempRoomRoute
   '/': typeof authenticatedIndexRoute
-  '/temp/': typeof TempIndexRoute
+  '/temp': typeof TempIndexRoute
   '/admin/spaces': typeof authenticatedAdminSpacesRoute
   '/admin/teams': typeof authenticatedAdminTeamsRoute
   '/admin/users': typeof authenticatedAdminUsersRoute
@@ -251,19 +251,19 @@ export interface FileRoutesByFullPath {
   '/temp/admin/resources': typeof TempAdminResourcesRoute
   '/temp/resources/$resourceId': typeof TempResourcesResourceIdRoute
   '/admin/': typeof authenticatedAdminIndexRoute
-  '/temp/resources/': typeof TempResourcesIndexRoute
+  '/temp/resources': typeof TempResourcesIndexRoute
   '/admin/resource-templates/$templateId': typeof authenticatedAdminResourceTemplatesTemplateIdRoute
   '/admin/resource-templates/new': typeof authenticatedAdminResourceTemplatesNewRoute
   '/teams/$teamSlug/members': typeof authenticatedTeamsTeamSlugMembersRoute
   '/teams/$teamSlug/resource-templates': typeof authenticatedTeamsTeamSlugResourceTemplatesRouteWithChildren
-  '/admin/resource-templates/': typeof authenticatedAdminResourceTemplatesIndexRoute
+  '/admin/resource-templates': typeof authenticatedAdminResourceTemplatesIndexRoute
   '/teams/$teamSlug/': typeof authenticatedTeamsTeamSlugIndexRoute
   '/teams/$teamSlug/resource-templates/$templateId': typeof authenticatedTeamsTeamSlugResourceTemplatesTemplateIdRoute
   '/teams/$teamSlug/resource-templates/new': typeof authenticatedTeamsTeamSlugResourceTemplatesNewRoute
   '/teams/$teamSlug/resources/$resourceId': typeof authenticatedTeamsTeamSlugResourcesResourceIdRoute
   '/teams/$teamSlug/resources/new': typeof authenticatedTeamsTeamSlugResourcesNewRoute
   '/teams/$teamSlug/resource-templates/': typeof authenticatedTeamsTeamSlugResourceTemplatesIndexRoute
-  '/teams/$teamSlug/resources/': typeof authenticatedTeamsTeamSlugResourcesIndexRoute
+  '/teams/$teamSlug/resources': typeof authenticatedTeamsTeamSlugResourcesIndexRoute
 }
 export interface FileRoutesByTo {
   '/about': typeof AboutRoute
@@ -349,7 +349,7 @@ export interface FileRouteTypes {
     | '/temp/reservations'
     | '/temp/room'
     | '/'
-    | '/temp/'
+    | '/temp'
     | '/admin/spaces'
     | '/admin/teams'
     | '/admin/users'
@@ -357,19 +357,19 @@ export interface FileRouteTypes {
     | '/temp/admin/resources'
     | '/temp/resources/$resourceId'
     | '/admin/'
-    | '/temp/resources/'
+    | '/temp/resources'
     | '/admin/resource-templates/$templateId'
     | '/admin/resource-templates/new'
     | '/teams/$teamSlug/members'
     | '/teams/$teamSlug/resource-templates'
-    | '/admin/resource-templates/'
+    | '/admin/resource-templates'
     | '/teams/$teamSlug/'
     | '/teams/$teamSlug/resource-templates/$templateId'
     | '/teams/$teamSlug/resource-templates/new'
     | '/teams/$teamSlug/resources/$resourceId'
     | '/teams/$teamSlug/resources/new'
     | '/teams/$teamSlug/resource-templates/'
-    | '/teams/$teamSlug/resources/'
+    | '/teams/$teamSlug/resources'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/about'
@@ -454,6 +454,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/(authenticated)': {
       id: '/(authenticated)'
       path: ''
@@ -461,11 +468,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/about': {
-      id: '/about'
-      path: '/about'
-      fullPath: '/about'
-      preLoaderRoute: typeof AboutRouteImport
+    '/temp/': {
+      id: '/temp/'
+      path: '/temp'
+      fullPath: '/temp'
+      preLoaderRoute: typeof TempIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/(authenticated)/': {
@@ -475,67 +482,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authenticatedIndexRouteImport
       parentRoute: typeof authenticatedRouteRoute
     }
-    '/(authenticated)/admin': {
-      id: '/(authenticated)/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof authenticatedAdminRouteImport
-      parentRoute: typeof authenticatedRouteRoute
-    }
-    '/(authenticated)/fetch': {
-      id: '/(authenticated)/fetch'
-      path: '/fetch'
-      fullPath: '/fetch'
-      preLoaderRoute: typeof authenticatedFetchRouteImport
-      parentRoute: typeof authenticatedRouteRoute
-    }
-    '/(authenticated)/form': {
-      id: '/(authenticated)/form'
-      path: '/form'
-      fullPath: '/form'
-      preLoaderRoute: typeof authenticatedFormRouteImport
-      parentRoute: typeof authenticatedRouteRoute
-    }
-    '/(authenticated)/me': {
-      id: '/(authenticated)/me'
-      path: '/me'
-      fullPath: '/me'
-      preLoaderRoute: typeof authenticatedMeRouteImport
-      parentRoute: typeof authenticatedRouteRoute
-    }
-    '/(authenticated)/notification': {
-      id: '/(authenticated)/notification'
-      path: '/notification'
-      fullPath: '/notification'
-      preLoaderRoute: typeof authenticatedNotificationRouteImport
-      parentRoute: typeof authenticatedRouteRoute
-    }
-    '/(authenticated)/styles': {
-      id: '/(authenticated)/styles'
-      path: '/styles'
-      fullPath: '/styles'
-      preLoaderRoute: typeof authenticatedStylesRouteImport
-      parentRoute: typeof authenticatedRouteRoute
-    }
-    '/(authenticated)/table-export': {
-      id: '/(authenticated)/table-export'
-      path: '/table-export'
-      fullPath: '/table-export'
-      preLoaderRoute: typeof authenticatedTableExportRouteImport
-      parentRoute: typeof authenticatedRouteRoute
-    }
-    '/temp/': {
-      id: '/temp/'
-      path: '/temp'
-      fullPath: '/temp/'
-      preLoaderRoute: typeof TempIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/temp/building': {
-      id: '/temp/building'
-      path: '/temp/building'
-      fullPath: '/temp/building'
-      preLoaderRoute: typeof TempBuildingRouteImport
+    '/temp/room': {
+      id: '/temp/room'
+      path: '/temp/room'
+      fullPath: '/temp/room'
+      preLoaderRoute: typeof TempRoomRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/temp/reservations': {
@@ -545,11 +496,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TempReservationsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/temp/room': {
-      id: '/temp/room'
-      path: '/temp/room'
-      fullPath: '/temp/room'
-      preLoaderRoute: typeof TempRoomRouteImport
+    '/temp/building': {
+      id: '/temp/building'
+      path: '/temp/building'
+      fullPath: '/temp/building'
+      preLoaderRoute: typeof TempBuildingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(authenticated)/table-export': {
+      id: '/(authenticated)/table-export'
+      path: '/table-export'
+      fullPath: '/table-export'
+      preLoaderRoute: typeof authenticatedTableExportRouteImport
+      parentRoute: typeof authenticatedRouteRoute
+    }
+    '/(authenticated)/styles': {
+      id: '/(authenticated)/styles'
+      path: '/styles'
+      fullPath: '/styles'
+      preLoaderRoute: typeof authenticatedStylesRouteImport
+      parentRoute: typeof authenticatedRouteRoute
+    }
+    '/(authenticated)/notification': {
+      id: '/(authenticated)/notification'
+      path: '/notification'
+      fullPath: '/notification'
+      preLoaderRoute: typeof authenticatedNotificationRouteImport
+      parentRoute: typeof authenticatedRouteRoute
+    }
+    '/(authenticated)/me': {
+      id: '/(authenticated)/me'
+      path: '/me'
+      fullPath: '/me'
+      preLoaderRoute: typeof authenticatedMeRouteImport
+      parentRoute: typeof authenticatedRouteRoute
+    }
+    '/(authenticated)/form': {
+      id: '/(authenticated)/form'
+      path: '/form'
+      fullPath: '/form'
+      preLoaderRoute: typeof authenticatedFormRouteImport
+      parentRoute: typeof authenticatedRouteRoute
+    }
+    '/(authenticated)/fetch': {
+      id: '/(authenticated)/fetch'
+      path: '/fetch'
+      fullPath: '/fetch'
+      preLoaderRoute: typeof authenticatedFetchRouteImport
+      parentRoute: typeof authenticatedRouteRoute
+    }
+    '/(authenticated)/admin': {
+      id: '/(authenticated)/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof authenticatedAdminRouteImport
+      parentRoute: typeof authenticatedRouteRoute
+    }
+    '/temp/resources/': {
+      id: '/temp/resources/'
+      path: '/temp/resources'
+      fullPath: '/temp/resources'
+      preLoaderRoute: typeof TempResourcesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/(authenticated)/admin/': {
@@ -559,11 +566,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authenticatedAdminIndexRouteImport
       parentRoute: typeof authenticatedAdminRoute
     }
-    '/(authenticated)/admin/spaces': {
-      id: '/(authenticated)/admin/spaces'
-      path: '/spaces'
-      fullPath: '/admin/spaces'
-      preLoaderRoute: typeof authenticatedAdminSpacesRouteImport
+    '/temp/resources/$resourceId': {
+      id: '/temp/resources/$resourceId'
+      path: '/temp/resources/$resourceId'
+      fullPath: '/temp/resources/$resourceId'
+      preLoaderRoute: typeof TempResourcesResourceIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/temp/admin/resources': {
+      id: '/temp/admin/resources'
+      path: '/temp/admin/resources'
+      fullPath: '/temp/admin/resources'
+      preLoaderRoute: typeof TempAdminResourcesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(authenticated)/teams/$teamSlug': {
+      id: '/(authenticated)/teams/$teamSlug'
+      path: '/teams/$teamSlug'
+      fullPath: '/teams/$teamSlug'
+      preLoaderRoute: typeof authenticatedTeamsTeamSlugRouteImport
+      parentRoute: typeof authenticatedRouteRoute
+    }
+    '/(authenticated)/admin/users': {
+      id: '/(authenticated)/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof authenticatedAdminUsersRouteImport
       parentRoute: typeof authenticatedAdminRoute
     }
     '/(authenticated)/admin/teams': {
@@ -573,60 +601,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authenticatedAdminTeamsRouteImport
       parentRoute: typeof authenticatedAdminRoute
     }
-    '/(authenticated)/admin/users': {
-      id: '/(authenticated)/admin/users'
-      path: '/users'
-      fullPath: '/admin/users'
-      preLoaderRoute: typeof authenticatedAdminUsersRouteImport
-      parentRoute: typeof authenticatedAdminRoute
-    }
-    '/(authenticated)/teams/$teamSlug': {
-      id: '/(authenticated)/teams/$teamSlug'
-      path: '/teams/$teamSlug'
-      fullPath: '/teams/$teamSlug'
-      preLoaderRoute: typeof authenticatedTeamsTeamSlugRouteImport
-      parentRoute: typeof authenticatedRouteRoute
-    }
-    '/temp/admin/resources': {
-      id: '/temp/admin/resources'
-      path: '/temp/admin/resources'
-      fullPath: '/temp/admin/resources'
-      preLoaderRoute: typeof TempAdminResourcesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/temp/resources/': {
-      id: '/temp/resources/'
-      path: '/temp/resources'
-      fullPath: '/temp/resources/'
-      preLoaderRoute: typeof TempResourcesIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/temp/resources/$resourceId': {
-      id: '/temp/resources/$resourceId'
-      path: '/temp/resources/$resourceId'
-      fullPath: '/temp/resources/$resourceId'
-      preLoaderRoute: typeof TempResourcesResourceIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/(authenticated)/admin/resource-templates/': {
-      id: '/(authenticated)/admin/resource-templates/'
-      path: '/resource-templates'
-      fullPath: '/admin/resource-templates/'
-      preLoaderRoute: typeof authenticatedAdminResourceTemplatesIndexRouteImport
-      parentRoute: typeof authenticatedAdminRoute
-    }
-    '/(authenticated)/admin/resource-templates/$templateId': {
-      id: '/(authenticated)/admin/resource-templates/$templateId'
-      path: '/resource-templates/$templateId'
-      fullPath: '/admin/resource-templates/$templateId'
-      preLoaderRoute: typeof authenticatedAdminResourceTemplatesTemplateIdRouteImport
-      parentRoute: typeof authenticatedAdminRoute
-    }
-    '/(authenticated)/admin/resource-templates/new': {
-      id: '/(authenticated)/admin/resource-templates/new'
-      path: '/resource-templates/new'
-      fullPath: '/admin/resource-templates/new'
-      preLoaderRoute: typeof authenticatedAdminResourceTemplatesNewRouteImport
+    '/(authenticated)/admin/spaces': {
+      id: '/(authenticated)/admin/spaces'
+      path: '/spaces'
+      fullPath: '/admin/spaces'
+      preLoaderRoute: typeof authenticatedAdminSpacesRouteImport
       parentRoute: typeof authenticatedAdminRoute
     }
     '/(authenticated)/teams/$teamSlug/': {
@@ -636,6 +615,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authenticatedTeamsTeamSlugIndexRouteImport
       parentRoute: typeof authenticatedTeamsTeamSlugRoute
     }
+    '/(authenticated)/admin/resource-templates/': {
+      id: '/(authenticated)/admin/resource-templates/'
+      path: '/resource-templates'
+      fullPath: '/admin/resource-templates'
+      preLoaderRoute: typeof authenticatedAdminResourceTemplatesIndexRouteImport
+      parentRoute: typeof authenticatedAdminRoute
+    }
+    '/(authenticated)/teams/$teamSlug/resource-templates': {
+      id: '/(authenticated)/teams/$teamSlug/resource-templates'
+      path: '/resource-templates'
+      fullPath: '/teams/$teamSlug/resource-templates'
+      preLoaderRoute: typeof authenticatedTeamsTeamSlugResourceTemplatesRouteImport
+      parentRoute: typeof authenticatedTeamsTeamSlugRoute
+    }
     '/(authenticated)/teams/$teamSlug/members': {
       id: '/(authenticated)/teams/$teamSlug/members'
       path: '/members'
@@ -643,11 +636,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authenticatedTeamsTeamSlugMembersRouteImport
       parentRoute: typeof authenticatedTeamsTeamSlugRoute
     }
-    '/(authenticated)/teams/$teamSlug/resource-templates': {
-      id: '/(authenticated)/teams/$teamSlug/resource-templates'
-      path: '/resource-templates'
-      fullPath: '/teams/$teamSlug/resource-templates'
-      preLoaderRoute: typeof authenticatedTeamsTeamSlugResourceTemplatesRouteImport
+    '/(authenticated)/admin/resource-templates/new': {
+      id: '/(authenticated)/admin/resource-templates/new'
+      path: '/resource-templates/new'
+      fullPath: '/admin/resource-templates/new'
+      preLoaderRoute: typeof authenticatedAdminResourceTemplatesNewRouteImport
+      parentRoute: typeof authenticatedAdminRoute
+    }
+    '/(authenticated)/admin/resource-templates/$templateId': {
+      id: '/(authenticated)/admin/resource-templates/$templateId'
+      path: '/resource-templates/$templateId'
+      fullPath: '/admin/resource-templates/$templateId'
+      preLoaderRoute: typeof authenticatedAdminResourceTemplatesTemplateIdRouteImport
+      parentRoute: typeof authenticatedAdminRoute
+    }
+    '/(authenticated)/teams/$teamSlug/resources/': {
+      id: '/(authenticated)/teams/$teamSlug/resources/'
+      path: '/resources'
+      fullPath: '/teams/$teamSlug/resources'
+      preLoaderRoute: typeof authenticatedTeamsTeamSlugResourcesIndexRouteImport
       parentRoute: typeof authenticatedTeamsTeamSlugRoute
     }
     '/(authenticated)/teams/$teamSlug/resource-templates/': {
@@ -657,25 +664,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authenticatedTeamsTeamSlugResourceTemplatesIndexRouteImport
       parentRoute: typeof authenticatedTeamsTeamSlugResourceTemplatesRoute
     }
-    '/(authenticated)/teams/$teamSlug/resource-templates/$templateId': {
-      id: '/(authenticated)/teams/$teamSlug/resource-templates/$templateId'
-      path: '/$templateId'
-      fullPath: '/teams/$teamSlug/resource-templates/$templateId'
-      preLoaderRoute: typeof authenticatedTeamsTeamSlugResourceTemplatesTemplateIdRouteImport
-      parentRoute: typeof authenticatedTeamsTeamSlugResourceTemplatesRoute
-    }
-    '/(authenticated)/teams/$teamSlug/resource-templates/new': {
-      id: '/(authenticated)/teams/$teamSlug/resource-templates/new'
-      path: '/new'
-      fullPath: '/teams/$teamSlug/resource-templates/new'
-      preLoaderRoute: typeof authenticatedTeamsTeamSlugResourceTemplatesNewRouteImport
-      parentRoute: typeof authenticatedTeamsTeamSlugResourceTemplatesRoute
-    }
-    '/(authenticated)/teams/$teamSlug/resources/': {
-      id: '/(authenticated)/teams/$teamSlug/resources/'
-      path: '/resources'
-      fullPath: '/teams/$teamSlug/resources/'
-      preLoaderRoute: typeof authenticatedTeamsTeamSlugResourcesIndexRouteImport
+    '/(authenticated)/teams/$teamSlug/resources/new': {
+      id: '/(authenticated)/teams/$teamSlug/resources/new'
+      path: '/resources/new'
+      fullPath: '/teams/$teamSlug/resources/new'
+      preLoaderRoute: typeof authenticatedTeamsTeamSlugResourcesNewRouteImport
       parentRoute: typeof authenticatedTeamsTeamSlugRoute
     }
     '/(authenticated)/teams/$teamSlug/resources/$resourceId': {
@@ -685,12 +678,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authenticatedTeamsTeamSlugResourcesResourceIdRouteImport
       parentRoute: typeof authenticatedTeamsTeamSlugRoute
     }
-    '/(authenticated)/teams/$teamSlug/resources/new': {
-      id: '/(authenticated)/teams/$teamSlug/resources/new'
-      path: '/resources/new'
-      fullPath: '/teams/$teamSlug/resources/new'
-      preLoaderRoute: typeof authenticatedTeamsTeamSlugResourcesNewRouteImport
-      parentRoute: typeof authenticatedTeamsTeamSlugRoute
+    '/(authenticated)/teams/$teamSlug/resource-templates/new': {
+      id: '/(authenticated)/teams/$teamSlug/resource-templates/new'
+      path: '/new'
+      fullPath: '/teams/$teamSlug/resource-templates/new'
+      preLoaderRoute: typeof authenticatedTeamsTeamSlugResourceTemplatesNewRouteImport
+      parentRoute: typeof authenticatedTeamsTeamSlugResourceTemplatesRoute
+    }
+    '/(authenticated)/teams/$teamSlug/resource-templates/$templateId': {
+      id: '/(authenticated)/teams/$teamSlug/resource-templates/$templateId'
+      path: '/$templateId'
+      fullPath: '/teams/$teamSlug/resource-templates/$templateId'
+      preLoaderRoute: typeof authenticatedTeamsTeamSlugResourceTemplatesTemplateIdRouteImport
+      parentRoute: typeof authenticatedTeamsTeamSlugResourceTemplatesRoute
     }
   }
 }

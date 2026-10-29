@@ -283,7 +283,7 @@ describe('team resource templates', () => {
       screen.queryByRole('button', { name: 'Save template' })
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: 'Build form' })
+      screen.queryByRole('tab', { name: 'Build form' })
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Add Input' })
@@ -291,7 +291,7 @@ describe('team resource templates', () => {
     const answer = screen.getByRole('textbox', { name: /Visitor name/ });
     fireEvent.change(answer, { target: { value: 'Taylor' } });
     expect(answer).toHaveValue('Taylor');
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('09:00');
     expect(screen.getByLabelText('Monday opening time 1')).toBeDisabled();
     expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue(
@@ -313,7 +313,7 @@ describe('team resource templates', () => {
       screen.getByRole('textbox', { name: 'Template name' })
     ).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Save template' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Build form' })).toBeEnabled();
+    expect(screen.getByRole('tab', { name: 'Build form' })).toBeEnabled();
   });
 
   it('shows active system templates and reveals older team versions without inactive system templates', async () => {
@@ -415,7 +415,7 @@ describe('team resource templates', () => {
     const answer = screen.getByRole('textbox', { name: /Visitor name/ });
     fireEvent.change(answer, { target: { value: 'Taylor' } });
     expect(answer).toHaveValue('Taylor');
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('09:00');
     expect(screen.getByLabelText('Monday opening time 1')).toBeDisabled();
     expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue(

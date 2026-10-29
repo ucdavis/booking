@@ -386,8 +386,8 @@ describe('team resources', () => {
     const template = await screen.findByRole('combobox', {
       name: 'Resource template',
     });
-    const location = screen.getByRole('combobox', { name: 'Location' });
-    expect(location).toHaveValue('2');
+    const location = screen.getByRole('radio', { name: 'Teaching laboratory' });
+    expect(location).toBeChecked();
     expect(template).toBeEnabled();
     expect(
       location.compareDocumentPosition(template) &
@@ -431,8 +431,7 @@ describe('team resources', () => {
         ).value,
       },
     });
-    expect(location).toHaveValue('2');
-    expect(location).toHaveDisplayValue('Teaching laboratory');
+    expect(location).toBeChecked();
     expect(
       within(location).queryByRole('option', { name: 'Add a new location' })
     ).not.toBeInTheDocument();
@@ -656,12 +655,11 @@ describe('team resources', () => {
     );
     const rendered = renderRoute({ initialPath: `${listPath}/new` });
     cleanup = rendered.cleanup;
-    const location = await screen.findByRole('combobox', { name: 'Location' });
+    const location = await screen.findByRole('group', { name: 'Location' });
     const template = screen.getByRole('combobox', {
       name: 'Resource template',
     });
-    expect(location).toHaveValue('');
-    expect(location).toHaveDisplayValue('Pick a location');
+    expect(within(location).getAllByRole('radio').every((radio) => !(radio as HTMLInputElement).checked)).toBe(true);
     expect(template).toBeDisabled();
     expect(
       location.compareDocumentPosition(template) &
@@ -669,13 +667,11 @@ describe('team resources', () => {
     ).toBeTruthy();
     expect(
       within(location)
-        .getAllByRole('option')
-        .map((option) => option.textContent)
-    ).toEqual(['Pick a location', 'Teaching laboratory', 'Annex laboratory']);
-    expect(
-      screen.queryByText('Specialist equipment in the annex.')
-    ).not.toBeInTheDocument();
-    fireEvent.change(location, { target: { value: '3' } });
+        .getAllByRole('radio')
+        .map((radio) => radio.getAttribute('aria-label'))
+    ).toEqual(['Teaching laboratory', 'Annex laboratory']);
+    expect(screen.getByText('Specialist equipment in the annex.')).toBeInTheDocument();
+    fireEvent.click(within(location).getByRole('radio', { name: 'Annex laboratory' }));
     expect(template).toBeEnabled();
     expect(
       screen.getByText('Specialist equipment in the annex.')
@@ -686,7 +682,7 @@ describe('team resources', () => {
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     fireEvent.change(template, { target: { value: '1' } });
-    expect(location).toHaveValue('3');
+    expect(within(location).getByRole('radio', { name: 'Annex laboratory' })).toBeChecked();
     fireEvent.change(screen.getByRole('textbox', { name: 'Resource name' }), {
       target: { value: 'Annex microscope' },
     });
@@ -694,10 +690,10 @@ describe('team resources', () => {
       target: { value: 'Equipment' },
     });
     expect(requests).toHaveLength(0);
-    fireEvent.change(location, { target: { value: '2' } });
+    fireEvent.click(within(location).getByRole('radio', { name: 'Teaching laboratory' }));
     expect(screen.getByText('1 Science Way')).toBeInTheDocument();
-    expect(screen.queryByText('2 Annex Road')).not.toBeInTheDocument();
-    fireEvent.change(location, { target: { value: '3' } });
+    expect(screen.getByText('2 Annex Road')).toBeInTheDocument();
+    fireEvent.click(within(location).getByRole('radio', { name: 'Annex laboratory' }));
     await act(async () => {
       rendered.queryClient.setQueryData(
         resourceOptionsQueryOptions(team.slug).queryKey,
@@ -718,22 +714,20 @@ describe('team resources', () => {
     });
     await waitFor(() =>
       expect(
-        within(location).getByRole('option', { name: 'East Hall' })
+        within(location).getByRole('radio', { name: 'East Hall' })
       ).toBeInTheDocument()
     );
-    expect(location).toHaveValue('3');
+    expect(within(location).getByRole('radio', { name: 'Annex laboratory' })).toBeChecked();
     expect(screen.getByText('2 Annex Road')).toBeInTheDocument();
-    fireEvent.change(location, { target: { value: '4' } });
-    expect(screen.queryByText('2 Annex Road')).not.toBeInTheDocument();
-    expect(
-      screen.queryByText('Specialist equipment in the annex.')
-    ).not.toBeInTheDocument();
+    fireEvent.click(within(location).getByRole('radio', { name: 'East Hall' }));
+    expect(screen.getByText('2 Annex Road')).toBeInTheDocument();
+    expect(screen.getByText('Specialist equipment in the annex.')).toBeInTheDocument();
     expect(
       within(
         screen.getByRole('region', { name: 'Resource location' })
       ).queryByText('Address')
     ).not.toBeInTheDocument();
-    fireEvent.change(location, { target: { value: '3' } });
+    fireEvent.click(within(location).getByRole('radio', { name: 'Annex laboratory' }));
     expect(screen.getByRole('textbox', { name: 'Resource name' })).toHaveValue(
       'Annex microscope'
     );
@@ -798,8 +792,8 @@ describe('team resources', () => {
     server.use(http.post('/api/teams/:teamSlug/resources', create));
     const rendered = renderRoute({ initialPath: `${listPath}/new` });
     cleanup = rendered.cleanup;
-    const location = await screen.findByRole('combobox', { name: 'Location' });
-    fireEvent.change(location, { target: { value: '3' } });
+    const location = await screen.findByRole('group', { name: 'Location' });
+    fireEvent.click(within(location).getByRole('radio', { name: 'Annex laboratory' }));
     fireEvent.change(
       screen.getByRole('combobox', { name: 'Resource template' }),
       {
@@ -818,9 +812,9 @@ describe('team resources', () => {
         options
       );
     });
-    await waitFor(() => expect(location).toHaveDisplayValue('Pick a location'));
+    await waitFor(() => expect(within(location).queryByRole('radio', { name: 'Annex laboratory' })).not.toBeInTheDocument());
     expect(
-      within(location).queryByRole('option', { name: 'Annex laboratory' })
+      within(location).queryByRole('radio', { name: 'Annex laboratory' })
     ).not.toBeInTheDocument();
     expect(screen.queryByText('2 Annex Road')).not.toBeInTheDocument();
     expect(

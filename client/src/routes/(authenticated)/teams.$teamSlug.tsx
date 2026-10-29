@@ -1,4 +1,3 @@
-import { UserGroupIcon } from '@heroicons/react/24/outline';
 import { useIsMutating, useQuery } from '@tanstack/react-query';
 import {
   createFileRoute,
@@ -102,13 +101,7 @@ function TeamLayout() {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-3 text-primary">
-            <UserGroupIcon aria-hidden="true" className="h-6 w-6" />
-            <p className="text-sm font-semibold tracking-wide uppercase">
-              Team administration
-            </p>
-          </div>
-          <h1 className="mt-3 break-words text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
+          <h1 className="break-words text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
             {team.name}
           </h1>
           <p className="mt-3 text-base-content/70">
