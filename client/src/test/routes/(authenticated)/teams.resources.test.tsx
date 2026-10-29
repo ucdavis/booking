@@ -444,7 +444,7 @@ describe('team resources', () => {
     expect(
       screen.queryByRole('textbox', { name: 'Time zone' })
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Hours and rates' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Hours and rates' }));
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('09:00');
     expect(screen.getByRole('textbox', { name: 'Rate name 1' })).toHaveValue(
       'Standard'
@@ -1006,7 +1006,7 @@ describe('team resources', () => {
     );
     ({ cleanup } = renderRoute({ initialPath: `${listPath}/1` }));
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Hours and rates' })
+      await screen.findByRole('tab', { name: 'Hours and rates' })
     );
     fireEvent.change(screen.getByRole('textbox', { name: 'Rate name 1' }), {
       target: { value: 'Updated rate' },
@@ -1108,7 +1108,7 @@ describe('team resources', () => {
     expect(
       screen.getByText(/saved form is not valid JSON/)
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Hours and rates' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Hours and rates' }));
     expect(
       screen.getByText(/These settings use a newer format/)
     ).toBeInTheDocument();

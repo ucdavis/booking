@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useBlocker } from '@tanstack/react-router';
-import { useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import type { ResourceDetail } from './models/ResourceDetail.ts';
 import type { ResourceOptions } from './models/ResourceOptions.ts';
 import type { SaveResourceRequest } from './models/SaveResourceRequest.ts';
@@ -133,6 +133,7 @@ export function ResourceEditor({
   teamSlug: string;
 }) {
   const queryClient = useQueryClient();
+  const formId = useId();
   // Keep the draft and its concurrency tokens together when queries refetch.
   const [baseline, setBaseline] = useState(resource);
   const [selectedTemplate, setSelectedTemplate] = useState<ResourceTemplate>();
@@ -360,19 +361,54 @@ export function ResourceEditor({
           {baseline ? 'Edit resource' : 'Create resource'}
         </span>
       </nav>
-      <h2 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
-        {baseline ? 'Edit resource' : 'Create resource'}
-      </h2>
-      <p className="mt-3 max-w-3xl text-base-content/70">
-        {baseline
-          ? 'Update this resource and its reservation settings. Deactivating it keeps its existing reservations and history.'
-          : 'Choose a location and a resource template, then customize the resource, reservation form, opening hours, and rates.'}
-      </p>
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight text-primary">
+            {baseline ? 'Edit resource' : 'Create resource'}
+          </h2>
+          <p className="mt-3 max-w-2xl text-base-content/70">
+            {baseline
+              ? 'Update this resource and its reservation settings.'
+              : 'Choose a space and template, then customize your resource.'}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-3 self-start">
+          <Link
+            className="btn btn-ghost"
+            params={{ teamSlug }}
+            to="/teams/$teamSlug/resources"
+          >
+            Cancel
+          </Link>
+          {canEdit && (
+            <form.Subscribe selector={(state) => state.isSubmitting}>
+              {(isSubmitting) => (
+                <button
+                  className="btn btn-primary"
+                  disabled={
+                    isSaving ||
+                    isSubmitting ||
+                    (!baseline && options.spaces.length === 0)
+                  }
+                  form={formId}
+                  type="submit"
+                >
+                  {isSaving || isSubmitting
+                    ? 'Saving…'
+                    : baseline
+                      ? 'Save changes'
+                      : 'Create resource'}
+                </button>
+              )}
+            </form.Subscribe>
+          )}
+        </div>
+      </div>
       {baseline?.config && (
         <p className="mt-3 max-w-3xl text-sm text-base-content/65">
-          Configuration version {baseline.config.version}. Saving form, hours,
-          or rate changes publishes a new version. Previous versions and
-          existing reservations retain their saved configuration.
+          Configuration version {baseline.config.version}. Form, hours, and rate
+          changes create a new version. Existing reservations keep their saved
+          settings.
         </p>
       )}
       {blocker.status === 'blocked' && (
@@ -411,6 +447,7 @@ export function ResourceEditor({
       )}
       <form
         className="mt-8"
+        id={formId}
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
@@ -436,249 +473,276 @@ export function ResourceEditor({
         >
           {([isSubmitting, spaceId]) => (
             <fieldset className="space-y-6" disabled={isSaving || isSubmitting}>
-              {baseline && (
-                <section
-                  aria-label="Resource location"
-                  className="space-y-4 rounded-sm border border-base-300 bg-base-100 p-5"
+              <section
+                aria-label="Resource setup"
+                className="rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
+              >
+                <div
+                  className={
+                    baseline
+                      ? undefined
+                      : 'grid items-start gap-6 lg:grid-cols-2'
+                  }
                 >
-                  <h3 className="text-xl font-semibold text-primary">
-                    Location
-                  </h3>
-                  <p className="font-semibold">{baseline.space.name}</p>
-                  {(baseline.space.description?.trim() ||
-                    baseline.space.address?.trim()) && (
-                    <div className="space-y-3 rounded-sm bg-base-200/60 p-4 text-sm text-base-content/75">
-                      {baseline.space.description?.trim() && (
-                        <p className="whitespace-pre-line">
-                          {baseline.space.description.trim()}
-                        </p>
-                      )}
-                      {baseline.space.address?.trim() && (
-                        <dl>
-                          <dt className="font-semibold">Address</dt>
-                          <dd className="mt-1 whitespace-pre-line">
-                            {baseline.space.address.trim()}
-                          </dd>
-                        </dl>
-                      )}
-                    </div>
-                  )}
-                  <p className="text-sm text-base-content/65">
-                    The resource stays in its current location.
-                  </p>
-                </section>
-              )}
-              {!baseline && (
-                <section
-                  aria-label="Resource location"
-                  className="space-y-4"
-                >
-                  <h3 className="text-xl font-semibold text-primary">
-                    1. Choose a space
-                  </h3>
-                  {options.spaces.length === 0 ? (
-                    <p className="alert alert-warning" role="status">
-                      No active locations are available for this team. A
-                      location must be made available to the team before a
-                      resource can be created.
-                    </p>
-                  ) : (
-                    <form.AppField name="spaceId">
-                      {(field) => {
-                        const hasError =
-                          field.state.meta.isTouched &&
-                          !field.state.meta.isValid;
-                        return (
-                          <fieldset
-                            aria-describedby={
-                              hasError ? 'resource-location-error' : undefined
-                            }
-                            aria-invalid={hasError || undefined}
-                            className="space-y-3"
-                          >
-                            <legend className="sr-only">Location</legend>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              {options.spaces.map((space) => {
-                                const selected =
-                                  String(space.id) === field.state.value;
-                                return (
-                                  <label
-                                    className={`flex cursor-pointer items-start gap-3 rounded-sm border p-4 transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary ${selected ? 'border-primary bg-primary/5' : 'border-base-300 bg-base-200 hover:border-primary/40'}`}
-                                    key={space.id}
-                                  >
-                                    <input
-                                      aria-label={space.name}
-                                      checked={selected}
-                                      className="radio radio-primary radio-sm mt-1 shrink-0"
-                                      name={field.name}
-                                      onBlur={field.handleBlur}
-                                      onChange={() =>
-                                        field.handleChange(String(space.id))
-                                      }
-                                      required
-                                      type="radio"
-                                      value={String(space.id)}
-                                    />
-                                    <span className="block min-w-0 space-y-2 break-words">
-                                      <span className="block font-semibold text-primary">
-                                        {space.name}
-                                      </span>
-                                      {space.description?.trim() && (
-                                        <span className="block text-sm whitespace-pre-line text-base-content/75">
-                                          {space.description.trim()}
-                                        </span>
-                                      )}
-                                      {space.address?.trim() && (
-                                        <span className="block text-sm whitespace-pre-line text-base-content/65">
-                                          {space.address.trim()}
-                                        </span>
-                                      )}
-                                    </span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                            {hasError && (
-                              <p
-                                className="text-sm text-error"
-                                id="resource-location-error"
-                                role="alert"
-                              >
-                                {field.state.meta.errors
-                                  .filter(Boolean)
-                                  .join(', ')}
-                              </p>
-                            )}
-                          </fieldset>
-                        );
-                      }}
-                    </form.AppField>
-                  )}
-                </section>
-              )}
-              {!baseline && (
-                <section
-                  aria-label="Resource template"
-                  className="space-y-3"
-                >
-                  <h3 className="text-xl font-semibold text-primary">
-                    2. Choose a resource template
-                  </h3>
-                  {selectedTemplate ? (
-                    <>
-                      <p className="font-semibold">{selectedTemplate.name}</p>
-                      {selectedTemplate.description && (
-                        <p className="text-sm text-base-content/70">
-                          {selectedTemplate.description}
-                        </p>
+                  {baseline && (
+                    <section
+                      aria-label="Resource location"
+                      className="space-y-4"
+                    >
+                      <h3 className="text-xl font-semibold text-primary">
+                        Location
+                      </h3>
+                      <p className="font-semibold">{baseline.space.name}</p>
+                      {(baseline.space.description?.trim() ||
+                        baseline.space.address?.trim()) && (
+                        <div className="space-y-3 rounded-sm bg-base-200/60 p-4 text-sm text-base-content/75">
+                          {baseline.space.description?.trim() && (
+                            <p className="whitespace-pre-line">
+                              {baseline.space.description.trim()}
+                            </p>
+                          )}
+                          {baseline.space.address?.trim() && (
+                            <dl>
+                              <dt className="font-semibold">Address</dt>
+                              <dd className="mt-1 whitespace-pre-line">
+                                {baseline.space.address.trim()}
+                              </dd>
+                            </dl>
+                          )}
+                        </div>
                       )}
                       <p className="text-sm text-base-content/65">
-                        This resource has its own copy of the template. Later
-                        template changes will not change this resource.
+                        The resource stays in its current location.
                       </p>
-                    </>
-                  ) : activeTemplates.length ? (
-                    <form.Field name="sourceTemplateId">
-                      {(field) => {
-                        const hasError =
-                          field.state.meta.isTouched &&
-                          !field.state.meta.isValid;
-                        return (
-                          <div>
-                            <label
-                              className="mb-2 block text-sm font-semibold"
-                              htmlFor="resource-template"
-                            >
-                              Resource template
-                            </label>
-                            <select
-                              aria-describedby={
-                                hasError ? 'resource-template-error' : undefined
-                              }
-                              aria-invalid={hasError || undefined}
-                              className="select select-bordered w-full"
-                              disabled={
-                                !options.spaces.some(
-                                  (space) => String(space.id) === spaceId
-                                )
-                              }
-                              id="resource-template"
-                              name={field.name}
-                              onBlur={field.handleBlur}
-                              onChange={(event) => {
-                                if (
-                                  !options.spaces.some(
-                                    (space) => String(space.id) === spaceId
-                                  )
-                                ) {
-                                  return;
-                                }
-                                const template = activeTemplates.find(
-                                  (item) =>
-                                    String(item.id) === event.target.value
-                                );
-                                if (template) {
-                                  const source = readConfiguration(
-                                    undefined,
-                                    template
-                                  );
-                                  setSelectedTemplate(template);
-                                  field.handleChange(event.target.value);
-                                  form.setFieldValue(
-                                    'definition',
-                                    source.definition
-                                  );
-                                  form.setFieldValue(
-                                    'resourceDefaults',
-                                    resourceDefaultsFormValues(source.defaults)
-                                  );
-                                }
-                              }}
-                              required
-                              value={field.state.value}
-                            >
-                              <option value="">Choose a template</option>
-                              {activeTemplates.map((template) => (
-                                <option key={template.id} value={template.id}>
-                                  {template.name} (
-                                  {template.teamId === null ? 'System' : 'Team'}
-                                  )
-                                </option>
-                              ))}
-                            </select>
-                            {hasError && (
-                              <p
-                                className="mt-2 text-sm text-error"
-                                id="resource-template-error"
-                                role="alert"
-                              >
-                                {field.state.meta.errors.join(' ')}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      }}
-                    </form.Field>
-                  ) : (
-                    <p role="status">
-                      There are no active resource templates available.{' '}
-                      <Link
-                        className="link link-primary"
-                        params={{ teamSlug }}
-                        to="/teams/$teamSlug/resource-templates"
-                      >
-                        Create a resource template
-                      </Link>{' '}
-                      before adding a resource.
-                    </p>
+                    </section>
                   )}
-                </section>
-              )}
+                  {!baseline && (
+                    <section
+                      aria-label="Resource location"
+                      className="space-y-4"
+                    >
+                      <h3 className="text-xl font-semibold text-primary">
+                        1. Choose a space
+                      </h3>
+                      {options.spaces.length === 0 ? (
+                        <p className="alert alert-warning" role="status">
+                          No active locations are available for this team. A
+                          location must be made available to the team before a
+                          resource can be created.
+                        </p>
+                      ) : (
+                        <form.AppField name="spaceId">
+                          {(field) => {
+                            const hasError =
+                              field.state.meta.isTouched &&
+                              !field.state.meta.isValid;
+                            return (
+                              <fieldset
+                                aria-describedby={
+                                  hasError
+                                    ? 'resource-location-error'
+                                    : undefined
+                                }
+                                aria-invalid={hasError || undefined}
+                                className="space-y-3"
+                              >
+                                <legend className="sr-only">Location</legend>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  {options.spaces.map((space) => {
+                                    const selected =
+                                      String(space.id) === field.state.value;
+                                    return (
+                                      <label
+                                        className={`flex cursor-pointer items-start gap-3 rounded-sm border p-4 transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary ${selected ? 'border-primary bg-primary/5' : 'border-base-300 bg-base-200 hover:border-primary/40'}`}
+                                        key={space.id}
+                                      >
+                                        <input
+                                          aria-label={space.name}
+                                          checked={selected}
+                                          className="radio radio-primary radio-sm mt-1 shrink-0"
+                                          name={field.name}
+                                          onBlur={field.handleBlur}
+                                          onChange={() =>
+                                            field.handleChange(String(space.id))
+                                          }
+                                          required
+                                          type="radio"
+                                          value={String(space.id)}
+                                        />
+                                        <span className="block min-w-0 space-y-2 break-words">
+                                          <span className="block font-semibold text-primary">
+                                            {space.name}
+                                          </span>
+                                          {space.description?.trim() && (
+                                            <span className="block text-sm whitespace-pre-line text-base-content/75">
+                                              {space.description.trim()}
+                                            </span>
+                                          )}
+                                          {space.address?.trim() && (
+                                            <span className="block text-sm whitespace-pre-line text-base-content/65">
+                                              {space.address.trim()}
+                                            </span>
+                                          )}
+                                        </span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                                {hasError && (
+                                  <p
+                                    className="text-sm text-error"
+                                    id="resource-location-error"
+                                    role="alert"
+                                  >
+                                    {field.state.meta.errors
+                                      .filter(Boolean)
+                                      .join(', ')}
+                                  </p>
+                                )}
+                              </fieldset>
+                            );
+                          }}
+                        </form.AppField>
+                      )}
+                    </section>
+                  )}
+                  {!baseline && (
+                    <section
+                      aria-label="Resource template"
+                      className="space-y-3"
+                    >
+                      <h3 className="text-xl font-semibold text-primary">
+                        2. Choose a resource template
+                      </h3>
+                      {selectedTemplate ? (
+                        <>
+                          <p className="font-semibold">
+                            {selectedTemplate.name}
+                          </p>
+                          {selectedTemplate.description && (
+                            <p className="text-sm text-base-content/70">
+                              {selectedTemplate.description}
+                            </p>
+                          )}
+                          <p className="text-sm text-base-content/65">
+                            This resource has its own copy of the template.
+                            Later template changes will not change this
+                            resource.
+                          </p>
+                        </>
+                      ) : activeTemplates.length ? (
+                        <form.Field name="sourceTemplateId">
+                          {(field) => {
+                            const hasError =
+                              field.state.meta.isTouched &&
+                              !field.state.meta.isValid;
+                            return (
+                              <div>
+                                <label
+                                  className="mb-2 block text-sm font-semibold"
+                                  htmlFor="resource-template"
+                                >
+                                  Resource template
+                                </label>
+                                <select
+                                  aria-describedby={
+                                    hasError
+                                      ? 'resource-template-error'
+                                      : undefined
+                                  }
+                                  aria-invalid={hasError || undefined}
+                                  className="select select-bordered w-full"
+                                  disabled={
+                                    !options.spaces.some(
+                                      (space) => String(space.id) === spaceId
+                                    )
+                                  }
+                                  id="resource-template"
+                                  name={field.name}
+                                  onBlur={field.handleBlur}
+                                  onChange={(event) => {
+                                    if (
+                                      !options.spaces.some(
+                                        (space) => String(space.id) === spaceId
+                                      )
+                                    ) {
+                                      return;
+                                    }
+                                    const template = activeTemplates.find(
+                                      (item) =>
+                                        String(item.id) === event.target.value
+                                    );
+                                    if (template) {
+                                      const source = readConfiguration(
+                                        undefined,
+                                        template
+                                      );
+                                      setSelectedTemplate(template);
+                                      field.handleChange(event.target.value);
+                                      form.setFieldValue(
+                                        'definition',
+                                        source.definition
+                                      );
+                                      form.setFieldValue(
+                                        'resourceDefaults',
+                                        resourceDefaultsFormValues(
+                                          source.defaults
+                                        )
+                                      );
+                                    }
+                                  }}
+                                  required
+                                  value={field.state.value}
+                                >
+                                  <option value="">Choose a template</option>
+                                  {activeTemplates.map((template) => (
+                                    <option
+                                      key={template.id}
+                                      value={template.id}
+                                    >
+                                      {template.name} (
+                                      {template.teamId === null
+                                        ? 'System'
+                                        : 'Team'}
+                                      )
+                                    </option>
+                                  ))}
+                                </select>
+                                {hasError && (
+                                  <p
+                                    className="mt-2 text-sm text-error"
+                                    id="resource-template-error"
+                                    role="alert"
+                                  >
+                                    {field.state.meta.errors.join(' ')}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          }}
+                        </form.Field>
+                      ) : (
+                        <p role="status">
+                          There are no active resource templates available.{' '}
+                          <Link
+                            className="link link-primary"
+                            params={{ teamSlug }}
+                            to="/teams/$teamSlug/resource-templates"
+                          >
+                            Create a resource template
+                          </Link>{' '}
+                          before adding a resource.
+                        </p>
+                      )}
+                    </section>
+                  )}
+                </div>
+              </section>
               {canEdit && (
-                <>
+                <div className="grid items-start gap-6 lg:grid-cols-2">
                   <section
                     aria-label="Resource details"
-                    className="space-y-5 rounded-sm border border-base-300 bg-base-100 p-5"
+                    className="min-w-0 space-y-5 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
                   >
                     <h3 className="text-xl font-semibold text-primary">
                       {baseline
@@ -845,7 +909,7 @@ export function ResourceEditor({
                   </section>
                   <section
                     aria-label="Reservation settings"
-                    className="space-y-5 rounded-sm border border-base-300 bg-base-100 p-5"
+                    className="min-w-0 space-y-5 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
                   >
                     <h3 className="text-xl font-semibold text-primary">
                       Reservation settings
@@ -932,93 +996,7 @@ export function ResourceEditor({
                       history are kept.
                     </p>
                   </section>
-                  <div
-                    aria-label="Configuration view"
-                    className="flex flex-wrap gap-2"
-                    role="group"
-                  >
-                    <button
-                      aria-pressed={editorView === 'build'}
-                      className={`btn btn-sm ${editorView === 'build' ? 'btn-primary' : 'btn-ghost'}`}
-                      onClick={() => setEditorView('build')}
-                      type="button"
-                    >
-                      Reservation form
-                    </button>
-                    <button
-                      aria-pressed={editorView === 'preview'}
-                      className={`btn btn-sm ${editorView === 'preview' ? 'btn-primary' : 'btn-ghost'}`}
-                      onClick={() => setEditorView('preview')}
-                      type="button"
-                    >
-                      Preview form
-                    </button>
-                    <button
-                      aria-pressed={editorView === 'defaults'}
-                      className={`btn btn-sm ${editorView === 'defaults' ? 'btn-primary' : 'btn-ghost'}`}
-                      onClick={() => setEditorView('defaults')}
-                      type="button"
-                    >
-                      Hours and rates
-                    </button>
-                  </div>
-                  {editorView !== 'defaults' &&
-                    configuration.formUnavailableReason && (
-                      <div
-                        className="rounded-sm border border-warning bg-warning/10 p-4"
-                        role="status"
-                      >
-                        <p>{configuration.formUnavailableReason}</p>
-                        <p className="mt-2 text-sm">
-                          The saved form will be preserved when you save other
-                          resource changes.
-                        </p>
-                      </div>
-                    )}
-                  {editorView === 'build' &&
-                    !configuration.formUnavailableReason && (
-                      <form.Field name="definition">
-                        {(field) => (
-                          <FormBuilder
-                            disabled={isSaving || isSubmitting}
-                            onChange={field.handleChange}
-                            value={field.state.value}
-                          />
-                        )}
-                      </form.Field>
-                    )}
-                  {editorView === 'defaults' && (
-                    <ResourceDefaultsEditor
-                      context="resource"
-                      disabled={isSaving || isSubmitting}
-                      embedded={false}
-                      fields="resourceDefaults"
-                      form={form}
-                      readOnly={false}
-                      unavailableReason={configuration.detailsUnavailableReason}
-                    />
-                  )}
-                  <div className="flex flex-wrap items-center gap-4">
-                    <button
-                      className="btn btn-primary"
-                      disabled={!baseline && options.spaces.length === 0}
-                      type="submit"
-                    >
-                      {isSaving || isSubmitting
-                        ? 'Saving…'
-                        : baseline
-                          ? 'Save changes'
-                          : 'Create resource'}
-                    </button>
-                    <Link
-                      className="link link-primary"
-                      params={{ teamSlug }}
-                      to="/teams/$teamSlug/resources"
-                    >
-                      Back to resources
-                    </Link>
-                  </div>
-                </>
+                </div>
               )}
             </fieldset>
           )}
@@ -1054,17 +1032,126 @@ export function ResourceEditor({
           )}
         </form.Subscribe>
       </form>
-      {canEdit &&
-        editorView === 'preview' &&
-        !configuration.formUnavailableReason && (
-          <form.Subscribe selector={(state) => state.values.definition}>
-            {(definition) => (
-              <div className="mt-6">
-                <FormPreview definition={definition} />
+      {canEdit && (
+        <form.Subscribe selector={(state) => state.isSubmitting}>
+          {(isSubmitting) => (
+            <fieldset
+              className="mt-6 min-w-0 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
+              disabled={isSaving || isSubmitting}
+            >
+              <div
+                aria-label="Configuration view"
+                className="tabs tabs-border mb-6"
+                onKeyDown={(event) => {
+                  if (
+                    !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
+                      event.key
+                    )
+                  ) {
+                    return;
+                  }
+                  const tabs = Array.from(
+                    event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                      '[role="tab"]'
+                    )
+                  );
+                  const current = tabs.indexOf(
+                    document.activeElement as HTMLButtonElement
+                  );
+                  const next =
+                    event.key === 'Home'
+                      ? 0
+                      : event.key === 'End'
+                        ? tabs.length - 1
+                        : (current +
+                            (event.key === 'ArrowRight' ? 1 : -1) +
+                            tabs.length) %
+                          tabs.length;
+                  event.preventDefault();
+                  tabs[next]?.focus();
+                  tabs[next]?.click();
+                }}
+                role="tablist"
+              >
+                {(
+                  [
+                    { label: 'Reservation form', value: 'build' },
+                    { label: 'Preview form', value: 'preview' },
+                    { label: 'Hours and rates', value: 'defaults' },
+                  ] as const
+                ).map(({ label, value }) => (
+                  <button
+                    aria-controls={`${formId}-panel`}
+                    aria-selected={editorView === value}
+                    className={`tab font-semibold ${editorView === value ? 'tab-active text-primary' : ''}`}
+                    id={`${formId}-${value}`}
+                    key={value}
+                    onClick={() => setEditorView(value)}
+                    role="tab"
+                    tabIndex={editorView === value ? 0 : -1}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
-            )}
-          </form.Subscribe>
-        )}
+              <div
+                aria-labelledby={`${formId}-${editorView}`}
+                id={`${formId}-panel`}
+                role="tabpanel"
+              >
+                {editorView !== 'defaults' &&
+                  configuration.formUnavailableReason && (
+                    <div
+                      className="rounded-sm border border-warning bg-warning/10 p-4"
+                      role="status"
+                    >
+                      <p>{configuration.formUnavailableReason}</p>
+                      <p className="mt-2 text-sm">
+                        The saved form will be preserved when you save other
+                        resource changes.
+                      </p>
+                    </div>
+                  )}
+                {editorView === 'build' &&
+                  !configuration.formUnavailableReason && (
+                    <form.Field name="definition">
+                      {(field) => (
+                        <FormBuilder
+                          disabled={isSaving || isSubmitting}
+                          embedded
+                          onChange={field.handleChange}
+                          value={field.state.value}
+                        />
+                      )}
+                    </form.Field>
+                  )}
+                {editorView === 'defaults' && (
+                  <ResourceDefaultsEditor
+                    context="resource"
+                    disabled={isSaving || isSubmitting}
+                    embedded
+                    fields="resourceDefaults"
+                    form={form}
+                    readOnly={false}
+                    unavailableReason={configuration.detailsUnavailableReason}
+                  />
+                )}
+                {editorView === 'preview' &&
+                  !configuration.formUnavailableReason && (
+                    <form.Subscribe
+                      selector={(state) => state.values.definition}
+                    >
+                      {(definition) => (
+                        <FormPreview definition={definition} embedded />
+                      )}
+                    </form.Subscribe>
+                  )}
+              </div>
+            </fieldset>
+          )}
+        </form.Subscribe>
+      )}
     </section>
   );
 }
