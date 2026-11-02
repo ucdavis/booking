@@ -142,7 +142,7 @@ export function EditTeamPaymentsDialog({
               return (
                 <div>
                   <label
-                    className="mb-2 block text-sm font-semibold"
+                    className="mb-2 block text-sm font-semibold text-base-content"
                     htmlFor="team-payments-api-key"
                   >
                     Payments API key

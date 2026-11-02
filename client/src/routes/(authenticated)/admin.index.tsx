@@ -37,7 +37,7 @@ function SiteAdminPage() {
         className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3"
       >
         <Link
-          className="group flex flex-col rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
+          className="group flex flex-col rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm transition hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
           to="/admin/users"
         >
           <TrophyIcon aria-hidden="true" className="h-7 w-7 text-primary" />
@@ -57,7 +57,7 @@ function SiteAdminPage() {
           </span>
         </Link>
         <Link
-          className="group flex flex-col rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
+          className="group flex flex-col rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm transition hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
           to="/admin/teams"
         >
           <UserGroupIcon aria-hidden="true" className="h-7 w-7 text-primary" />
@@ -74,7 +74,7 @@ function SiteAdminPage() {
           </span>
         </Link>
         <Link
-          className="group flex flex-col rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
+          className="group flex flex-col rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm transition hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
           to="/admin/spaces"
         >
           <BuildingOfficeIcon aria-hidden="true" className="h-7 w-7 text-primary" />
@@ -91,7 +91,7 @@ function SiteAdminPage() {
           </span>
         </Link>
         <Link
-          className="group flex flex-col rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
+          className="group flex flex-col rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm transition hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary sm:p-8"
           to="/admin/resource-templates"
         >
           <DocumentTextIcon aria-hidden="true" className="h-7 w-7 text-primary" />

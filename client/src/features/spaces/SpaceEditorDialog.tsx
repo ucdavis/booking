@@ -320,7 +320,7 @@ export function SpaceEditorDialog({
             <form.Field name="isOfficialFacility">
               {(field) => (
                 <label
-                  className="flex items-center gap-3 font-medium"
+                  className="flex items-center gap-3 font-semibold text-base-content"
                   htmlFor="space-official-facility"
                 >
                   <input
@@ -403,7 +403,7 @@ export function SpaceEditorDialog({
             <form.Field name="isActive">
               {(field) => (
                 <label
-                  className="flex items-center gap-3 font-medium"
+                  className="flex items-center gap-3 font-semibold text-base-content"
                   htmlFor="space-active"
                 >
                   <input

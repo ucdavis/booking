@@ -64,7 +64,7 @@ export function FormPreview({
       className={
         embedded
           ? undefined
-          : 'rounded-sm border border-base-300 bg-base-100 p-5 sm:p-6'
+          : 'rounded-sm border border-base-300 bg-base-100 p-5 sm:p-6 shadow-sm'
       }
     >
       <h2 className="text-xl font-semibold text-primary">Preview</h2>
@@ -152,13 +152,13 @@ export function FormPreview({
                         aria-describedby={describedBy}
                         aria-invalid={hasError || undefined}
                       >
-                        <legend className="mb-3 whitespace-pre-wrap break-words font-semibold">
+                        <legend className="mb-3 whitespace-pre-wrap break-words font-semibold text-base-content">
                           {caption}
                         </legend>
                         <div className="space-y-3">
                           {(definitionField.options ?? []).map((option) => (
                             <label
-                              className="flex items-start gap-3"
+                              className="flex items-start gap-3 text-base-content"
                               key={option.id}
                             >
                               <input
@@ -192,7 +192,7 @@ export function FormPreview({
                                 }
                                 value={option.id}
                               />
-                              <span className="min-w-0 break-words">
+                              <span className="min-w-0 break-words font-semibold text-base-content">
                                 {option.label}
                               </span>
                             </label>
@@ -213,7 +213,7 @@ export function FormPreview({
                     ) : (
                       <>
                         <label
-                          className="mb-2 block whitespace-pre-wrap break-words font-semibold"
+                          className="mb-2 block whitespace-pre-wrap break-words font-semibold text-base-content"
                           htmlFor={inputId}
                         >
                           {caption}

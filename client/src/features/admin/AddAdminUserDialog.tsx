@@ -113,7 +113,7 @@ export function AddAdminUserDialog({
 
         <form className="mt-6" onSubmit={searchPeople}>
           <label
-            className="mb-2 block text-sm font-semibold"
+            className="mb-2 block text-sm font-semibold text-base-content"
             htmlFor="admin-person-search"
           >
             Email, IAM ID, or Kerberos ID
@@ -179,7 +179,7 @@ export function AddAdminUserDialog({
               </p>
             ) : (
               <fieldset>
-                <legend className="mb-3 font-semibold">
+                <legend className="mb-3 font-semibold text-base-content">
                   {people.length === 1
                     ? 'Review the matching person'
                     : 'Select a matching person'}
@@ -215,15 +215,21 @@ export function AddAdminUserDialog({
                       />
                       <div className="min-w-0">
                         <p className="font-semibold">{person.name}</p>
-                        <dl className="mt-2 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
-                          <dt className="text-base-content/60">Email</dt>
-                          <dd className="break-all">
+                        <dl className="mt-2 grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
+                          <dt className="text-sm font-normal text-base-content/65">Email</dt>
+                          <dd className="break-all text-base font-normal text-base-content">
                             {person.email || 'Not available'}
                           </dd>
-                          <dt className="text-base-content/60">IAM ID</dt>
-                          <dd>{person.iamId}</dd>
-                          <dt className="text-base-content/60">Kerberos ID</dt>
-                          <dd>{person.kerberos || 'Not available'}</dd>
+                          <dt className="text-sm font-normal text-base-content/65">IAM ID</dt>
+                          <dd className="text-base font-normal text-base-content">
+                            {person.iamId}
+                          </dd>
+                          <dt className="text-sm font-normal text-base-content/65">
+                            Kerberos ID
+                          </dt>
+                          <dd className="text-base font-normal text-base-content">
+                            {person.kerberos || 'Not available'}
+                          </dd>
                         </dl>
                         {person.isAdmin && (
                           <p className="mt-3 text-sm font-medium">

@@ -1,3 +1,4 @@
+import { LinkSlashIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import type { Space } from './models/Space.ts';
@@ -5,6 +6,7 @@ import type { SpaceTeamAccess } from './models/SpaceTeamAccess.ts';
 import type { TeamSummary } from '@/features/teams/models/TeamSummary.ts';
 import { HttpError } from '@/lib/api.ts';
 import {
+  adminSpacesQueryKey,
   assignSpaceTeam,
   confirmationResourceCount,
   spaceTeamsQueryOptions,
@@ -49,6 +51,10 @@ export function SpaceTeamsDialog({
 
   async function refreshTeamAccess(team: TeamSummary) {
     await Promise.all([
+      queryClient.invalidateQueries({
+        exact: true,
+        queryKey: adminSpacesQueryKey,
+      }),
       queryClient.invalidateQueries({
         queryKey: teamSpacesQueryOptions(team.slug).queryKey,
       }),
@@ -288,7 +294,7 @@ export function SpaceTeamsDialog({
                           <td>
                             <button
                               aria-label={`Unlink ${access.team.name}`}
-                              className="btn btn-ghost btn-sm text-error"
+                              className="btn btn-error btn-outline btn-sm"
                               disabled={
                                 isMutating ||
                                 !!confirmation ||
@@ -309,6 +315,10 @@ export function SpaceTeamsDialog({
                               }}
                               type="button"
                             >
+                              <LinkSlashIcon
+                                aria-hidden="true"
+                                className="h-4 w-4"
+                              />
                               Unlink
                             </button>
                           </td>
@@ -360,13 +370,14 @@ export function SpaceTeamsDialog({
                     Cancel unlink
                   </button>
                   <button
-                    className="btn btn-error btn-sm"
+                    className="btn btn-error btn-outline btn-sm"
                     disabled={isMutating}
                     onClick={() =>
                       void unlink(confirmation, confirmation.resourceCount)
                     }
                     type="button"
                   >
+                    <LinkSlashIcon aria-hidden="true" className="h-4 w-4" />
                     Confirm unlink
                   </button>
                 </div>

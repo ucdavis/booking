@@ -38,6 +38,31 @@ function SiteAdminSpacesPage() {
         header: 'Space name',
       },
       {
+        accessorKey: 'address',
+        cell: ({ row }) => (
+          <span className="whitespace-pre-line break-words">
+            {row.original.address?.trim() || ''}
+          </span>
+        ),
+        header: 'Address',
+      },
+      {
+        accessorFn: (space) =>
+          (space.teams ?? []).map((team) => team.name).join(', '),
+        cell: ({ row }) =>
+          row.original.teams?.length ? (
+            <ul className="space-y-1">
+              {row.original.teams.map((team) => (
+                <li key={team.id}>{team.name}</li>
+              ))}
+            </ul>
+          ) : (
+            <span className="text-base-content/65">No teams attached</span>
+          ),
+        header: 'Attached teams',
+        id: 'teams',
+      },
+      {
         accessorKey: 'slug',
         cell: ({ row }) => (
           <span className="break-all text-base-content/70">

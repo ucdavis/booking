@@ -31,6 +31,14 @@ public sealed class AdminSpacesController(AppDbContext dbContext) : ControllerBa
                 Description = space.Description, Address = space.Address,
                 IsOfficialFacility = space.IsOfficialFacility, IsActive = space.IsActive,
                 ReferenceNumber = space.ReferenceNumber,
+                Teams = dbContext.TeamSpaces
+                    .Where(link => link.SpaceId == space.Id)
+                    .OrderBy(link => link.Team.Name)
+                    .ThenBy(link => link.Team.Slug)
+                    .Select(link => new TeamSummaryResponse
+                    {
+                        Id = link.TeamId, Name = link.Team.Name, Slug = link.Team.Slug,
+                    }).ToList(),
             })
             .ToListAsync(cancellationToken);
 

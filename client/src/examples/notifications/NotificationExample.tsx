@@ -119,7 +119,7 @@ export function NotificationExample() {
         </header>
 
         <section className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
-          <article className="card bg-base-100 shadow-xl">
+          <article className="card bg-base-100 rounded-sm border border-base-300 shadow-sm">
             <div className="card-body gap-8">
               <div>
                 <h2 className="card-title text-2xl">
@@ -133,7 +133,7 @@ export function NotificationExample() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">
-                <div className="card bg-base-200 shadow-sm">
+                <div className="card bg-base-200 shadow-sm rounded-sm border border-base-300">
                   <div className="card-body">
                     <div className="badge badge-primary badge-outline">
                       1. Razor
@@ -146,7 +146,7 @@ export function NotificationExample() {
                   </div>
                 </div>
 
-                <div className="card bg-base-200 shadow-sm">
+                <div className="card bg-base-200 shadow-sm rounded-sm border border-base-300">
                   <div className="card-body">
                     <div className="badge badge-primary badge-outline">
                       2. MJML
@@ -158,7 +158,7 @@ export function NotificationExample() {
                   </div>
                 </div>
 
-                <div className="card bg-base-200 shadow-sm">
+                <div className="card bg-base-200 shadow-sm rounded-sm border border-base-300">
                   <div className="card-body">
                     <div className="badge badge-primary badge-outline">
                       3. SMTP
@@ -171,7 +171,7 @@ export function NotificationExample() {
                 </div>
               </div>
 
-              <div className="card bg-base-200 shadow-sm">
+              <div className="card bg-base-200 shadow-sm rounded-sm border border-base-300">
                 <div className="card-body">
                   <h3 className="card-title text-lg">
                     Starter files to inspect
@@ -211,7 +211,7 @@ export function NotificationExample() {
             </div>
           </article>
 
-          <article className="card bg-base-100 shadow-xl">
+          <article className="card bg-base-100 rounded-sm border border-base-300 shadow-sm">
             <div className="card-body">
               <h2 className="card-title text-2xl">Send a notification email</h2>
               <p className="text-base-content/70">
@@ -325,7 +325,7 @@ export function NotificationExample() {
 
               <div className="divider my-8">Table template example</div>
 
-              <div className="card bg-base-200 shadow-sm">
+              <div className="card bg-base-200 shadow-sm rounded-sm border border-base-300">
                 <div className="card-body gap-4">
                   <h3 className="card-title text-lg">
                     Send the 5-row table email

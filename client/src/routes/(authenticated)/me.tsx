@@ -62,7 +62,7 @@ function MyProfilePage() {
       <div className="mt-8 grid items-start gap-6 lg:grid-cols-3">
         <section
           aria-labelledby="account-details-heading"
-          className="min-w-0 overflow-hidden rounded-sm border border-base-300 bg-base-200 lg:col-span-2"
+          className="min-w-0 overflow-hidden rounded-sm border border-base-300 bg-base-200 lg:col-span-2 shadow-sm"
         >
           <div className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:p-8">
             <div
@@ -102,8 +102,8 @@ function MyProfilePage() {
                   className="grid gap-1 py-4 first:pt-0 last:pb-0 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4"
                   key={label}
                 >
-                  <dt className="text-sm text-base-content/65">{label}</dt>
-                  <dd className="min-w-0 text-sm font-medium break-words [overflow-wrap:anywhere]">
+                  <dt className="text-sm font-normal text-base-content/65">{label}</dt>
+                  <dd className="min-w-0 break-words [overflow-wrap:anywhere] text-base font-normal text-base-content">
                     {value?.trim() || 'Not available'}
                   </dd>
                 </div>
@@ -114,7 +114,7 @@ function MyProfilePage() {
 
         <section
           aria-labelledby="access-heading"
-          className="min-w-0 rounded-sm border border-base-300 bg-base-200 p-6 sm:p-8"
+          className="min-w-0 rounded-sm border border-base-300 bg-base-200 p-6 sm:p-8 shadow-sm"
         >
           <div className="flex items-center gap-2 text-primary">
             <ShieldCheckIcon aria-hidden="true" className="h-5 w-5" />
@@ -124,7 +124,7 @@ function MyProfilePage() {
           </div>
 
           <dl className="mt-6">
-            <dt className="text-sm text-base-content/65">Site access</dt>
+            <dt className="text-sm font-normal text-base-content/65">Site access</dt>
             <dd className="mt-2">
               <span
                 className={`badge badge-outline ${user.isSiteAdmin ? 'badge-primary' : ''}`}
@@ -154,7 +154,7 @@ function MyProfilePage() {
 
             {(!teamsQuery.isSuccess || visibleTeams.length > 0) && (
               <>
-                <dt className="mt-6 border-t border-base-300 pt-6 text-sm text-base-content/65">
+                <dt className="mt-6 border-t border-base-300 pt-6 text-sm font-normal text-base-content/65">
                   Team memberships
                 </dt>
                 <dd className="mt-3">

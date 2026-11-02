@@ -503,8 +503,10 @@ export function ResourceEditor({
                           )}
                           {baseline.space.address?.trim() && (
                             <dl>
-                              <dt className="font-semibold">Address</dt>
-                              <dd className="mt-1 whitespace-pre-line">
+                              <dt className="text-sm font-normal text-base-content/65">
+                                Address
+                              </dt>
+                              <dd className="mt-1 text-base font-normal whitespace-pre-line text-base-content">
                                 {baseline.space.address.trim()}
                               </dd>
                             </dl>
@@ -570,7 +572,7 @@ export function ResourceEditor({
                                           value={String(space.id)}
                                         />
                                         <span className="block min-w-0 space-y-2 break-words">
-                                          <span className="block font-semibold text-primary">
+                                          <span className="block font-semibold text-base-content">
                                             {space.name}
                                           </span>
                                           {space.description?.trim() && (
@@ -639,7 +641,7 @@ export function ResourceEditor({
                             return (
                               <div>
                                 <label
-                                  className="mb-2 block text-sm font-semibold"
+                                  className="mb-2 block text-sm font-semibold text-base-content"
                                   htmlFor="resource-template"
                                 >
                                   Resource template
@@ -870,7 +872,7 @@ export function ResourceEditor({
                         return (
                           <div>
                             <label
-                              className="mb-2 block text-sm font-semibold"
+                              className="mb-2 block text-sm font-semibold text-base-content"
                               htmlFor="resource-description"
                             >
                               Description (optional)
@@ -974,7 +976,7 @@ export function ResourceEditor({
                     ).map(([name, label]) => (
                       <form.Field key={name} name={name}>
                         {(field) => (
-                          <label className="flex items-center gap-3">
+                          <label className="flex items-center gap-3 font-semibold text-base-content">
                             <input
                               checked={field.state.value}
                               className="checkbox checkbox-primary"

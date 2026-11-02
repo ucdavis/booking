@@ -39,7 +39,7 @@ export const TeamRoleFields = withFieldGroup({
         className="space-y-3"
         disabled={disabled}
       >
-        <legend className="mb-3 text-sm font-semibold">Team roles</legend>
+        <legend className="mb-3 text-sm font-semibold text-base-content">Team roles</legend>
         {roles.map((role) => (
           <group.Field key={role} name={role}>
             {(field) => (
@@ -59,7 +59,7 @@ export const TeamRoleFields = withFieldGroup({
                   type="checkbox"
                 />
                 <div>
-                  <label className="font-medium" htmlFor={`${prefix}-${role}`}>
+                  <label className="font-semibold text-base-content" htmlFor={`${prefix}-${role}`}>
                     {teamRoleLabels[role]}
                   </label>
                   <p

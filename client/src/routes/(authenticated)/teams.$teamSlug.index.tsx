@@ -36,16 +36,22 @@ function TeamOverviewPage() {
       <section className="min-w-0 rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm sm:p-8">
         <h2 className="text-xl font-semibold text-primary">Team overview</h2>
         <dl className="mt-6 grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
-          <dt className="text-sm font-medium text-base-content/65">
+          <dt className="text-sm font-normal text-base-content/65">
             Team name
           </dt>
-          <dd className="mb-3 break-words sm:mb-0">{team.name}</dd>
-          <dt className="text-sm font-medium text-base-content/65">Team URL</dt>
-          <dd className="mb-3 break-all sm:mb-0">/teams/{team.slug}</dd>
-          <dt className="text-sm font-medium text-base-content/65">
+          <dd className="mb-3 break-words sm:mb-0 text-base font-normal text-base-content">
+            {team.name}
+          </dd>
+          <dt className="text-sm font-normal text-base-content/65">Team URL</dt>
+          <dd className="mb-3 break-all sm:mb-0 text-base font-normal text-base-content">
+            /teams/{team.slug}
+          </dd>
+          <dt className="text-sm font-normal text-base-content/65">
             Your access
           </dt>
-          <dd>{accessLabels.join(', ') || 'Team access'}</dd>
+          <dd className="text-base font-normal text-base-content">
+            {accessLabels.join(', ') || 'Team access'}
+          </dd>
         </dl>
         <p className="mt-6 text-sm text-base-content/65">
           The team name and URL slug were set when this team was created and
@@ -58,15 +64,15 @@ function TeamOverviewPage() {
           </p>
         )}
       </section>
-      <TeamSpaces
-        canAttach={isSiteAdmin}
-        key={`${teamSlug}:${user.id}:${isSiteAdmin}`}
-        team={team}
-      />
       <TeamPaymentsSettings
         canManage={canManage}
         key={`${teamSlug}:${user.id}:${canManage}`}
         teamSlug={teamSlug}
+      />
+      <TeamSpaces
+        canAttach={isSiteAdmin}
+        key={`${teamSlug}:${user.id}:${isSiteAdmin}`}
+        team={team}
       />
     </div>
   );

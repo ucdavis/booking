@@ -115,26 +115,30 @@ export function TeamPaymentsSettings({
               <dl className="mt-5 grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
                 {settings.paymentsTeamName && (
                   <>
-                    <dt className="text-sm font-medium text-base-content/65">
+                    <dt className="text-sm font-normal text-base-content/65">
                       Payments team
                     </dt>
-                    <dd className="break-words">{settings.paymentsTeamName}</dd>
+                    <dd className="break-words text-base font-normal text-base-content">
+                      {settings.paymentsTeamName}
+                    </dd>
                   </>
                 )}
                 {settings.paymentsTeamSlug && (
                   <>
-                    <dt className="text-sm font-medium text-base-content/65">
+                    <dt className="text-sm font-normal text-base-content/65">
                       Payments team slug
                     </dt>
-                    <dd className="break-all">{settings.paymentsTeamSlug}</dd>
+                    <dd className="break-all text-base font-normal text-base-content">
+                      {settings.paymentsTeamSlug}
+                    </dd>
                   </>
                 )}
                 {canManage && settings.maskedApiKey && (
                   <>
-                    <dt className="text-sm font-medium text-base-content/65">
+                    <dt className="text-sm font-normal text-base-content/65">
                       Saved API key
                     </dt>
-                    <dd className="break-all font-mono">
+                    <dd className="break-all font-mono text-base font-normal text-base-content">
                       {settings.maskedApiKey}
                     </dd>
                   </>
@@ -147,7 +151,7 @@ export function TeamPaymentsSettings({
             </p>
           )}
           <button
-            className="btn btn-ghost btn-sm mt-4"
+            className="btn btn-sm mt-4"
             disabled={paymentsQuery.isFetching}
             onClick={() => {
               setNotice('');

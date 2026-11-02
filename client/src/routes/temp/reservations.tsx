@@ -73,7 +73,7 @@ function MyReservationsPage() {
         <div className="mt-4 space-y-3">
           {reservations.map((reservation) => (
             <article
-              className="rounded-sm border border-base-300 bg-base-200 p-5 sm:p-6"
+              className="rounded-sm border border-base-300 bg-base-200 p-5 sm:p-6 shadow-sm"
               key={reservation.id}
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -116,8 +116,8 @@ function MyReservationsPage() {
                     className="mt-0.5 h-4 w-4 shrink-0 text-base-content/55"
                   />
                   <div>
-                    <dt className="text-base-content/60">Date</dt>
-                    <dd className="mt-0.5 font-medium">
+                    <dt className="text-sm font-normal text-base-content/65">Date</dt>
+                    <dd className="mt-0.5 text-base font-normal text-base-content">
                       {dateFormatter.format(new Date(reservation.start))}
                     </dd>
                   </div>
@@ -128,8 +128,8 @@ function MyReservationsPage() {
                     className="mt-0.5 h-4 w-4 shrink-0 text-base-content/55"
                   />
                   <div>
-                    <dt className="text-base-content/60">Time</dt>
-                    <dd className="mt-0.5 font-medium">
+                    <dt className="text-sm font-normal text-base-content/65">Time</dt>
+                    <dd className="mt-0.5 text-base font-normal text-base-content">
                       {timeFormatter.format(new Date(reservation.start))}–
                       {timeFormatter.format(new Date(reservation.end))}
                     </dd>
@@ -141,8 +141,8 @@ function MyReservationsPage() {
                     className="mt-0.5 h-4 w-4 shrink-0 text-base-content/55"
                   />
                   <div>
-                    <dt className="text-base-content/60">Building</dt>
-                    <dd className="mt-0.5 font-medium">
+                    <dt className="text-sm font-normal text-base-content/65">Building</dt>
+                    <dd className="mt-0.5 text-base font-normal text-base-content">
                       {reservation.building}
                     </dd>
                   </div>
@@ -153,8 +153,8 @@ function MyReservationsPage() {
                     className="mt-0.5 h-4 w-4 shrink-0 text-base-content/55"
                   />
                   <div>
-                    <dt className="text-base-content/60">Resource type</dt>
-                    <dd className="mt-0.5 font-medium capitalize">
+                    <dt className="text-sm font-normal text-base-content/65">Resource type</dt>
+                    <dd className="mt-0.5 capitalize text-base font-normal text-base-content">
                       {reservation.resourceKind}
                     </dd>
                   </div>

@@ -104,7 +104,7 @@ function TempRoomPage() {
         </ol>
       </nav>
 
-      <article className="overflow-hidden rounded-sm border border-base-300 bg-base-200">
+      <article className="overflow-hidden rounded-sm border border-base-300 bg-base-200 shadow-sm">
         <header className="border-b-8 border-secondary bg-primary px-6 py-8 text-primary-content sm:px-10 sm:py-10">
           <div className="grid gap-8 lg:grid-cols-2">
             <div>
@@ -145,10 +145,12 @@ function TempRoomPage() {
                   className="h-4 w-4 shrink-0 text-primary-content/70"
                 />
                 <div>
-                  <dt className="text-sm font-bold tracking-wide text-primary-content/70 uppercase">
+                  <dt className="text-sm font-normal text-primary-content/70">
                     Type
                   </dt>
-                  <dd className="mt-1">Conference</dd>
+                  <dd className="mt-1 text-base font-normal text-primary-content">
+                    Conference
+                  </dd>
                 </div>
               </div>
               <div className="flex items-start gap-2 px-3 py-4">
@@ -157,10 +159,12 @@ function TempRoomPage() {
                   className="h-4 w-4 shrink-0 text-primary-content/70"
                 />
                 <div>
-                  <dt className="text-sm font-bold tracking-wide text-primary-content/70 uppercase">
+                  <dt className="text-sm font-normal text-primary-content/70">
                     Capacity
                   </dt>
-                  <dd className="mt-1">20 people</dd>
+                  <dd className="mt-1 text-base font-normal text-primary-content">
+                    20 people
+                  </dd>
                 </div>
               </div>
               <div className="flex items-start gap-2 px-3 py-4">
@@ -169,10 +173,12 @@ function TempRoomPage() {
                   className="h-4 w-4 shrink-0 text-primary-content/70"
                 />
                 <div>
-                  <dt className="text-sm font-bold tracking-wide text-primary-content/70 uppercase">
+                  <dt className="text-sm font-normal text-primary-content/70">
                     Hours
                   </dt>
-                  <dd className="mt-1">8:00 AM–5:00 PM</dd>
+                  <dd className="mt-1 text-base font-normal text-primary-content">
+                    8:00 AM–5:00 PM
+                  </dd>
                 </div>
               </div>
             </dl>
@@ -297,7 +303,7 @@ function TempRoomPage() {
 
             <section
               aria-labelledby="reservation-details-heading"
-              className="rounded-sm border border-base-300 bg-base-100 p-5 sm:p-6"
+              className="rounded-sm border border-base-300 bg-base-100 p-5 sm:p-6 shadow-sm"
             >
               <h3
                 className="text-lg font-semibold text-primary"
@@ -372,7 +378,7 @@ function TempRoomPage() {
                 </label>
 
                 {repeatType === 'custom' ? (
-                  <div className="mt-4 space-y-5 rounded-sm border border-base-300 bg-base-200 p-4 sm:p-5">
+                  <div className="mt-4 space-y-5 rounded-sm border border-base-300 bg-base-200 p-4 sm:p-5 shadow-sm">
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                       <span className="text-sm font-semibold text-base-content">
                         Repeats every:
@@ -470,7 +476,7 @@ function TempRoomPage() {
                 ) : null}
               </div>
 
-              <div className="mt-6 rounded-sm bg-base-200 p-4 text-sm">
+              <div className="mt-6 rounded-sm border border-base-300 bg-base-200 p-4 text-sm shadow-sm">
                 <p className="font-semibold text-primary">Your selection</p>
                 <p className="mt-2 text-base-content/70">
                   {selectedDates.length > 0 && selectedTime

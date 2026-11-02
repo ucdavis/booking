@@ -13,7 +13,6 @@ import {
   resourceDefaultsFormValues,
   resourceDefaultsFromForm,
   serializeResourceDefaults,
-  validateResourceDefaults,
   validateResourceDefaultsFields,
 } from '@/features/resource-defaults/resourceDefaults.ts';
 import { useAppForm } from '@/shared/forms/formContext.tsx';
@@ -71,8 +70,8 @@ export function ResourceTemplateEditor({
           }
       : undefined;
   const [editorView, setEditorView] = useState<
-    'build' | 'preview' | 'defaults'
-  >('build');
+    'details' | 'build' | 'preview' | 'defaults'
+  >(template ? 'build' : 'details');
   const activeView =
     isReadOnly && editorView === 'build' ? 'preview' : editorView;
   const [saved, setSaved] = useState(false);
@@ -177,6 +176,17 @@ export function ResourceTemplateEditor({
     onSubmitInvalid: ({ formApi }) => {
       // Refresh errors for array fields mounted after the last change validation.
       void formApi.validate('change');
+      const errors = validate({ value: formApi.state.values })?.fields;
+      if (errors?.name || errors?.description) {
+        setEditorView('details');
+      } else if (errors?.definition) {
+        setEditorView('build');
+      } else if (
+        errors &&
+        Object.keys(errors).some((key) => key.startsWith('resourceDefaults'))
+      ) {
+        setEditorView('defaults');
+      }
     },
     validators: {
       // TanStack also runs change validation on submit, including untouched values.
@@ -226,6 +236,15 @@ export function ResourceTemplateEditor({
                 ? 'Edit resource template'
                 : 'Create resource template'}
           </Heading>
+          <form.Subscribe selector={(state) => state.values.name}>
+            {(name) =>
+              name.trim() && (
+                <p className="mt-2 text-lg font-semibold text-base-content">
+                  {name}
+                </p>
+              )
+            }
+          </form.Subscribe>
           <p className="mt-3 max-w-2xl text-base-content/70">
             {isArchived
               ? 'Review this archived template.'
@@ -324,148 +343,6 @@ export function ResourceTemplateEditor({
             className="mt-8 min-w-0 space-y-6"
             disabled={isSaving || isSubmitting}
           >
-            <form
-              id={formId}
-              noValidate
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (
-                  !isReadOnly &&
-                  !saveFlowRef.current &&
-                  !form.state.isSubmitting
-                ) {
-                  if (
-                    validateResourceDefaults(
-                      resourceDefaultsFromForm(
-                        form.state.values.resourceDefaults
-                      )
-                    ).length
-                  ) {
-                    setEditorView('defaults');
-                  }
-                  void form.handleSubmit();
-                }
-              }}
-            >
-              <fieldset
-                className="space-y-5 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
-                disabled={isReadOnly}
-              >
-                <h3 className="text-xl font-semibold text-primary">
-                  Template details
-                </h3>
-                <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
-                  <form.Field name="name">
-                    {(field) => {
-                      const hasError =
-                        field.state.meta.isTouched && !field.state.meta.isValid;
-                      return (
-                        <div className="grow">
-                          <label
-                            className="mb-2 block text-sm font-semibold"
-                            htmlFor="template-name"
-                          >
-                            Template name
-                          </label>
-                          <input
-                            aria-describedby={
-                              hasError ? 'template-name-error' : undefined
-                            }
-                            aria-invalid={hasError || undefined}
-                            className={`input input-bordered w-full ${hasError ? 'input-error' : ''}`}
-                            id="template-name"
-                            maxLength={200}
-                            name={field.name}
-                            onBlur={field.handleBlur}
-                            onChange={(event) =>
-                              field.handleChange(event.target.value)
-                            }
-                            required
-                            value={field.state.value}
-                          />
-                          {hasError && (
-                            <p
-                              className="mt-2 text-sm text-error"
-                              id="template-name-error"
-                              role="alert"
-                            >
-                              {field.state.meta.errors.join(' ')}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    }}
-                  </form.Field>
-                  <form.Field name="isActive">
-                    {(field) => (
-                      <label className="flex items-center gap-3 py-3">
-                        <input
-                          checked={field.state.value}
-                          className="checkbox checkbox-primary"
-                          onChange={(event) =>
-                            field.handleChange(event.target.checked)
-                          }
-                          type="checkbox"
-                        />
-                        Active template
-                      </label>
-                    )}
-                  </form.Field>
-                </div>
-                <form.Field name="description">
-                  {(field) => {
-                    const hasError =
-                      field.state.meta.isTouched && !field.state.meta.isValid;
-                    return (
-                      <div>
-                        <label
-                          className="mb-2 block text-sm font-semibold"
-                          htmlFor="template-description"
-                        >
-                          Description
-                        </label>
-                        <textarea
-                          aria-describedby={`template-description-help${hasError ? ' template-description-error' : ''}`}
-                          aria-invalid={hasError || undefined}
-                          className={`textarea textarea-bordered w-full ${hasError ? 'textarea-error' : ''}`}
-                          id="template-description"
-                          maxLength={2000}
-                          name={field.name}
-                          onBlur={field.handleBlur}
-                          onChange={(event) =>
-                            field.handleChange(event.target.value)
-                          }
-                          rows={3}
-                          value={field.state.value}
-                        />
-                        <p
-                          className="mt-2 text-sm text-base-content/65"
-                          id="template-description-help"
-                        >
-                          Optional. Describe what this template is for in 2,000
-                          characters or fewer.
-                        </p>
-                        {hasError && (
-                          <p
-                            className="mt-2 text-sm text-error"
-                            id="template-description-error"
-                            role="alert"
-                          >
-                            {field.state.meta.errors.join(' ')}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  }}
-                </form.Field>
-                {currentTemplate && !isReadOnly && (
-                  <p className="text-sm text-base-content/65">
-                    Clear Active template and save to archive this version. Save
-                    form or default changes before archiving.
-                  </p>
-                )}
-              </fieldset>
-            </form>
             <section
               aria-label="Template editor"
               className="min-w-0 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
@@ -478,8 +355,9 @@ export function ResourceTemplateEditor({
                     !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
                       event.key
                     )
-                  )
-                    {return;}
+                  ) {
+                    return;
+                  }
                   const tabs = Array.from(
                     event.currentTarget.querySelectorAll<HTMLButtonElement>(
                       '[role="tab"]'
@@ -504,6 +382,7 @@ export function ResourceTemplateEditor({
                 role="tablist"
               >
                 {[
+                  { label: 'Template details', value: 'details' as const },
                   ...(!isReadOnly
                     ? [{ label: 'Build form', value: 'build' as const }]
                     : []),
@@ -530,6 +409,139 @@ export function ResourceTemplateEditor({
                 id={`${formId}-panel`}
                 role="tabpanel"
               >
+                <form
+                  hidden={activeView !== 'details'}
+                  id={formId}
+                  noValidate
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (
+                      !isReadOnly &&
+                      !saveFlowRef.current &&
+                      !form.state.isSubmitting
+                    ) {
+                      void form.handleSubmit();
+                    }
+                  }}
+                >
+                  <fieldset className="space-y-5" disabled={isReadOnly}>
+                    <h3 className="text-xl font-semibold text-primary">
+                      Template details
+                    </h3>
+                    <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
+                      <form.Field name="name">
+                        {(field) => {
+                          const hasError =
+                            field.state.meta.isTouched &&
+                            !field.state.meta.isValid;
+                          return (
+                            <div className="grow">
+                              <label
+                                className="mb-2 block text-sm font-semibold text-base-content"
+                                htmlFor="template-name"
+                              >
+                                Template name
+                              </label>
+                              <input
+                                aria-describedby={
+                                  hasError ? 'template-name-error' : undefined
+                                }
+                                aria-invalid={hasError || undefined}
+                                className={`input input-bordered w-full ${hasError ? 'input-error' : ''}`}
+                                id="template-name"
+                                maxLength={200}
+                                name={field.name}
+                                onBlur={field.handleBlur}
+                                onChange={(event) =>
+                                  field.handleChange(event.target.value)
+                                }
+                                required
+                                value={field.state.value}
+                              />
+                              {hasError && (
+                                <p
+                                  className="mt-2 text-sm text-error"
+                                  id="template-name-error"
+                                  role="alert"
+                                >
+                                  {field.state.meta.errors.join(' ')}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        }}
+                      </form.Field>
+                      <form.Field name="isActive">
+                        {(field) => (
+                          <label className="flex items-center gap-3 py-3 font-semibold text-base-content">
+                            <input
+                              checked={field.state.value}
+                              className="checkbox checkbox-primary"
+                              onChange={(event) =>
+                                field.handleChange(event.target.checked)
+                              }
+                              type="checkbox"
+                            />
+                            Active template
+                          </label>
+                        )}
+                      </form.Field>
+                    </div>
+                    <form.Field name="description">
+                      {(field) => {
+                        const hasError =
+                          field.state.meta.isTouched &&
+                          !field.state.meta.isValid;
+                        return (
+                          <div>
+                            <label
+                              className="mb-2 block text-sm font-semibold text-base-content"
+                              htmlFor="template-description"
+                            >
+                              Description
+                            </label>
+                            <textarea
+                              aria-describedby={`template-description-help${hasError ? ' template-description-error' : ''}`}
+                              aria-invalid={hasError || undefined}
+                              className={`textarea textarea-bordered w-full ${hasError ? 'textarea-error' : ''}`}
+                              id="template-description"
+                              maxLength={2000}
+                              name={field.name}
+                              onBlur={field.handleBlur}
+                              onChange={(event) =>
+                                field.handleChange(event.target.value)
+                              }
+                              rows={3}
+                              value={field.state.value}
+                            />
+                            <p
+                              className="mt-2 text-sm text-base-content/65"
+                              id="template-description-help"
+                            >
+                              Optional. Describe what this template is for in
+                              2,000 characters or fewer.
+                            </p>
+                            {hasError && (
+                              <p
+                                className="mt-2 text-sm text-error"
+                                id="template-description-error"
+                                role="alert"
+                              >
+                                {field.state.meta.errors.join(' ')}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      }}
+                    </form.Field>
+                    {currentTemplate && !isReadOnly && (
+                      <p className="text-sm text-base-content/65">
+                        Clear Active template and save to archive this version.
+                        Save form or default changes before archiving.
+                      </p>
+                    )}
+                  </fieldset>
+                </form>
                 {activeView === 'build' && (
                   <form.Field name="definition">
                     {(field) => (

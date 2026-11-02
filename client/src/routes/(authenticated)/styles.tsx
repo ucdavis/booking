@@ -68,7 +68,7 @@ function RouteComponent() {
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {proximaNovaFaces.map(({ className, label }) => (
               <article
-                className="card border border-base-300 bg-base-100"
+                className="card border border-base-300 bg-base-100 rounded-sm shadow-sm"
                 key={label}
               >
                 <div className="card-body gap-2 p-5">
@@ -82,7 +82,7 @@ function RouteComponent() {
               </article>
             ))}
           </div>
-          <article className="card border border-base-300 bg-base-100">
+          <article className="card border border-base-300 bg-base-100 rounded-sm shadow-sm">
             <div className="card-body gap-2">
               <p className="text-sm text-base-content/70">Ryman display</p>
               <p className="font-display text-5xl">Aggies lead the way</p>
@@ -113,31 +113,31 @@ function RouteComponent() {
               placeholder="My awesome page"
               type="text"
             />
-            <p className="label">
+            <p className="text-base-content/65">
               You can edit page title later on from settings
             </p>
           </fieldset>
-          <fieldset className="fieldset bg-base-200 border-base-300 rounded-box w-xs border p-4">
+          <fieldset className="fieldset bg-base-200 border-base-300 rounded-sm w-xs border p-4 shadow-sm">
             <legend className="fieldset-legend">Page details</legend>
 
-            <label className="label">Title</label>
+            <label className="label font-semibold text-base-content">Title</label>
             <input
               className="input"
               placeholder="My awesome page"
               type="text"
             />
 
-            <label className="label">Slug</label>
+            <label className="label font-semibold text-base-content">Slug</label>
             <input
               className="input"
               placeholder="my-awesome-page"
               type="text"
             />
 
-            <label className="label">Author</label>
+            <label className="label font-semibold text-base-content">Author</label>
             <input className="input" placeholder="Name" type="text" />
           </fieldset>
-          <fieldset className="fieldset bg-base-200 border-base-300 rounded-box w-xs border p-4">
+          <fieldset className="fieldset bg-base-200 border-base-300 rounded-sm w-xs border p-4 shadow-sm">
             <legend className="fieldset-legend">Settings</legend>
             <div className="join">
               <input
@@ -152,7 +152,7 @@ function RouteComponent() {
 
         {/* Cards */}
         <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="card bg-base-100 shadow-md">
+          <div className="card bg-base-100 rounded-sm border border-base-300 shadow-sm">
             <div className="card-body">
               <h2 className="card-title">Card Title</h2>
               <p>This is a card with some content and a button.</p>
@@ -161,7 +161,7 @@ function RouteComponent() {
               </div>
             </div>
           </div>
-          <div className="card bg-neutral text-neutral-content">
+          <div className="card bg-neutral text-neutral-content rounded-sm border border-base-300 shadow-sm">
             <div className="card-body">
               <h2 className="card-title">Dark Card</h2>
               <p>This one uses the neutral theme colors.</p>

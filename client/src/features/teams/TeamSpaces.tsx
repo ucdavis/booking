@@ -1,3 +1,4 @@
+import { LinkSlashIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import type { Space } from '@/features/spaces/models/Space.ts';
@@ -23,7 +24,6 @@ export function TeamSpaces({
   team: TeamSummary;
 }) {
   const queryClient = useQueryClient();
-  const [isAttaching, setIsAttaching] = useState(false);
   const [notice, setNotice] = useState('');
   const [confirmation, setConfirmation] = useState<{
     resourceCount: number;
@@ -32,26 +32,34 @@ export function TeamSpaces({
   const [countChanged, setCountChanged] = useState(false);
   const mutationInProgressRef = useRef(false);
   const cancelUnlinkRef = useRef<HTMLButtonElement>(null);
-  const attachButtonRef = useRef<HTMLButtonElement>(null);
+  const spacePickerRef = useRef<HTMLInputElement>(null);
   const wasConfirmingRef = useRef(false);
   useEffect(() => {
     if (confirmation) {
       cancelUnlinkRef.current?.focus();
     } else if (wasConfirmingRef.current) {
-      attachButtonRef.current?.focus();
+      spacePickerRef.current?.focus();
     }
     wasConfirmingRef.current = !!confirmation;
   }, [confirmation]);
   const spacesQuery = useQuery(teamSpacesQueryOptions(team.slug));
   const availableQuery = useQuery({
     ...adminSpacesQueryOptions(),
-    enabled: canAttach && isAttaching,
+    enabled: canAttach,
   });
   const availableSpaces = (availableQuery.data ?? []).filter(
     (space) => !spacesQuery.data?.some((attached) => attached.id === space.id)
   );
+  const spaceOptions = availableSpaces.map((space) => ({
+    label: `${space.name}${availableQuery.data?.some((other) => other.id !== space.id && other.name === space.name) ? ` — ${space.slug}` : ''}${space.isActive ? '' : ' (inactive)'}`,
+    space,
+  }));
   async function refreshSpaces(spaceId: number) {
     await Promise.all([
+      queryClient.invalidateQueries({
+        exact: true,
+        queryKey: adminSpacesQueryOptions().queryKey,
+      }),
       queryClient.invalidateQueries({
         queryKey: teamSpacesQueryOptions(team.slug).queryKey,
       }),
@@ -83,7 +91,7 @@ export function TeamSpaces({
       setCountChanged(false);
       await refreshSpaces(space.id);
       setNotice(`${space.name} unlinked.`);
-      attachButtonRef.current?.focus();
+      spacePickerRef.current?.focus();
     },
   });
   async function unlink(space: Space, resourceCount?: number) {
@@ -105,7 +113,6 @@ export function TeamSpaces({
     onSuccess: async (_access, spaceId) => {
       await refreshSpaces(spaceId);
       setNotice('Space attached.');
-      setIsAttaching(false);
     },
   });
   const isMutating = attachMutation.isPending || unlinkMutation.isPending;
@@ -115,11 +122,11 @@ export function TeamSpaces({
     availableQuery.isSuccess &&
     !confirmation;
   const form = useAppForm({
-    defaultValues: { spaceId: '' },
+    defaultValues: { spaceName: '' },
     onSubmit: async ({ formApi, value }) => {
-      const space = availableSpaces.find(
-        (item) => String(item.id) === value.spaceId
-      );
+      const space = spaceOptions.find(
+        (item) => item.label === value.spaceName
+      )?.space;
       if (!canSubmit || !space || mutationInProgressRef.current) {
         return;
       }
@@ -148,21 +155,6 @@ export function TeamSpaces({
         >
           Attached spaces
         </h2>
-        {canAttach && !isAttaching && (
-          <button
-            className="btn btn-outline btn-sm"
-            disabled={isMutating || !!confirmation}
-            onClick={() => {
-              setNotice('');
-              attachMutation.reset();
-              setIsAttaching(true);
-            }}
-            ref={attachButtonRef}
-            type="button"
-          >
-            Attach space
-          </button>
-        )}
       </div>
       {spacesQuery.isPending ? (
         <p className="mt-5 text-base-content/70" role="status">
@@ -195,17 +187,17 @@ export function TeamSpaces({
                 {canAttach && (
                   <button
                     aria-label={`Unlink ${space.name}`}
-                    className="btn btn-ghost btn-sm ml-auto text-error"
+                    className="btn btn-error btn-outline btn-sm ml-auto"
                     disabled={
                       isMutating || !!confirmation || spacesQuery.isFetching
                     }
                     onClick={() => {
-                      setIsAttaching(false);
                       setCountChanged(false);
                       void unlink(space);
                     }}
                     type="button"
                   >
+                    <LinkSlashIcon aria-hidden="true" className="h-4 w-4" />
                     Unlink
                   </button>
                 )}
@@ -249,7 +241,7 @@ export function TeamSpaces({
                 setConfirmation(null);
                 setCountChanged(false);
                 unlinkMutation.reset();
-                attachButtonRef.current?.focus();
+                spacePickerRef.current?.focus();
               }}
               ref={cancelUnlinkRef}
               type="button"
@@ -257,13 +249,14 @@ export function TeamSpaces({
               Cancel unlink
             </button>
             <button
-              className="btn btn-error btn-sm"
+              className="btn btn-error btn-outline btn-sm"
               disabled={isMutating}
               onClick={() =>
                 void unlink(confirmation.space, confirmation.resourceCount)
               }
               type="button"
             >
+              <LinkSlashIcon aria-hidden="true" className="h-4 w-4" />
               Confirm unlink
             </button>
           </div>
@@ -283,12 +276,94 @@ export function TeamSpaces({
           {notice}
         </p>
       )}
-      {canAttach && isAttaching && (
+      {canAttach && (
         <div className="mt-6 border-t border-base-300 pt-5">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void form.handleSubmit();
+            }}
+          >
+            <fieldset
+              className="flex flex-col gap-3 sm:flex-row sm:items-start"
+              disabled={!canSubmit || isMutating || spaceOptions.length === 0}
+            >
+              <div className="min-w-0 grow">
+                <form.AppField
+                  name="spaceName"
+                  validators={{
+                    onChange: ({ value }) =>
+                      spaceOptions.some((option) => option.label === value)
+                        ? undefined
+                        : 'Choose a space from the available suggestions.',
+                  }}
+                >
+                  {(field) => (
+                    <FieldWrapper
+                      controlId="team-attach-space"
+                      label="Choose a space"
+                    >
+                      <input
+                        aria-describedby={
+                          field.state.meta.isTouched &&
+                          !field.state.meta.isValid
+                            ? 'team-attach-space-error'
+                            : undefined
+                        }
+                        aria-invalid={
+                          (field.state.meta.isTouched &&
+                            !field.state.meta.isValid) ||
+                          undefined
+                        }
+                        autoComplete="off"
+                        className="input w-full"
+                        id="team-attach-space"
+                        list="team-available-spaces"
+                        name={field.name}
+                        onBlur={field.handleBlur}
+                        onChange={(event) => {
+                          field.handleChange(event.target.value);
+                          attachMutation.reset();
+                        }}
+                        placeholder="Search available spaces…"
+                        ref={spacePickerRef}
+                        value={field.state.value}
+                      />
+                      <datalist id="team-available-spaces">
+                        {spaceOptions.map(({ label, space }) => (
+                          <option key={space.id} value={label} />
+                        ))}
+                      </datalist>
+                    </FieldWrapper>
+                  )}
+                </form.AppField>
+              </div>
+              <form.Subscribe
+                selector={(state) =>
+                  [state.values.spaceName, state.isSubmitting] as const
+                }
+              >
+                {([spaceName, isSubmitting]) => (
+                  <button
+                    className="btn btn-primary shrink-0 sm:mt-7"
+                    disabled={
+                      isSubmitting ||
+                      !spaceOptions.some((option) => option.label === spaceName)
+                    }
+                    type="submit"
+                  >
+                    {attachMutation.isPending ? 'Attaching…' : 'Attach space'}
+                  </button>
+                )}
+              </form.Subscribe>
+            </fieldset>
+          </form>
           {availableQuery.isPending ? (
-            <p role="status">Loading available spaces…</p>
+            <p className="mt-3 text-sm text-base-content/65" role="status">
+              Loading available spaces…
+            </p>
           ) : availableQuery.isError ? (
-            <div>
+            <div className="mt-3">
               <p role="alert">
                 We could not load available spaces. Check your permissions or
                 try again.
@@ -302,91 +377,10 @@ export function TeamSpaces({
               </button>
             </div>
           ) : spacesQuery.isSuccess && availableSpaces.length === 0 ? (
-            <p className="text-base-content/70">
+            <p className="mt-3 text-sm text-base-content/65">
               All available spaces are already attached.
             </p>
-          ) : (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void form.handleSubmit();
-              }}
-            >
-              <fieldset
-                className="flex flex-col gap-3 sm:flex-row sm:items-end"
-                disabled={!canSubmit || isMutating}
-              >
-                <div className="grow">
-                  <form.AppField
-                    name="spaceId"
-                    validators={{
-                      onChange: ({ value }) =>
-                        availableSpaces.some(
-                          (space) => String(space.id) === value
-                        )
-                          ? undefined
-                          : 'Choose a space to attach.',
-                    }}
-                  >
-                    {(field) => (
-                      <FieldWrapper controlId="team-attach-space" label="Space">
-                        <select
-                          aria-describedby={
-                            field.state.meta.isTouched &&
-                            !field.state.meta.isValid
-                              ? 'team-attach-space-error'
-                              : undefined
-                          }
-                          aria-invalid={
-                            (field.state.meta.isTouched &&
-                              !field.state.meta.isValid) ||
-                            undefined
-                          }
-                          className="select w-full"
-                          id="team-attach-space"
-                          name={field.name}
-                          onBlur={field.handleBlur}
-                          onChange={(event) => {
-                            field.handleChange(event.target.value);
-                            attachMutation.reset();
-                          }}
-                          value={field.state.value}
-                        >
-                          <option value="">Choose a space</option>
-                          {availableSpaces.map((space) => (
-                            <option key={space.id} value={space.id}>
-                              {space.name}
-                              {space.isActive ? '' : ' (inactive)'}
-                            </option>
-                          ))}
-                        </select>
-                      </FieldWrapper>
-                    )}
-                  </form.AppField>
-                </div>
-                <form.Subscribe
-                  selector={(state) =>
-                    [state.values.spaceId, state.isSubmitting] as const
-                  }
-                >
-                  {([spaceId, isSubmitting]) => (
-                    <button
-                      className="btn btn-primary"
-                      disabled={
-                        isSubmitting ||
-                        !availableSpaces.some(
-                          (space) => String(space.id) === spaceId
-                        )
-                      }
-                      type="submit"
-                    >
-                      {attachMutation.isPending ? 'Attaching…' : 'Attach space'}
-                    </button>
-                  )}
-                </form.Subscribe>
-              </fieldset>
-            </form>
-          )}
+          ) : null}
           {attachMutation.isError && (
             <p className="alert alert-error mt-4" role="alert">
               {attachMutation.error instanceof HttpError &&
@@ -395,18 +389,6 @@ export function TeamSpaces({
                 : 'We could not attach this space. Please try again.'}
             </p>
           )}
-          <button
-            className="btn btn-ghost btn-sm mt-3"
-            disabled={isMutating}
-            onClick={() => {
-              setIsAttaching(false);
-              form.reset();
-              attachMutation.reset();
-            }}
-            type="button"
-          >
-            Cancel
-          </button>
         </div>
       )}
     </section>

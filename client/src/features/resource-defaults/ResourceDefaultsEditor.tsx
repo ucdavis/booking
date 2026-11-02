@@ -28,7 +28,7 @@ export const ResourceDefaultsEditor = withFieldGroup({
         className={
           embedded
             ? 'space-y-5'
-            : 'space-y-5 rounded-sm border border-base-300 bg-base-100 p-5'
+            : 'space-y-5 rounded-sm border border-base-300 bg-base-100 p-5 shadow-sm'
         }
       >
         <div>

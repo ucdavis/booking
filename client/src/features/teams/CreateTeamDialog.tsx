@@ -132,7 +132,7 @@ export function CreateTeamDialog({
                 return (
                   <div>
                     <label
-                      className="mb-2 block text-sm font-semibold"
+                      className="mb-2 block text-sm font-semibold text-base-content"
                       htmlFor="create-team-name"
                     >
                       Team name
@@ -195,7 +195,7 @@ export function CreateTeamDialog({
                 return (
                   <div>
                     <label
-                      className="mb-2 block text-sm font-semibold"
+                      className="mb-2 block text-sm font-semibold text-base-content"
                       htmlFor="create-team-slug"
                     >
                       URL slug

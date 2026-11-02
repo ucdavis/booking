@@ -70,8 +70,8 @@ export function ResourcesPage({ teamSlug }: { teamSlug: string }) {
       </div>
       <div className="mt-8 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6">
         <div className="flex flex-wrap gap-4">
-          <label className="form-control flex min-w-56 flex-1 flex-col gap-1">
-            <span className="text-sm font-medium">Search resources</span>
+          <label className="form-control flex min-w-56 flex-1 flex-col gap-1 text-base-content">
+            <span className="text-sm font-semibold text-base-content">Search resources</span>
             <input
               className="input w-full"
               onChange={(event) => setSearch(event.target.value)}
@@ -80,8 +80,8 @@ export function ResourcesPage({ teamSlug }: { teamSlug: string }) {
               value={search}
             />
           </label>
-          <label className="form-control flex flex-col gap-1">
-            <span className="text-sm font-medium">Status</span>
+          <label className="form-control flex flex-col gap-1 text-base-content">
+            <span className="text-sm font-semibold text-base-content">Status</span>
             <select
               className="select"
               onChange={(event) => setStatus(event.target.value)}

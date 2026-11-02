@@ -69,25 +69,25 @@ function ResourceDirectoryPage() {
         <p className="mt-3 text-lg leading-7 text-base-content/70">Search reservable rooms, lab benches, and equipment. Every result includes its building and location details.</p>
       </div>
 
-      <section aria-labelledby="filters-heading" className="mt-8 rounded-sm border border-base-300 bg-base-200 p-5 sm:p-6">
+      <section aria-labelledby="filters-heading" className="mt-8 rounded-sm border border-base-300 bg-base-200 p-5 sm:p-6 shadow-sm">
         <div className="flex items-center gap-2 text-primary">
           <AdjustmentsHorizontalIcon aria-hidden="true" className="h-5 w-5" />
           <h2 className="font-semibold" id="filters-heading">Search and filters</h2>
         </div>
         <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <label className="sm:col-span-2">
-            <span className="mb-2 block text-sm font-medium">Resource or feature</span>
+            <span className="mb-2 block text-sm font-semibold text-base-content">Resource or feature</span>
             <input className="input w-full" onChange={(event) => setSearch(event.target.value)} placeholder="e.g. projector, room 1155" type="search" value={search} />
           </label>
           <label>
-            <span className="mb-2 block text-sm font-medium">Building</span>
+            <span className="mb-2 block text-sm font-semibold text-base-content">Building</span>
             <select className="select w-full" onChange={(event) => setBuilding(event.target.value)} value={building}>
               <option value="all">All buildings</option>
               {buildings.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
             </select>
           </label>
           <label>
-            <span className="mb-2 block text-sm font-medium">Resource type</span>
+            <span className="mb-2 block text-sm font-semibold text-base-content">Resource type</span>
             <select className="select w-full" onChange={(event) => setKind(event.target.value as 'all' | ResourceKind)} value={kind}>
               <option value="all">All resource types</option>
               <option value="room">Rooms</option>
@@ -96,7 +96,7 @@ function ResourceDirectoryPage() {
             </select>
           </label>
         </div>
-        <label className="mt-5 flex w-fit cursor-pointer items-center gap-3 text-sm">
+        <label className="mt-5 flex w-fit cursor-pointer items-center gap-3 text-sm font-semibold text-base-content">
           <input checked={showAvailableOnly} className="checkbox checkbox-primary checkbox-sm" onChange={(event) => setShowAvailableOnly(event.target.checked)} type="checkbox" />
           Show only resources available now
         </label>

@@ -87,13 +87,13 @@ export function FormBuilder({
           Your form is empty. Add a field or a text block to get started.
         </div>
       ) : (
-        <div className="grid items-start gap-5 xl:grid-cols-2">
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           {selectedField && (
             <div
               className={
                 embedded
                   ? 'min-w-0'
-                  : 'rounded-sm border border-base-300 bg-base-100 p-5'
+                  : 'rounded-sm border border-base-300 bg-base-100 p-5 shadow-sm'
               }
             >
               <FormFieldEditor

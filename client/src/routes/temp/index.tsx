@@ -117,7 +117,7 @@ function ReservationHomePage() {
             ['Equipment', 'Standalone instruments and event equipment', '67'],
           ].map(([title, description, count]) => (
             <Link
-              className="group rounded-sm border border-base-300 bg-base-200 p-5 transition hover:border-primary hover:shadow-sm"
+              className="group rounded-sm border border-base-300 bg-base-200 p-5 transition hover:border-primary shadow-sm"
               key={title}
               to="/temp/resources"
             >
@@ -157,7 +157,7 @@ function ReservationHomePage() {
       <div className="mt-14 grid gap-8 lg:grid-cols-[1.3fr_0.7fr]">
         <section
           aria-labelledby="reservations-heading"
-          className="rounded-sm border border-base-300 bg-base-200 p-6 sm:p-8"
+          className="rounded-sm border border-base-300 bg-base-200 p-6 sm:p-8 shadow-sm"
         >
           <div className="flex items-center justify-between gap-4 border-b border-base-300 pb-5">
             <div>
@@ -217,7 +217,7 @@ function ReservationHomePage() {
 
         <section
           aria-labelledby="buildings-heading"
-          className="rounded-sm bg-base-300/60 p-6 sm:p-8"
+          className="rounded-sm border border-base-300 bg-base-300/60 p-6 shadow-sm sm:p-8"
         >
           <p className="text-sm font-semibold tracking-wide text-base-content/60 uppercase">
             Locations
@@ -230,7 +230,7 @@ function ReservationHomePage() {
           </h2>
           <ul className="mt-5 space-y-4">
             {buildings.map((building) => (
-              <li className="rounded-sm bg-base-200 p-4" key={building.code}>
+              <li className="rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm" key={building.code}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="font-semibold">{building.name}</h3>

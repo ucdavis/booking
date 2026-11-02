@@ -979,13 +979,16 @@ describe('team attached spaces', () => {
     cleanup = renderRoute({ initialPath: '/teams/plant-sciences' }).cleanup;
     const section = within(await screen.findByRole('region', { name: 'Attached spaces' }));
     expect(await section.findByText('No spaces are attached to this team.')).toBeInTheDocument();
-    fireEvent.click(section.getByRole('button', { name: 'Attach space' }));
-    await section.findByRole('option', { name: space.name });
-    fireEvent.change(section.getByLabelText('Space'), { target: { value: '7' } });
+    await waitFor(() => expect(section.getByLabelText('Choose a space')).toBeEnabled());
+    expect(section.getByRole('button', { name: 'Attach space' })).toBeDisabled();
+    fireEvent.change(section.getByLabelText('Choose a space'), { target: { value: space.name } });
     fireEvent.click(section.getByRole('button', { name: 'Attach space' }));
     expect(await section.findByText('Space attached.')).toBeInTheDocument();
     expect(section.getByText(space.name)).toBeInTheDocument();
     expect(attach).toHaveBeenCalledTimes(1);
+    expect(section.getByLabelText('Choose a space')).toHaveValue('');
+    expect(section.getByLabelText('Choose a space')).toBeDisabled();
+    expect(section.getByText('All available spaces are already attached.')).toBeInTheDocument();
   });
 
   it('preserves the selection when attaching fails and allows retry', async () => {
@@ -998,12 +1001,35 @@ describe('team attached spaces', () => {
     );
     cleanup = renderRoute({ initialPath: '/teams/plant-sciences' }).cleanup;
     const section = within(await screen.findByRole('region', { name: 'Attached spaces' }));
-    fireEvent.click(section.getByRole('button', { name: 'Attach space' }));
-    await section.findByRole('option', { name: space.name });
-    fireEvent.change(section.getByLabelText('Space'), { target: { value: '7' } });
+    await waitFor(() => expect(section.getByLabelText('Choose a space')).toBeEnabled());
+    expect(section.getByRole('button', { name: 'Attach space' })).toBeDisabled();
+    fireEvent.change(section.getByLabelText('Choose a space'), { target: { value: space.name } });
     fireEvent.click(section.getByRole('button', { name: 'Attach space' }));
     expect(await section.findByRole('alert')).toHaveTextContent('We could not attach this space.');
-    expect(section.getByLabelText('Space')).toHaveValue('7');
+    expect(section.getByLabelText('Choose a space')).toHaveValue(space.name);
+    expect(section.getByRole('button', { name: 'Attach space' })).toBeEnabled();
+  });
+
+  it('excludes attached spaces and requires an available suggestion before attaching', async () => {
+    mockUser(true);
+    mockTeamAccess(null);
+    const available = { ...space, id: 8, name: 'Research greenhouse', slug: 'research-greenhouse' };
+    server.use(
+      http.get('/api/teams/:teamSlug/spaces', () => HttpResponse.json([space])),
+      http.get('/api/admin/spaces', () => HttpResponse.json([space, available]))
+    );
+    cleanup = renderRoute({ initialPath: '/teams/plant-sciences' }).cleanup;
+    const section = within(await screen.findByRole('region', { name: 'Attached spaces' }));
+    const picker = section.getByLabelText('Choose a space');
+    await waitFor(() => expect(picker).toBeEnabled());
+    const suggestions = document.getElementById(picker.getAttribute('list')!);
+    expect(suggestions?.querySelectorAll('option')).toHaveLength(1);
+    expect(suggestions?.querySelector('option')).toHaveValue(available.name);
+    for (const value of ['Unknown space', space.name]) {
+      fireEvent.change(picker, { target: { value } });
+      expect(section.getByRole('button', { name: 'Attach space' })).toBeDisabled();
+    }
+    fireEvent.change(picker, { target: { value: available.name } });
     expect(section.getByRole('button', { name: 'Attach space' })).toBeEnabled();
   });
 

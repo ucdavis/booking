@@ -205,7 +205,7 @@ export function ResourceTemplatesPage({ teamSlug }: { teamSlug?: string }) {
             {teamSlug && <h3 className="mb-4 text-xl font-semibold text-primary">{title}</h3>}
             {isSystem
               ? <p className="mb-6 text-sm text-base-content/70">View a system template or duplicate it into your team to customize it.</p>
-              : <label className="mb-6 flex items-center gap-3 text-sm"><input checked={showArchived} className="checkbox checkbox-sm" onChange={(event) => setShowArchived(event.target.checked)} type="checkbox" />Include archived templates</label>}
+              : <label className="mb-6 flex items-center gap-3 text-sm font-semibold text-base-content"><input checked={showArchived} className="checkbox checkbox-sm" onChange={(event) => setShowArchived(event.target.checked)} type="checkbox" />Include archived templates</label>}
             {templates.length === 0 ? <p className="py-8 text-center text-base-content/70">{isSystem
               ? 'No active system templates are available.'
               : showArchived ? 'No templates have been created yet. Create a template to get started.' : 'No active templates. Create a template or include archived templates.'}</p>

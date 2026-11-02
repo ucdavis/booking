@@ -101,7 +101,7 @@ function FormComponent() {
         {/* Form Section */}
         <section className="mb-16">
           <div className="max-w-2xl mx-auto">
-            <div className="card bg-base-100 shadow-xl">
+            <div className="card bg-base-100 rounded-sm border border-base-300 shadow-sm">
               <div className="card-body">
                 <h2 className="card-title text-2xl mb-6">Contact Form</h2>
                 <p className="text-base-content/70 mb-6">
@@ -184,7 +184,7 @@ function FormComponent() {
             Form Features
           </h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-4xl mx-auto">
-            <div className="card bg-base-100 shadow-md text-center">
+            <div className="card bg-base-100 text-center rounded-sm border border-base-300 shadow-sm">
               <div className="card-body">
                 <div className="w-12 h-12 bg-primary/20 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <svg
@@ -211,7 +211,7 @@ function FormComponent() {
               </div>
             </div>
 
-            <div className="card bg-base-100 shadow-md text-center">
+            <div className="card bg-base-100 text-center rounded-sm border border-base-300 shadow-sm">
               <div className="card-body">
                 <div className="w-12 h-12 bg-success/20 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <svg
@@ -237,7 +237,7 @@ function FormComponent() {
               </div>
             </div>
 
-            <div className="card bg-base-100 shadow-md text-center">
+            <div className="card bg-base-100 text-center rounded-sm border border-base-300 shadow-sm">
               <div className="card-body">
                 <div className="w-12 h-12 bg-secondary/20 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <svg
@@ -270,7 +270,7 @@ function FormComponent() {
           </h2>
           <div className="max-w-4xl mx-auto">
             <div className="grid md:grid-cols-2 gap-8">
-              <div className="card bg-base-100 shadow-md">
+              <div className="card bg-base-100 rounded-sm border border-base-300 shadow-sm">
                 <div className="card-body">
                   <h3 className="card-title mb-4">Zod Validation Testing</h3>
                   <ul className="space-y-2 text-sm">
@@ -298,7 +298,7 @@ function FormComponent() {
                 </div>
               </div>
 
-              <div className="card bg-base-100 shadow-md">
+              <div className="card bg-base-100 rounded-sm border border-base-300 shadow-sm">
                 <div className="card-body">
                   <h3 className="card-title mb-4">Form Behavior</h3>
                   <ul className="space-y-2 text-sm">
