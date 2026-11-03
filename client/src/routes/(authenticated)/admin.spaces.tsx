@@ -38,13 +38,14 @@ function SiteAdminSpacesPage() {
         header: 'Space name',
       },
       {
-        accessorKey: 'address',
+        accessorFn: (space) => space.address ?? '',
         cell: ({ row }) => (
           <span className="whitespace-pre-line break-words">
             {row.original.address?.trim() || ''}
           </span>
         ),
         header: 'Address',
+        id: 'address',
       },
       {
         accessorFn: (space) =>
