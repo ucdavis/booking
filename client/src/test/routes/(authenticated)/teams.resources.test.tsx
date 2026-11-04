@@ -574,6 +574,54 @@ describe('team resources', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      defaultsError: false,
+      definitionError: true,
+      expectedTab: 'Customize form',
+    },
+    {
+      defaultsError: true,
+      definitionError: false,
+      expectedTab: 'Resource details',
+    },
+    {
+      defaultsError: true,
+      definitionError: true,
+      expectedTab: 'Resource details',
+    },
+  ])(
+    'opens $expectedTab for definition errors: $definitionError and defaults errors: $defaultsError',
+    async ({ defaultsError, definitionError, expectedTab }) => {
+      mockAccess();
+      mockResources();
+      const update = vi.fn(() => HttpResponse.json(resource()));
+      server.use(http.put('/api/teams/:teamSlug/resources/:id', update));
+      ({ cleanup } = renderRoute({ initialPath: `${listPath}/1` }));
+      await screen.findByRole('textbox', { name: 'Resource name' });
+      if (defaultsError) {
+        fireEvent.change(screen.getByRole('textbox', { name: 'Rate name 1' }), {
+          target: { value: '' },
+        });
+      }
+      if (definitionError) {
+        fireEvent.click(screen.getByRole('tab', { name: 'Customize form' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Label' }), {
+          target: { value: '' },
+        });
+      }
+      fireEvent.click(screen.getByRole('tab', { name: 'Preview form' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+      await waitFor(() =>
+        expect(screen.getByRole('tab', { name: expectedTab })).toHaveAttribute(
+          'aria-selected',
+          'true'
+        )
+      );
+      expect(update).not.toHaveBeenCalled();
+    }
+  );
+
   it('requires valid resource fields before creating a resource', async () => {
     mockAccess();
     mockResources([]);

@@ -10,7 +10,6 @@ import {
   resourceDefaultsFormValues,
   resourceDefaultsFromForm,
   serializeResourceDefaults,
-  validateResourceDefaults,
   validateResourceDefaultsFields,
 } from '@/features/resource-defaults/resourceDefaults.ts';
 import { FormBuilder } from '@/features/resource-templates/FormBuilder.tsx';
@@ -338,13 +337,9 @@ export function ResourceEditor({
       const errors = validate({ value: formApi.state.values })?.fields;
       if (errors) {
         setEditorView(
-          Object.keys(errors).some(
-            (key) => key !== 'definition' && !key.startsWith('resourceDefaults')
-          )
+          Object.keys(errors).some((key) => key !== 'definition')
             ? 'details'
-            : errors.definition
-              ? 'build'
-              : 'details'
+            : 'build'
         );
       }
     },
@@ -466,16 +461,6 @@ export function ResourceEditor({
         onSubmit={(event) => {
           event.preventDefault();
           if (!saveFlowRef.current && !form.state.isSubmitting) {
-            if (
-              !configuration.detailsUnavailableReason &&
-              (!baseline ||
-                hasDefaultsChanges(form.state.values.resourceDefaults)) &&
-              validateResourceDefaults(
-                resourceDefaultsFromForm(form.state.values.resourceDefaults)
-              ).length
-            ) {
-              setEditorView('details');
-            }
             void form.handleSubmit();
           }
         }}
