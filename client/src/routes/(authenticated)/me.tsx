@@ -30,7 +30,7 @@ function MyProfilePage() {
     <main className="content-container py-6 sm:py-10">
       <nav
         aria-label="Breadcrumb"
-        className="mb-6 text-sm text-base-content/65"
+        className="mb-6 text-sm text-base-content/75"
       >
         <Link className="hover:text-primary hover:underline" to="/temp">
           Home
@@ -42,7 +42,7 @@ function MyProfilePage() {
       <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
         My profile
       </h1>
-      <p className="mt-3 text-base-content/70">
+      <p className="mt-3 text-base-content/80">
         Your account details and access in Booking.
       </p>
 
@@ -62,7 +62,7 @@ function MyProfilePage() {
       <div className="mt-8 grid items-start gap-6 lg:grid-cols-3">
         <section
           aria-labelledby="account-details-heading"
-          className="min-w-0 overflow-hidden rounded-sm border border-base-300 bg-base-200 lg:col-span-2"
+          className="min-w-0 overflow-hidden rounded-sm border border-base-300 bg-base-200 lg:col-span-2 shadow-sm"
         >
           <div className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:p-8">
             <div
@@ -72,7 +72,7 @@ function MyProfilePage() {
               {initials || <UserCircleIcon className="h-10 w-10" />}
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-medium text-base-content/65">
+              <p className="text-sm font-medium text-base-content/75">
                 {user.isEmulating ? 'Emulated account' : 'Signed in as'}
               </p>
               <h2
@@ -81,7 +81,7 @@ function MyProfilePage() {
               >
                 {name}
               </h2>
-              <p className="mt-2 text-sm text-base-content/70">
+              <p className="mt-2 text-sm text-base-content/80">
                 UC Davis Booking account
               </p>
             </div>
@@ -102,8 +102,8 @@ function MyProfilePage() {
                   className="grid gap-1 py-4 first:pt-0 last:pb-0 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4"
                   key={label}
                 >
-                  <dt className="text-sm text-base-content/65">{label}</dt>
-                  <dd className="min-w-0 text-sm font-medium break-words [overflow-wrap:anywhere]">
+                  <dt className="text-sm font-normal text-base-content/75">{label}</dt>
+                  <dd className="min-w-0 break-words [overflow-wrap:anywhere] text-base font-normal text-base-content">
                     {value?.trim() || 'Not available'}
                   </dd>
                 </div>
@@ -114,7 +114,7 @@ function MyProfilePage() {
 
         <section
           aria-labelledby="access-heading"
-          className="min-w-0 rounded-sm border border-base-300 bg-base-200 p-6 sm:p-8"
+          className="min-w-0 rounded-sm border border-base-300 bg-base-200 p-6 sm:p-8 shadow-sm"
         >
           <div className="flex items-center gap-2 text-primary">
             <ShieldCheckIcon aria-hidden="true" className="h-5 w-5" />
@@ -124,7 +124,7 @@ function MyProfilePage() {
           </div>
 
           <dl className="mt-6">
-            <dt className="text-sm text-base-content/65">Site access</dt>
+            <dt className="text-sm font-normal text-base-content/75">Site access</dt>
             <dd className="mt-2">
               <span
                 className={`badge badge-outline ${user.isSiteAdmin ? 'badge-primary' : ''}`}
@@ -132,7 +132,7 @@ function MyProfilePage() {
                 {user.isSiteAdmin ? 'Site administrator' : 'Standard user'}
               </span>
               {user.isSiteAdmin && (
-                <p className="mt-3 text-sm leading-relaxed text-base-content/70">
+                <p className="mt-3 text-sm leading-relaxed text-base-content/80">
                   You can manage teams, resource templates, and administrator
                   access.
                 </p>
@@ -146,7 +146,7 @@ function MyProfilePage() {
                 </Link>
               )}
               {user.isSiteAdmin && (
-                <p className="mt-3 text-sm leading-relaxed text-base-content/70">
+                <p className="mt-3 text-sm leading-relaxed text-base-content/80">
                   As a site administrator, you also have access to all teams.
                 </p>
               )}
@@ -154,12 +154,12 @@ function MyProfilePage() {
 
             {(!teamsQuery.isSuccess || visibleTeams.length > 0) && (
               <>
-                <dt className="mt-6 border-t border-base-300 pt-6 text-sm text-base-content/65">
+                <dt className="mt-6 border-t border-base-300 pt-6 text-sm font-normal text-base-content/75">
                   Team memberships
                 </dt>
                 <dd className="mt-3">
                   {teamsQuery.isPending ? (
-                    <p className="text-sm text-base-content/70" role="status">
+                    <p className="text-sm text-base-content/80" role="status">
                       Loading your teams…
                     </p>
                   ) : teamsQuery.isError ? (
@@ -205,7 +205,7 @@ function MyProfilePage() {
                         ))}
                       </ul>
                       {remainingTeamCount > 0 && (
-                        <p className="mt-3 text-sm text-base-content/70">
+                        <p className="mt-3 text-sm text-base-content/80">
                           And {remainingTeamCount} more{' '}
                           {remainingTeamCount === 1 ? 'team' : 'teams'}. Use the
                           team menu to see all your teams.

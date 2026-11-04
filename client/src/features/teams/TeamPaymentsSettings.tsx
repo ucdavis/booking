@@ -64,7 +64,7 @@ export function TeamPaymentsSettings({
   return (
     <section
       aria-labelledby="team-payments-title"
-      className="mt-6 max-w-3xl rounded-sm border border-base-300 bg-base-100 p-6 shadow-sm sm:p-8"
+      className="min-w-0 rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm sm:p-8"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2
@@ -91,7 +91,7 @@ export function TeamPaymentsSettings({
           check your permissions.
         </p>
       ) : paymentsQuery.isPending ? (
-        <p className="mt-5 text-base-content/70" role="status">
+        <p className="mt-5 text-base-content/80" role="status">
           Loading payments settings…
         </p>
       ) : (
@@ -109,32 +109,36 @@ export function TeamPaymentsSettings({
               >
                 {statusLabels[settings.status]}
               </p>
-              <p className="mt-2 text-sm text-base-content/70">
+              <p className="mt-2 text-sm text-base-content/80">
                 {settings.message || statusMessages[settings.status]}
               </p>
               <dl className="mt-5 grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
                 {settings.paymentsTeamName && (
                   <>
-                    <dt className="text-sm font-medium text-base-content/65">
+                    <dt className="text-sm font-normal text-base-content/75">
                       Payments team
                     </dt>
-                    <dd className="break-words">{settings.paymentsTeamName}</dd>
+                    <dd className="break-words text-base font-normal text-base-content">
+                      {settings.paymentsTeamName}
+                    </dd>
                   </>
                 )}
                 {settings.paymentsTeamSlug && (
                   <>
-                    <dt className="text-sm font-medium text-base-content/65">
+                    <dt className="text-sm font-normal text-base-content/75">
                       Payments team slug
                     </dt>
-                    <dd className="break-all">{settings.paymentsTeamSlug}</dd>
+                    <dd className="break-all text-base font-normal text-base-content">
+                      {settings.paymentsTeamSlug}
+                    </dd>
                   </>
                 )}
                 {canManage && settings.maskedApiKey && (
                   <>
-                    <dt className="text-sm font-medium text-base-content/65">
+                    <dt className="text-sm font-normal text-base-content/75">
                       Saved API key
                     </dt>
-                    <dd className="break-all font-mono">
+                    <dd className="break-all font-mono text-base font-normal text-base-content">
                       {settings.maskedApiKey}
                     </dd>
                   </>
@@ -147,7 +151,7 @@ export function TeamPaymentsSettings({
             </p>
           )}
           <button
-            className="btn btn-ghost btn-sm mt-4"
+            className="btn btn-sm mt-4"
             disabled={paymentsQuery.isFetching}
             onClick={() => {
               setNotice('');

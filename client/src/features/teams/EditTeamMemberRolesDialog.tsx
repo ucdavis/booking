@@ -141,7 +141,7 @@ export function EditTeamMemberRolesDialog({
               includeViewer={member.roles.includes(TeamRole.Viewer)}
               onChange={onChange}
             />
-            <p className="mt-3 text-sm text-base-content/65">
+            <p className="mt-3 text-sm text-base-content/75">
               To remove every role, cancel and use Remove member.
             </p>
           </div>

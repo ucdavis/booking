@@ -3,6 +3,7 @@ import {
   type MutationFilters,
   type QueryClient,
 } from '@tanstack/react-query';
+import type { Space } from '@/features/spaces/models/Space.ts';
 import type { TeamAccess } from '@/features/teams/models/TeamAccess.ts';
 import type { TeamMember } from '@/features/teams/models/TeamMember.ts';
 import type { TeamPaymentsSettings } from '@/features/teams/models/TeamPaymentsSettings.ts';
@@ -193,3 +194,15 @@ export async function invalidateTeamMemberQueries(
     }),
   ]);
 }
+
+export const teamSpacesQueryOptions = (teamSlug: string) =>
+  queryOptions({
+    queryFn: ({ signal }) =>
+      fetchJson<Space[]>(
+        `/api/teams/${encodeURIComponent(teamSlug)}/spaces`,
+        { cache: 'no-store' },
+        signal
+      ),
+    queryKey: ['teams', 'spaces', teamSlug] as const,
+    retry: false,
+  });

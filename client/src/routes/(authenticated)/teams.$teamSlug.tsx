@@ -1,4 +1,3 @@
-import { UserGroupIcon } from '@heroicons/react/24/outline';
 import { useIsMutating, useQuery } from '@tanstack/react-query';
 import {
   createFileRoute,
@@ -91,7 +90,7 @@ function TeamLayout() {
     <main className="content-container py-4 sm:py-8">
       <nav
         aria-label="Breadcrumb"
-        className="mb-5 text-sm text-base-content/65"
+        className="mb-5 text-sm text-base-content/75"
       >
         <Link className="hover:text-primary hover:underline" to="/temp">
           Home
@@ -102,16 +101,10 @@ function TeamLayout() {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-3 text-primary">
-            <UserGroupIcon aria-hidden="true" className="h-6 w-6" />
-            <p className="text-sm font-semibold tracking-wide uppercase">
-              Team administration
-            </p>
-          </div>
-          <h1 className="mt-3 break-words text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
+          <h1 className="break-words text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
             {team.name}
           </h1>
-          <p className="mt-3 text-base-content/70">
+          <p className="mt-3 text-base-content/80">
             View your team and its administration tools.
           </p>
         </div>
@@ -131,7 +124,7 @@ function TeamLayout() {
           activeProps={{ className: 'border-primary text-primary' }}
           className="border-b-2 px-1 py-3 text-sm font-semibold hover:text-primary"
           inactiveProps={{
-            className: 'border-transparent text-base-content/70',
+            className: 'border-transparent text-base-content/80',
           }}
           params={{ teamSlug: team.slug }}
           to="/teams/$teamSlug"
@@ -144,7 +137,7 @@ function TeamLayout() {
           <Link
             activeProps={{ className: 'border-primary text-primary' }}
             className="border-b-2 px-1 py-3 text-sm font-semibold hover:text-primary"
-            inactiveProps={{ className: 'border-transparent text-base-content/70' }}
+            inactiveProps={{ className: 'border-transparent text-base-content/80' }}
             params={{ teamSlug: team.slug }}
             to="/teams/$teamSlug/resources"
           >
@@ -158,7 +151,7 @@ function TeamLayout() {
             activeProps={{ className: 'border-primary text-primary' }}
             className="border-b-2 px-1 py-3 text-sm font-semibold hover:text-primary"
             inactiveProps={{
-              className: 'border-transparent text-base-content/70',
+              className: 'border-transparent text-base-content/80',
             }}
             params={{ teamSlug: team.slug }}
             to="/teams/$teamSlug/resource-templates"
@@ -171,7 +164,7 @@ function TeamLayout() {
             activeProps={{ className: 'border-primary text-primary' }}
             className="border-b-2 px-1 py-3 text-sm font-semibold hover:text-primary"
             inactiveProps={{
-              className: 'border-transparent text-base-content/70',
+              className: 'border-transparent text-base-content/80',
             }}
             params={{ teamSlug: team.slug }}
             to="/teams/$teamSlug/members"
@@ -206,7 +199,7 @@ function TeamAccessError({ error }: { error: unknown }) {
         <h1 className="text-3xl font-semibold text-primary">
           {isNotFound ? 'Team not found' : 'We could not load this team'}
         </h1>
-        <p className="mt-4 text-base-content/70">
+        <p className="mt-4 text-base-content/80">
           {isNotFound
             ? 'Check the team URL and try again.'
             : 'Refresh the page or try again later.'}

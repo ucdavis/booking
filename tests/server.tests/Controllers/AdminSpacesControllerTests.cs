@@ -39,6 +39,35 @@ public class AdminSpacesControllerTests
     }
 
     [Fact]
+    public async Task List_includes_address_and_only_attached_teams_in_name_order()
+    {
+        using var db = TestDbContextFactory.CreateInMemory();
+        var hall = CreateSpace("Hall", "hall");
+        hall.Address = "1 Science Way";
+        var garden = CreateSpace("Garden", "garden");
+        var chemistry = new Team { Name = "Chemistry", Slug = "chemistry" };
+        var plants = new Team { Name = "Plant Sciences", Slug = "plants" };
+        var other = new Team { Name = "Other", Slug = "other" };
+        db.Spaces.Add(garden);
+        db.TeamSpaces.AddRange(
+            new TeamSpace { Space = hall, Team = plants },
+            new TeamSpace { Space = hall, Team = chemistry });
+        db.Teams.Add(other);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var spaces = ReadOk(await new AdminSpacesController(db).GetSpaces());
+
+        var response = spaces.Single(space => space.Id == hall.Id);
+        response.Address.Should().Be("1 Science Way");
+        response.Teams.Select(team => team.Name).Should().Equal("Chemistry", "Plant Sciences");
+        response.Teams[0].Id.Should().Be(chemistry.Id);
+        response.Teams[0].Slug.Should().Be("chemistry");
+        spaces.Single(space => space.Id == garden.Id).Teams.Should().BeEmpty();
+        db.ChangeTracker.Entries().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Create_saves_trimmed_identity_with_Pacific_time_without_team_links()
     {
         using var db = TestDbContextFactory.CreateInMemory();

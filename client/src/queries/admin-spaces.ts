@@ -65,3 +65,30 @@ export const unlinkSpaceTeam = (
     }`,
     { method: 'DELETE' }
   );
+
+export function confirmationResourceCount(error: unknown): number | undefined {
+  if (!(error instanceof HttpError) || error.status !== 409) {
+    return undefined;
+  }
+  let details = error.body;
+  if (typeof details === 'string') {
+    try {
+      details = JSON.parse(details);
+    } catch {
+      return undefined;
+    }
+  }
+  if (
+    details !== null &&
+    typeof details === 'object' &&
+    'code' in details &&
+    details.code === 'space_team_resources_confirmation_required' &&
+    'resourceCount' in details &&
+    typeof details.resourceCount === 'number' &&
+    Number.isSafeInteger(details.resourceCount) &&
+    details.resourceCount >= 0
+  ) {
+    return details.resourceCount;
+  }
+  return undefined;
+}

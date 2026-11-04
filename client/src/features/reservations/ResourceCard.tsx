@@ -20,7 +20,7 @@ export function ResourceCard({ resource }: { resource: Resource }) {
   const Icon = kindIcons[resource.kind];
 
   return (
-    <article className="flex h-full flex-col rounded-sm border border-base-300 bg-base-200 p-5">
+    <article className="flex h-full flex-col rounded-sm border border-base-300 bg-base-200 p-5 shadow-sm">
       <div className="flex items-center gap-3">
         <div>
           <p className="text-xs font-semibold tracking-wide text-base-content/60 uppercase">
@@ -37,23 +37,23 @@ export function ResourceCard({ resource }: { resource: Resource }) {
 
       <dl className="mt-5 space-y-2 border-t border-base-300 pt-4 text-sm">
         <div className="flex justify-between gap-4">
-          <dt className="text-base-content/60">Location</dt>
-          <dd className="text-right font-medium">
+          <dt className="text-sm font-normal text-base-content/75">Location</dt>
+          <dd className="text-right text-base font-normal text-base-content">
             {resource.building}
             {resource.parentName ? ` · ${resource.parentName}` : ''}
           </dd>
         </div>
         {resource.capacity && (
           <div className="flex justify-between gap-4">
-            <dt className="text-base-content/60">Capacity</dt>
-            <dd className="font-medium">
+            <dt className="text-sm font-normal text-base-content/75">Capacity</dt>
+            <dd className="text-base font-normal text-base-content">
               {resource.capacity} {resource.capacity === 1 ? 'person' : 'people'}
             </dd>
           </div>
         )}
         <div className="flex justify-between gap-4">
-          <dt className="text-base-content/60">Next opening</dt>
-          <dd className="text-right font-medium text-success">
+          <dt className="text-sm font-normal text-base-content/75">Next opening</dt>
+          <dd className="text-right text-success text-base font-normal">
             {resource.nextAvailable}
           </dd>
         </div>
@@ -62,15 +62,15 @@ export function ResourceCard({ resource }: { resource: Resource }) {
       <div className="flex items-center justify-between gap-3 pt-5">
         <div className="flex flex-wrap gap-1.5">
           {resource.reservationMode === 'child-resources' && (
-            <span className="badge badge-soft badge-sm">
+            <span className="badge badge-neutral badge-sm">
               Reserve by bench
             </span>
           )}
           {resource.trainingRequired && (
-            <span className="badge badge-soft badge-sm">Training needed</span>
+            <span className="badge badge-neutral badge-sm">Training needed</span>
           )}
           {resource.requiresApproval && (
-            <span className="badge badge-soft badge-sm">Approval needed</span>
+            <span className="badge badge-neutral badge-sm">Approval needed</span>
           )}
         </div>
         <Link

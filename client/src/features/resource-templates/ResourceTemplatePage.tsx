@@ -52,7 +52,7 @@ export function ResourceTemplatePage({
     return teamSlug ? (
       <section>
         <h2 className="text-3xl font-semibold text-primary">Not authorized</h2>
-        <p className="mt-4 text-base-content/70">You don&apos;t have permission to manage resource templates for this team.</p>
+        <p className="mt-4 text-base-content/80">You don&apos;t have permission to manage resource templates for this team.</p>
       </section>
     ) : <NotAuthorizedPage />;
   }

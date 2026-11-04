@@ -173,6 +173,25 @@ describe('site admin spaces', () => {
     expect(screen.queryByText(/time zone/i)).not.toBeInTheDocument();
   });
 
+  it('shows addresses and attached teams and searches both fields', async () => {
+    mockAdminAccess([
+      { ...existingSpace, teams: [chemistry, plantSciences] },
+      { ...existingSpace, address: null, id: 2, name: 'Garden', slug: 'garden', teams: [] },
+    ]);
+    cleanup = renderRoute({ initialPath: '/admin/spaces' }).cleanup;
+    const row = await screen.findByRole('row', { name: /Science Building/ });
+    expect(row).toHaveTextContent('1 Science Way');
+    expect(row).toHaveTextContent('Chemistry');
+    expect(row).toHaveTextContent('Plant Sciences');
+    expect(screen.getByRole('row', { name: /Garden/ })).toHaveTextContent('No teams attached');
+    const search = screen.getByPlaceholderText('Search spaces…');
+    for (const value of ['Chemistry', '1 Science Way']) {
+      fireEvent.change(search, { target: { value } });
+      await waitFor(() => expect(screen.queryByRole('row', { name: /Garden/ })).not.toBeInTheDocument());
+      expect(screen.getByRole('row', { name: /Science Building/ })).toBeInTheDocument();
+    }
+  });
+
   it('suggests an editable slug and creates a space without a time-zone payload', async () => {
     const spaces = [existingSpace];
     mockAdminAccess(spaces);

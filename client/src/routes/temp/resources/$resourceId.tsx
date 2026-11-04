@@ -105,7 +105,7 @@ function ResourceReservationPage() {
     <main className="content-container py-8 sm:py-10">
       <nav
         aria-label="Breadcrumb"
-        className="mb-4 text-xs text-base-content/70 uppercase"
+        className="mb-4 text-xs text-base-content/80 uppercase"
       >
         <ol className="flex flex-wrap items-center gap-2">
           <li>
@@ -129,7 +129,7 @@ function ResourceReservationPage() {
         </ol>
       </nav>
 
-      <article className="overflow-hidden rounded-sm border border-base-300 bg-base-200">
+      <article className="overflow-hidden rounded-sm border border-base-300 bg-base-200 shadow-sm">
         <header className="border-b-8 border-secondary bg-primary px-6 py-8 text-primary-content sm:px-10 sm:py-10">
           <div className="grid gap-8 lg:grid-cols-5">
             <div className="lg:col-span-2">
@@ -167,10 +167,12 @@ function ResourceReservationPage() {
                   className="h-4 w-4 shrink-0 text-primary-content/70"
                 />
                 <div>
-                  <dt className="text-sm font-bold tracking-wide text-primary-content/70 uppercase">
+                  <dt className="text-sm font-normal text-primary-content/70">
                     Building
                   </dt>
-                  <dd className="mt-1 font-medium">{resource.building}</dd>
+                  <dd className="mt-1 text-base font-normal text-primary-content">
+                    {resource.building}
+                  </dd>
                 </div>
               </div>
               <div className="flex items-start gap-2 px-3 py-4">
@@ -179,10 +181,12 @@ function ResourceReservationPage() {
                   className="h-4 w-4 shrink-0 text-primary-content/70"
                 />
                 <div>
-                  <dt className="text-sm font-bold tracking-wide text-primary-content/70 uppercase">
+                  <dt className="text-sm font-normal text-primary-content/70">
                     Type
                   </dt>
-                  <dd className="mt-1">{resourceKindLabels[resource.kind]}</dd>
+                  <dd className="mt-1 text-base font-normal text-primary-content">
+                    {resourceKindLabels[resource.kind]}
+                  </dd>
                 </div>
               </div>
               <div className="flex items-start gap-2 px-3 py-4">
@@ -191,10 +195,10 @@ function ResourceReservationPage() {
                   className="h-4 w-4 shrink-0 text-primary-content/70"
                 />
                 <div>
-                  <dt className="text-sm font-bold tracking-wide text-primary-content/70 uppercase">
+                  <dt className="text-sm font-normal text-primary-content/70">
                     Capacity
                   </dt>
-                  <dd className="mt-1">
+                  <dd className="mt-1 text-base font-normal text-primary-content">
                     {resource.capacity ? `${resource.capacity} people` : '1 user'}
                   </dd>
                 </div>
@@ -205,10 +209,12 @@ function ResourceReservationPage() {
                   className="h-4 w-4 shrink-0 text-primary-content/70"
                 />
                 <div>
-                  <dt className="text-sm font-bold tracking-wide text-primary-content/70 uppercase">
+                  <dt className="text-sm font-normal text-primary-content/70">
                     Hours
                   </dt>
-                  <dd className="mt-1">8:00 AM–5:00 PM</dd>
+                  <dd className="mt-1 text-base font-normal text-primary-content">
+                    8:00 AM–5:00 PM
+                  </dd>
                 </div>
               </div>
             </dl>
@@ -217,13 +223,13 @@ function ResourceReservationPage() {
 
         {resource.reservationMode === 'child-resources' ? (
           <section className="px-6 py-8 sm:px-10 sm:py-10">
-            <p className="text-sm font-semibold tracking-wide text-base-content/65 uppercase">
+            <p className="text-sm font-semibold tracking-wide text-base-content/75 uppercase">
               Partitioned room
             </p>
             <h2 className="mt-2 text-2xl font-semibold text-primary">
               Reserve an individual bench
             </h2>
-            <p className="mt-2 max-w-3xl text-base-content/70">
+            <p className="mt-2 max-w-3xl text-base-content/80">
               {resource.name} is divided into independently reservable benches.
               It cannot be booked as a whole room.
             </p>
@@ -352,7 +358,7 @@ function ResourceReservationPage() {
 
               <section
                 aria-labelledby="reservation-details-heading"
-                className="rounded-sm border border-base-300 bg-base-100 p-5 sm:p-6"
+                className="rounded-sm border border-base-300 bg-base-100 p-5 sm:p-6 shadow-sm"
               >
                 <h3
                   className="text-lg font-semibold text-primary"
@@ -360,7 +366,7 @@ function ResourceReservationPage() {
                 >
                   Reservation details
                 </h3>
-                <p className="mt-2 text-sm text-base-content/70">
+                <p className="mt-2 text-sm text-base-content/80">
                   {selectedDates.length > 0
                     ? selectedDates.map(dateFormatter.format).join(', ')
                     : 'Select one or more dates on the calendar to begin.'}
@@ -427,7 +433,7 @@ function ResourceReservationPage() {
                   </label>
 
                   {repeatType === 'custom' ? (
-                    <div className="mt-4 space-y-5 rounded-sm border border-base-300 bg-base-200 p-4 sm:p-5">
+                    <div className="mt-4 space-y-5 rounded-sm border border-base-300 bg-base-200 p-4 sm:p-5 shadow-sm">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                         <span className="text-sm font-semibold text-base-content">
                           Repeats every:
@@ -514,7 +520,7 @@ function ResourceReservationPage() {
                         </select>
                       </label>
 
-                      <p className="border-t border-base-300 pt-4 text-xs text-base-content/70">
+                      <p className="border-t border-base-300 pt-4 text-xs text-base-content/80">
                         Repeats every {repeatInterval} {repeatUnit}
                         {repeatUnit === 'week' && repeatDays.length > 0
                           ? ` on ${repeatDays.map((day) => weekdays[day]).join(', ')}`
@@ -525,9 +531,9 @@ function ResourceReservationPage() {
                   ) : null}
                 </div>
 
-                <div className="mt-6 rounded-sm bg-base-200 p-4 text-sm">
+                <div className="mt-6 rounded-sm border border-base-300 bg-base-200 p-4 text-sm shadow-sm">
                   <p className="font-semibold text-primary">Your selection</p>
-                  <p className="mt-2 text-base-content/70">
+                  <p className="mt-2 text-base-content/80">
                     {selectedDates.length > 0 && selectedTime
                       ? `${selectedDates.map(dateFormatter.format).join(', ')} at ${selectedTime} for ${duration} ${duration === 1 ? 'hour' : 'hours'}`
                       : 'Choose one or more dates and a start time to see your reservation.'}
@@ -548,7 +554,7 @@ function ResourceReservationPage() {
                 </button>
                 <p
                   aria-live="polite"
-                  className="mt-3 text-sm text-base-content/70"
+                  className="mt-3 text-sm text-base-content/80"
                 >
                   {reservationMessage || 'Reservations are not submitted yet.'}
                 </p>

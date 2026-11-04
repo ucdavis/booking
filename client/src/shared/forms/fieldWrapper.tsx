@@ -20,25 +20,26 @@ export function FieldWrapper({
 
   return (
     <div className="form-control w-full">
-      <label className="label" htmlFor={controlId}>
-        <span className="label-text font-medium">{label}</span>
+      <label
+        className="mb-2 block text-sm font-semibold text-base-content"
+        htmlFor={controlId}
+      >
+        {label}
       </label>
       {children}
       {hasError && (
-        <div className="label">
-          <span
-            className="label-text-alt text-error"
-            id={`${controlId}-error`}
-            role="alert"
-          >
-            {field.state.meta.errors
-              .map((error) =>
-                typeof error === 'string' ? error : error?.message
-              )
-              .filter(Boolean)
-              .join(', ')}
-          </span>
-        </div>
+        <p
+          className="mt-2 text-sm text-error"
+          id={`${controlId}-error`}
+          role="alert"
+        >
+          {field.state.meta.errors
+            .map((error) =>
+              typeof error === 'string' ? error : error?.message
+            )
+            .filter(Boolean)
+            .join(', ')}
+        </p>
       )}
       {field.state.meta.isValidating && (
         <span className="loading loading-spinner loading-xs ml-2"></span>

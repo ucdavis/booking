@@ -147,7 +147,7 @@ export function SpaceEditorDialog({
         >
           {space ? 'Edit space' : 'Create a space'}
         </h2>
-        <p className="mt-2 text-base-content/70" id="space-editor-description">
+        <p className="mt-2 text-base-content/80" id="space-editor-description">
           A space can be a building or any named location.
         </p>
 
@@ -250,7 +250,7 @@ export function SpaceEditorDialog({
                       value={field.state.value}
                     />
                     <p
-                      className="mt-2 text-sm text-base-content/65"
+                      className="mt-2 text-sm text-base-content/75"
                       id="space-slug-help"
                     >
                       {space
@@ -320,7 +320,7 @@ export function SpaceEditorDialog({
             <form.Field name="isOfficialFacility">
               {(field) => (
                 <label
-                  className="flex items-center gap-3 font-medium"
+                  className="flex items-center gap-3 font-semibold text-base-content"
                   htmlFor="space-official-facility"
                 >
                   <input
@@ -388,7 +388,7 @@ export function SpaceEditorDialog({
                           value={field.state.value}
                         />
                         <p
-                          className="mt-2 text-sm text-base-content/65"
+                          className="mt-2 text-sm text-base-content/75"
                           id="space-reference-number-help"
                         >
                           Required for official facilities.
@@ -403,7 +403,7 @@ export function SpaceEditorDialog({
             <form.Field name="isActive">
               {(field) => (
                 <label
-                  className="flex items-center gap-3 font-medium"
+                  className="flex items-center gap-3 font-semibold text-base-content"
                   htmlFor="space-active"
                 >
                   <input

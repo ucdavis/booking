@@ -1,4 +1,4 @@
-import { UserGroupIcon, UserPlusIcon } from '@heroicons/react/24/outline';
+import { UserPlusIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -72,7 +72,7 @@ function SiteAdminUsersPage() {
         accessorKey: 'isActive',
         cell: ({ row }) => (
           <span
-            className={`badge badge-sm ${row.original.isActive ? 'badge-success badge-outline' : 'badge-ghost'}`}
+            className={`badge badge-sm ${row.original.isActive ? 'badge-success' : 'badge-neutral'}`}
           >
             {row.original.isActive ? 'Active' : 'Inactive'}
           </span>
@@ -112,7 +112,7 @@ function SiteAdminUsersPage() {
     <main className="content-container py-4 sm:py-8">
       <nav
         aria-label="Breadcrumb"
-        className="mb-5 text-sm text-base-content/65"
+        className="mb-5 text-sm text-base-content/75"
       >
         <Link className="hover:text-primary hover:underline" to="/temp">
           Home
@@ -127,16 +127,10 @@ function SiteAdminUsersPage() {
 
       <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-3 text-primary">
-            <UserGroupIcon aria-hidden="true" className="h-6 w-6" />
-            <p className="text-sm font-semibold tracking-wide uppercase">
-              Booking administration
-            </p>
-          </div>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
+          <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
             Site admin users
           </h1>
-          <p className="mt-3 max-w-2xl text-base-content/70">
+          <p className="mt-3 max-w-2xl text-base-content/80">
             Manage who can administer Booking. You can add a person or remove
             another user&apos;s admin access.
           </p>
@@ -184,10 +178,10 @@ function SiteAdminUsersPage() {
 
       <section
         aria-label="Site admin users"
-        className="mt-8 rounded-sm border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6"
+        className="mt-8 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
       >
         {usersQuery.isPending ? (
-          <p className="py-8 text-center text-base-content/70" role="status">
+          <p className="py-8 text-center text-base-content/80" role="status">
             Loading admin users…
           </p>
         ) : usersQuery.isError ? (
@@ -204,7 +198,7 @@ function SiteAdminUsersPage() {
             </button>
           </div>
         ) : usersQuery.data.length === 0 ? (
-          <p className="py-8 text-center text-base-content/70">
+          <p className="py-8 text-center text-base-content/80">
             There are no site admin users.
           </p>
         ) : (

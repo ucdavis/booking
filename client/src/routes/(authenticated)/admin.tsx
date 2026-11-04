@@ -40,7 +40,7 @@ function SiteAdminError({ error }: ErrorComponentProps<unknown>) {
         <h1 className="text-3xl font-semibold text-primary">
           We could not load site administration
         </h1>
-        <p className="mt-4 text-base-content/70">
+        <p className="mt-4 text-base-content/80">
           Refresh the page or try again later.
         </p>
         <Link className="btn btn-primary mt-6" to="/temp">

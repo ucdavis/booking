@@ -33,7 +33,7 @@ export const BillingRatesEditor = withFieldGroup({
               <legend className="mb-3 text-lg font-semibold text-primary">
                 Billing rates
               </legend>
-              <label className="flex items-center gap-3 text-sm font-semibold">
+              <label className="flex items-center gap-3 text-sm font-semibold text-base-content">
                 <input
                   checked={billingRates !== null}
                   className="checkbox checkbox-primary"
@@ -51,21 +51,21 @@ export const BillingRatesEditor = withFieldGroup({
               {billingRates !== null && (
                 <>
                   <p
-                    className="text-sm text-base-content/65"
+                    className="text-sm text-base-content/75"
                     id={`${prefix}-help`}
                   >
                     Enter a rate name and a nonnegative amount in US dollars.
                     Rates can apply per hour, per day, or per booking.
                   </p>
                   {billingRates.length === 0 && (
-                    <p className="rounded-sm border border-dashed border-base-300 p-4 text-sm text-base-content/65">
+                    <p className="rounded-sm border border-dashed border-base-300 p-4 text-sm text-base-content/75">
                       No billing rates are configured.
                     </p>
                   )}
                   <div className="space-y-3">
                     {billingRates.map((rate, index) => (
                       <div
-                        className="rounded-sm border border-base-300 p-4"
+                        className="rounded-sm border border-base-300 p-4 shadow-sm"
                         key={rate.id}
                       >
                         <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
@@ -78,7 +78,7 @@ export const BillingRatesEditor = withFieldGroup({
                               return (
                                 <div className="min-w-0">
                                   <label
-                                    className="mb-1 block text-sm font-medium"
+                                    className="mb-1 block text-sm font-semibold text-base-content"
                                     htmlFor={`${prefix}-${rate.id}-name`}
                                   >
                                     Rate name {index + 1}
@@ -119,7 +119,7 @@ export const BillingRatesEditor = withFieldGroup({
                               return (
                                 <div className="min-w-0">
                                   <label
-                                    className="mb-1 block text-sm font-medium"
+                                    className="mb-1 block text-sm font-semibold text-base-content"
                                     htmlFor={`${prefix}-${rate.id}-amount`}
                                   >
                                     Amount (USD) {index + 1}
@@ -160,7 +160,7 @@ export const BillingRatesEditor = withFieldGroup({
                               return (
                                 <div className="min-w-0">
                                   <label
-                                    className="mb-1 block text-sm font-medium"
+                                    className="mb-1 block text-sm font-semibold text-base-content"
                                     htmlFor={`${prefix}-${rate.id}-basis`}
                                   >
                                     Rate basis {index + 1}

@@ -1,6 +1,12 @@
 import { isDeepStrictEqual } from 'node:util';
 import { createBrowserHistory } from '@tanstack/react-router';
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FormDefinition } from '@/features/resource-templates/models/FormDefinition.ts';
@@ -98,7 +104,10 @@ afterEach(() => {
 function mockAdminAccess() {
   server.use(
     http.get('/api/user/me', () => HttpResponse.json(siteAdmin)),
-    http.get('/api/admin/access', () => new HttpResponse(null, { status: 204 })),
+    http.get(
+      '/api/admin/access',
+      () => new HttpResponse(null, { status: 204 })
+    ),
     http.get('/api/antiforgery', () =>
       HttpResponse.json({
         formFieldName: '__RequestVerificationToken',
@@ -150,62 +159,186 @@ function mockTemplateStore(initial: ResourceTemplate[] = [makeTemplate()]) {
       templates.set(id, copy);
       return HttpResponse.json(copy, { status: 201 });
     }),
-    http.put('/api/admin/resource-templates/:id', async ({ params, request }) => {
-      const id = Number(params.id);
-      const body = (await request.json()) as SaveResourceTemplateRequest;
-      const previous = templates.get(id)!;
-      if (
-        !previous.isActive ||
-        body.formSchemaVersion !== previous.formSchemaVersion ||
-        body.updatedAt !== previous.updatedAt
-      ) {
-        return new HttpResponse(null, { status: 409 });
+    http.put(
+      '/api/admin/resource-templates/:id',
+      async ({ params, request }) => {
+        const id = Number(params.id);
+        const body = (await request.json()) as SaveResourceTemplateRequest;
+        const previous = templates.get(id)!;
+        if (
+          !previous.isActive ||
+          body.formSchemaVersion !== previous.formSchemaVersion ||
+          body.updatedAt !== previous.updatedAt
+        ) {
+          return new HttpResponse(null, { status: 409 });
+        }
+        const updatedAt = new Date(
+          Math.max(
+            ...[...templates.values()].map((template) =>
+              Date.parse(template.updatedAt)
+            )
+          ) + 1
+        ).toISOString();
+        const formChanged = !isDeepStrictEqual(
+          JSON.parse(previous.formJson),
+          JSON.parse(body.formJson)
+        );
+        const resourceDefaultsJson =
+          body.resourceDefaultsJson === undefined
+            ? previous.resourceDefaultsJson
+            : body.resourceDefaultsJson?.trim()
+              ? body.resourceDefaultsJson
+              : null;
+        const revisionChanged =
+          formChanged || resourceDefaultsJson !== previous.resourceDefaultsJson;
+        const savedId = revisionChanged
+          ? Math.max(...templates.keys()) + 1
+          : id;
+        const template = makeTemplate({
+          ...body,
+          formJson: formChanged ? body.formJson : previous.formJson,
+          formSchemaVersion:
+            previous.formSchemaVersion + (revisionChanged ? 1 : 0),
+          id: savedId,
+          isActive: revisionChanged || body.isActive,
+          resourceDefaultsJson,
+          updatedAt,
+        });
+        saves.push({
+          body,
+          id,
+          token: request.headers.get('RequestVerificationToken'),
+        });
+        if (revisionChanged) {
+          templates.set(id, { ...previous, isActive: false, updatedAt });
+        }
+        templates.set(savedId, template);
+        return HttpResponse.json(template);
       }
-      const updatedAt = new Date(
-        Math.max(
-          ...[...templates.values()].map((template) =>
-            Date.parse(template.updatedAt)
-          )
-        ) + 1
-      ).toISOString();
-      const formChanged = !isDeepStrictEqual(
-        JSON.parse(previous.formJson),
-        JSON.parse(body.formJson)
-      );
-      const resourceDefaultsJson =
-        body.resourceDefaultsJson === undefined
-          ? previous.resourceDefaultsJson
-          : body.resourceDefaultsJson?.trim()
-            ? body.resourceDefaultsJson
-            : null;
-      const revisionChanged =
-        formChanged || resourceDefaultsJson !== previous.resourceDefaultsJson;
-      const savedId = revisionChanged ? Math.max(...templates.keys()) + 1 : id;
-      const template = makeTemplate({
-        ...body,
-        formJson: formChanged ? body.formJson : previous.formJson,
-        formSchemaVersion: previous.formSchemaVersion + (revisionChanged ? 1 : 0),
-        id: savedId,
-        isActive: revisionChanged || body.isActive,
-        resourceDefaultsJson,
-        updatedAt,
-      });
-      saves.push({
-        body,
-        id,
-        token: request.headers.get('RequestVerificationToken'),
-      });
-      if (revisionChanged) {
-        templates.set(id, { ...previous, isActive: false, updatedAt });
-      }
-      templates.set(savedId, template);
-      return HttpResponse.json(template);
-    })
+    )
   );
   return { saves, templates };
 }
 
+function getTemplateName() {
+  fireEvent.click(screen.getByRole('tab', { name: 'Template details' }));
+  return screen.getByLabelText('Template name');
+}
+
+async function findTemplateName() {
+  fireEvent.click(await screen.findByRole('tab', { name: 'Template details' }));
+  return screen.getByLabelText('Template name');
+}
+
+function getBuildButton(name: string) {
+  fireEvent.click(screen.getByRole('tab', { name: 'Build form' }));
+  return screen.getByRole('button', { name });
+}
+
+async function findBuildButton(name: string) {
+  fireEvent.click(await screen.findByRole('tab', { name: 'Build form' }));
+  return screen.getByRole('button', { name });
+}
+
+function getBuildLabel() {
+  fireEvent.click(screen.getByRole('tab', { name: 'Build form' }));
+  return screen.getByRole('textbox', { name: 'Label' });
+}
+
+function getPreviewAnswer() {
+  fireEvent.click(screen.getByRole('tab', { name: 'Preview form' }));
+  return screen.getByRole('textbox', { name: /Visitor name/ });
+}
+
+function getActiveTemplate() {
+  fireEvent.click(screen.getByRole('tab', { name: 'Template details' }));
+  return screen.getByLabelText('Active template');
+}
+
+async function findActiveTemplate() {
+  fireEvent.click(await screen.findByRole('tab', { name: 'Template details' }));
+  return screen.getByLabelText('Active template');
+}
+
 describe('site admin resource templates', () => {
+  it('opens new templates on details and reveals missing details when saving from the builder', async () => {
+    mockAdminAccess();
+    const { saves } = mockTemplateStore([]);
+    cleanup = renderRoute({
+      initialPath: '/admin/resource-templates/new',
+    }).cleanup;
+    expect(
+      await screen.findByRole('tab', {
+        name: 'Template details',
+        selected: true,
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Add Input' })
+    ).not.toBeInTheDocument();
+    fireEvent.click(getBuildButton('Add Input'));
+    fireEvent.click(screen.getByRole('button', { name: 'Create template' }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('tab', { name: 'Template details' })
+      ).toHaveAttribute('aria-selected', 'true')
+    );
+    expect(
+      screen.getByRole('textbox', { name: 'Template name' })
+    ).toHaveAttribute('aria-invalid', 'true');
+    expect(saves).toHaveLength(0);
+    fireEvent.click(screen.getByRole('tab', { name: 'Build form' }));
+    expect(screen.getByRole('textbox', { name: 'Label' })).toHaveValue('New input');
+  });
+
+  it('opens an existing template on Build form with its name visible above the tabs', async () => {
+    mockAdminAccess();
+    const template = makeTemplate();
+    mockTemplateStore([template]);
+    cleanup = renderRoute({
+      initialPath: '/admin/resource-templates/1',
+    }).cleanup;
+    expect(
+      await screen.findByRole('tab', { name: 'Build form', selected: true })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('textbox', { name: 'Template name' })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(template.name)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save template' })).toBeVisible();
+  });
+
+  it('supports keyboard navigation between editor tabs without losing template details', async () => {
+    mockAdminAccess();
+    mockTemplateStore([]);
+    ({ cleanup } = renderRoute({
+      initialPath: '/admin/resource-templates/new',
+    }));
+    const name = await findTemplateName();
+    fireEvent.change(name, { target: { value: 'Camera checkout' } });
+    const build = screen.getByRole('tab', { name: 'Build form' });
+    build.focus();
+    fireEvent.keyDown(build, { key: 'ArrowRight' });
+    const preview = screen.getByRole('tab', { name: 'Preview form' });
+    expect(preview).toHaveFocus();
+    expect(preview).toHaveAttribute('aria-selected', 'true');
+    expect(
+      screen.getByRole('tabpanel', { name: 'Preview form' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'Form preview' })
+    ).toBeInTheDocument();
+    fireEvent.keyDown(preview, { key: 'End' });
+    const defaults = screen.getByRole('tab', { name: 'Resource defaults' });
+    expect(defaults).toHaveFocus();
+    expect(defaults).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(defaults, { key: 'Home' });
+    const details = screen.getByRole('tab', { name: 'Template details' });
+    expect(details).toHaveFocus();
+    expect(details).toHaveAttribute('aria-selected', 'true');
+    expect(name).toHaveValue('Camera checkout');
+  });
+
   it.each([
     {
       action: 'Create template',
@@ -242,14 +375,11 @@ describe('site admin resource templates', () => {
       });
       const { saves, templates } = mockTemplateStore([original]);
       ({ cleanup } = renderRoute({ initialPath }));
-      fireEvent.change(
-        await screen.findByRole('textbox', { name: 'Template name' }),
-        { target: { value: 'Camera checkout' } }
-      );
+      fireEvent.change(await findTemplateName(), {
+        target: { value: 'Camera checkout' },
+      });
       if (action === 'Save template') {
-        fireEvent.click(
-          screen.getByRole('button', { name: 'Remove Visitor name' })
-        );
+        fireEvent.click(getBuildButton('Remove Visitor name'));
       }
 
       fireEvent.click(screen.getByRole('button', { name: action }));
@@ -277,7 +407,7 @@ describe('site admin resource templates', () => {
     ]);
     ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Add Input' }));
+    fireEvent.click(await findBuildButton('Add Input'));
     fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
     await waitFor(() => expect(saves).toHaveLength(1));
     expect(JSON.parse(saves[0].body.formJson).fields.at(-1).type).toBe('input');
@@ -287,7 +417,7 @@ describe('site admin resource templates', () => {
     mockAdminAccess();
     const { saves } = mockTemplateStore();
     ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
-    const name = await screen.findByRole('textbox', { name: 'Template name' });
+    const name = await findTemplateName();
     expect(name).not.toHaveAttribute('aria-invalid');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
@@ -316,17 +446,18 @@ describe('site admin resource templates', () => {
     const rendered = renderRoute({ initialPath: '/admin/resource-templates' });
     cleanup = rendered.cleanup;
 
-    fireEvent.click(await screen.findByRole('link', { name: 'Create template' }));
-    fireEvent.change(
-      await screen.findByRole('textbox', { name: 'Template name' }),
-      { target: { value: 'Camera checkout' } }
+    fireEvent.click(
+      await screen.findByRole('link', { name: 'Create template' })
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Add Input' }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'Label' }), {
+    fireEvent.change(await findTemplateName(), {
+      target: { value: 'Camera checkout' },
+    });
+    fireEvent.click(getBuildButton('Add Input'));
+    fireEvent.change(getBuildLabel(), {
       target: { value: 'Contact name' },
     });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Required' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     fireEvent.click(
       screen.getByRole('checkbox', { name: 'Include default opening hours' })
     );
@@ -351,7 +482,9 @@ describe('site admin resource templates', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Amount (USD) 1' }), {
       target: { value: '25.00' },
     });
-    expect(screen.queryByRole('textbox', { name: 'Currency 1' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('textbox', { name: 'Currency 1' })
+    ).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole('combobox', { name: 'Rate basis 1' }), {
       target: { value: 'hour' },
     });
@@ -362,9 +495,7 @@ describe('site admin resource templates', () => {
         '/admin/resource-templates/1'
       )
     );
-    expect(
-      await screen.findByRole('textbox', { name: 'Template name' })
-    ).toHaveValue('Camera checkout');
+    expect(await findTemplateName()).toHaveValue('Camera checkout');
     expect(saves).toHaveLength(1);
     expect(saves[0]).toMatchObject({
       body: {
@@ -387,7 +518,7 @@ describe('site admin resource templates', () => {
         },
       ],
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('09:00');
     expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue(
       '25.00'
@@ -408,11 +539,10 @@ describe('site admin resource templates', () => {
     let rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
     cleanup = rendered.cleanup;
 
-    fireEvent.change(
-      await screen.findByRole('textbox', { name: 'Template name' }),
-      { target: { value: 'Updated equipment booking' } }
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Move Visitor name down' }));
+    fireEvent.change(await findTemplateName(), {
+      target: { value: 'Updated equipment booking' },
+    });
+    fireEvent.click(getBuildButton('Move Visitor name down'));
     fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
     await waitFor(() =>
       expect(rendered.router.state.location.pathname).toBe(
@@ -437,7 +567,10 @@ describe('site admin resource templates', () => {
       name: original.name,
     });
     const archivedOriginal = templates.get(1);
-    expect(templates.get(2)).toMatchObject({ formSchemaVersion: 2, isActive: true });
+    expect(templates.get(2)).toMatchObject({
+      formSchemaVersion: 2,
+      isActive: true,
+    });
     expect(saves[0].body).toMatchObject({
       formSchemaVersion: 1,
       updatedAt: original.updatedAt,
@@ -446,23 +579,24 @@ describe('site admin resource templates', () => {
     cleanup?.();
     rendered = renderRoute({ initialPath: '/admin/resource-templates/2' });
     cleanup = rendered.cleanup;
+    expect(await findTemplateName()).toHaveValue('Updated equipment booking');
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview form' }));
+    expect(getPreviewAnswer()).toHaveAttribute('maxLength', '40');
     expect(
-      await screen.findByRole('textbox', { name: 'Template name' })
-    ).toHaveValue('Updated equipment booking');
-    fireEvent.click(screen.getByRole('button', { name: 'Preview form' }));
-    expect(screen.getByRole('textbox', { name: /Visitor name/ })).toHaveAttribute(
-      'maxLength',
-      '40'
-    );
-    expect(screen.getByRole('textbox', { name: /Purpose/ })).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Camera' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: /Location/ })).toBeInTheDocument();
+      screen.getByRole('textbox', { name: /Purpose/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('checkbox', { name: 'Camera' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', { name: /Location/ })
+    ).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Full day' })).toBeInTheDocument();
     expect(screen.getByText('Bring your campus ID.')).toBeInTheDocument();
 
     const versionTwoJson = templates.get(2)!.formJson;
-    fireEvent.click(screen.getByRole('button', { name: 'Build form' }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'Label' }), {
+    fireEvent.click(screen.getByRole('tab', { name: 'Build form' }));
+    fireEvent.change(getBuildLabel(), {
       target: { value: 'Booking purpose' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
@@ -479,7 +613,10 @@ describe('site admin resource templates', () => {
       formSchemaVersion: 2,
       isActive: false,
     });
-    expect(templates.get(3)).toMatchObject({ formSchemaVersion: 3, isActive: true });
+    expect(templates.get(3)).toMatchObject({
+      formSchemaVersion: 3,
+      isActive: true,
+    });
     expect(JSON.parse(templates.get(3)!.formJson).fields[0].label).toBe(
       'Booking purpose'
     );
@@ -513,25 +650,23 @@ describe('site admin resource templates', () => {
       screen.getByRole('columnheader', { name: 'Version' })
     ).toBeInTheDocument();
     fireEvent.click(within(row).getByRole('button', { name: /Duplicate/ }));
-    expect(
-      await screen.findByRole('textbox', { name: 'Template name' })
-    ).toHaveValue('Equipment booking (copy)');
+    expect(await findTemplateName()).toHaveValue('Equipment booking (copy)');
     expect(rendered.router.state.location.pathname).toBe(
       '/admin/resource-templates/2'
     );
     expect(screen.getByText('Version 1')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue(
       '25.00'
     );
     fireEvent.change(screen.getByRole('textbox', { name: 'Amount (USD) 1' }), {
       target: { value: '50.00' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Build form' }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'Template name' }), {
+    fireEvent.click(screen.getByRole('tab', { name: 'Build form' }));
+    fireEvent.change(getTemplateName(), {
       target: { value: 'Camera booking' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Move Visitor name down' }));
+    fireEvent.click(getBuildButton('Move Visitor name down'));
     fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
     await waitFor(() =>
       expect(rendered.router.state.location.pathname).toBe(
@@ -563,9 +698,10 @@ describe('site admin resource templates', () => {
       makeTemplate({ resourceDefaultsJson: JSON.stringify(resourceDefaults) }),
     ]);
     ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
-    const active = await screen.findByRole('checkbox', { name: 'Active template' });
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    const active = await findActiveTemplate();
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Template details' }));
     fireEvent.click(active);
     expect(templates.get(1)!.isActive).toBe(true);
     expect(saves).toHaveLength(0);
@@ -574,19 +710,24 @@ describe('site admin resource templates', () => {
       await screen.findByRole('heading', { name: 'View resource template' })
     ).toBeInTheDocument();
     expect(templates.get(1)!.isActive).toBe(false);
-    const archivedActive = screen.getByRole('checkbox', { name: 'Active template' });
+    const archivedActive = getActiveTemplate();
     expect(archivedActive).toBeDisabled();
     expect(archivedActive).not.toBeChecked();
-    expect(screen.getByRole('textbox', { name: 'Template name' })).toBeDisabled();
+    expect(getTemplateName()).toBeDisabled();
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(
-      screen.getByRole('button', { name: 'Resource defaults', pressed: true })
+      screen.getByRole('tab', { name: 'Resource defaults', selected: true })
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('09:00');
     expect(screen.getByLabelText('Monday opening time 1')).toBeDisabled();
     expect(screen.getByLabelText('Monday closing time 1')).toHaveValue('17:00');
     expect(screen.getByLabelText('Monday closing time 1')).toBeDisabled();
-    expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue('25.00');
-    expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue(
+      '25.00'
+    );
+    expect(
+      screen.getByRole('textbox', { name: 'Amount (USD) 1' })
+    ).toBeDisabled();
     for (const name of [
       'Add Monday hours',
       'Remove Monday hours 1',
@@ -602,12 +743,12 @@ describe('site admin resource templates', () => {
       screen.queryByRole('button', { name: 'Save template' })
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText(
-        'Archived templates are read-only. Duplicate this template to make changes.'
-      )
+      screen.getByText('Duplicate this archived template to make changes.')
     ).toBeInTheDocument();
     expect(JSON.parse(templates.get(1)!.formJson)).toEqual(definition);
-    expect(JSON.parse(templates.get(1)!.resourceDefaultsJson!)).toEqual(resourceDefaults);
+    expect(JSON.parse(templates.get(1)!.resourceDefaultsJson!)).toEqual(
+      resourceDefaults
+    );
     expect(templates.size).toBe(1);
     expect(templates.get(1)!.formSchemaVersion).toBe(1);
     expect(saves).toHaveLength(1);
@@ -638,7 +779,9 @@ describe('site admin resource templates', () => {
 
     act(() => name.focus());
     expect(screen.getByRole('tooltip')).toHaveTextContent(description);
-    expect(screen.getByRole('link', { name: 'Equipment booking' })).toHaveFocus();
+    expect(
+      screen.getByRole('link', { name: 'Equipment booking' })
+    ).toHaveFocus();
     fireEvent.keyDown(name, { key: 'Escape' });
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     expect(name).toHaveFocus();
@@ -666,39 +809,55 @@ describe('site admin resource templates', () => {
     const row = within(
       await screen.findByRole('row', { name: /Equipment booking/ })
     );
-    expect(row.getByRole('link', { name: 'Edit Equipment booking' })).toHaveAttribute(
-      'href', '/admin/resource-templates/1'
-    );
+    expect(
+      row.getByRole('link', { name: 'Edit Equipment booking' })
+    ).toHaveAttribute('href', '/admin/resource-templates/1');
     const view = row.getByRole('link', { name: 'View Equipment booking' });
-    expect(view).toHaveAttribute('href', '/admin/resource-templates/1?view=true');
+    expect(view).toHaveAttribute(
+      'href',
+      '/admin/resource-templates/1?view=true'
+    );
     fireEvent.click(view);
 
     expect(
       await screen.findByRole('heading', { name: 'View resource template' })
     ).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Template name' })).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: 'Active template' })).toBeDisabled();
-    expect(screen.queryByRole('button', { name: 'Save template' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Build form' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Add Input' })).not.toBeInTheDocument();
-    const answer = screen.getByRole('textbox', { name: /Visitor name/ });
+    expect(getTemplateName()).toBeDisabled();
+    expect(getActiveTemplate()).toBeDisabled();
+    expect(
+      screen.queryByRole('button', { name: 'Save template' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('tab', { name: 'Build form' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Add Input' })
+    ).not.toBeInTheDocument();
+    const answer = getPreviewAnswer();
     fireEvent.change(answer, { target: { value: 'Taylor' } });
     expect(answer).toHaveValue('Taylor');
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('09:00');
     expect(screen.getByLabelText('Monday opening time 1')).toBeDisabled();
-    expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue('25.00');
-    expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue(
+      '25.00'
+    );
+    expect(
+      screen.getByRole('textbox', { name: 'Amount (USD) 1' })
+    ).toBeDisabled();
     expect(saves).toHaveLength(0);
     fireEvent.click(screen.getByRole('link', { name: 'Edit template' }));
 
     expect(
       await screen.findByRole('heading', { name: 'Edit resource template' })
     ).toBeInTheDocument();
-    expect(rendered.router.state.location.search).not.toHaveProperty('view', true);
-    expect(screen.getByRole('textbox', { name: 'Template name' })).toBeEnabled();
+    expect(rendered.router.state.location.search).not.toHaveProperty(
+      'view',
+      true
+    );
+    expect(getTemplateName()).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Save template' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Build form' })).toBeEnabled();
+    expect(screen.getByRole('tab', { name: 'Build form' })).toBeEnabled();
     expect(saves).toHaveLength(0);
   });
 
@@ -715,10 +874,8 @@ describe('site admin resource templates', () => {
     expect(
       await screen.findByRole('heading', { name: 'View resource template' })
     ).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Template name' })).toBeDisabled();
-    expect(
-      screen.getByRole('checkbox', { name: 'Active template' })
-    ).toBeDisabled();
+    expect(getTemplateName()).toBeDisabled();
+    expect(getActiveTemplate()).toBeDisabled();
     expect(
       screen.queryByRole('textbox', { name: 'Label' })
     ).not.toBeInTheDocument();
@@ -735,30 +892,32 @@ describe('site admin resource templates', () => {
       screen.getByRole('link', { name: 'Back to resource templates' })
     ).toHaveAttribute('href', '/admin/resource-templates');
     expect(
-      screen.queryByRole('button', { name: 'Build form' })
+      screen.queryByRole('tab', { name: 'Build form' })
     ).not.toBeInTheDocument();
-    const answer = screen.getByRole('textbox', { name: /Visitor name/ });
+    const answer = getPreviewAnswer();
     expect(answer).toBeEnabled();
     fireEvent.change(answer, { target: { value: 'Taylor' } });
     expect(answer).toHaveValue('Taylor');
     expect(
       screen.getByRole('button', { name: 'Try validation' })
     ).toBeEnabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('09:00');
     expect(screen.getByLabelText('Monday opening time 1')).toBeDisabled();
     expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue(
       '25.00'
     );
-    expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toBeDisabled();
+    expect(
+      screen.getByRole('textbox', { name: 'Amount (USD) 1' })
+    ).toBeDisabled();
     expect(
       screen.getByRole('checkbox', { name: 'Include default opening hours' })
     ).toBeDisabled();
     expect(
       screen.getByRole('checkbox', { name: 'Include default billing rates' })
     ).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Preview form' }));
-    expect(screen.getByRole('textbox', { name: /Visitor name/ })).toBeEnabled();
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview form' }));
+    expect(getPreviewAnswer()).toBeEnabled();
     expect(saves).toHaveLength(0);
     expect(templates.get(1)).toEqual(original);
   });
@@ -770,7 +929,9 @@ describe('site admin resource templates', () => {
     const rendered = renderRoute({ initialPath: '/admin/resource-templates' });
     cleanup = rendered.cleanup;
     fireEvent.click(
-      await screen.findByRole('checkbox', { name: 'Include archived templates' })
+      await screen.findByRole('checkbox', {
+        name: 'Include archived templates',
+      })
     );
     const row = within(
       await screen.findByRole('row', { name: /Equipment booking/ })
@@ -790,10 +951,13 @@ describe('site admin resource templates', () => {
       '/admin/resource-templates/2'
     );
     expect(screen.getByText('Version 1')).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Active template' })).toBeChecked();
+    expect(getActiveTemplate()).toBeChecked();
     expect(screen.getByRole('button', { name: 'Save template' })).toBeEnabled();
     expect(templates.get(1)).toEqual(archived);
-    expect(templates.get(2)).toMatchObject({ formSchemaVersion: 1, isActive: true });
+    expect(templates.get(2)).toMatchObject({
+      formSchemaVersion: 1,
+      isActive: true,
+    });
   });
 
   it('renames a later version without creating a row or rewriting equivalent form JSON', async () => {
@@ -804,12 +968,13 @@ describe('site admin resource templates', () => {
       resourceDefaultsJson: JSON.stringify(resourceDefaults, null, 2),
     });
     const { saves, templates } = mockTemplateStore([original]);
-    const rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
+    const rendered = renderRoute({
+      initialPath: '/admin/resource-templates/1',
+    });
     cleanup = rendered.cleanup;
-    fireEvent.change(
-      await screen.findByRole('textbox', { name: 'Template name' }),
-      { target: { value: 'Renamed equipment booking' } }
-    );
+    fireEvent.change(await findTemplateName(), {
+      target: { value: 'Renamed equipment booking' },
+    });
     expect(screen.getByText('Version 3')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
 
@@ -826,7 +991,7 @@ describe('site admin resource templates', () => {
     });
     expect(templates.get(1)!.updatedAt).not.toBe(original.updatedAt);
     const firstSaveTimestamp = templates.get(1)!.updatedAt;
-    fireEvent.change(screen.getByRole('textbox', { name: 'Template name' }), {
+    fireEvent.change(getTemplateName(), {
       target: { value: 'Final equipment booking' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
@@ -861,7 +1026,7 @@ describe('site admin resource templates', () => {
     cleanup = rendered.cleanup;
 
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Resource defaults' })
+      await screen.findByRole('tab', { name: 'Resource defaults' })
     );
     fireEvent.change(screen.getByLabelText('Monday opening time 1'), {
       target: { value: '10:00' },
@@ -876,8 +1041,8 @@ describe('site admin resource templates', () => {
       target: { value: '40.00' },
     });
     expect(screen.getByText('You have unsaved changes.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Preview form' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview form' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('10:00');
     expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue(
       '40.00'
@@ -912,7 +1077,7 @@ describe('site admin resource templates', () => {
     rendered = renderRoute({ initialPath: '/admin/resource-templates/2' });
     cleanup = rendered.cleanup;
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Resource defaults' })
+      await screen.findByRole('tab', { name: 'Resource defaults' })
     );
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('10:00');
     expect(screen.getByLabelText('Monday closing time 1')).toHaveValue('18:00');
@@ -932,7 +1097,7 @@ describe('site admin resource templates', () => {
       )
     );
     expect(await screen.findByText('Version 5')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(
       screen.getByRole('checkbox', { name: 'Include default opening hours' })
     ).not.toBeChecked();
@@ -962,10 +1127,12 @@ describe('site admin resource templates', () => {
     const { saves } = mockTemplateStore([
       makeTemplate({ resourceDefaultsJson: JSON.stringify(resourceDefaults) }),
     ]);
-    const rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
+    const rendered = renderRoute({
+      initialPath: '/admin/resource-templates/1',
+    });
     cleanup = rendered.cleanup;
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Resource defaults' })
+      await screen.findByRole('tab', { name: 'Resource defaults' })
     );
     fireEvent.change(screen.getByRole('combobox', { name: 'Monday hours' }), {
       target: { value: 'unspecified' },
@@ -973,8 +1140,8 @@ describe('site admin resource templates', () => {
     expect(
       screen.queryByLabelText('Monday opening time 1')
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Preview form' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview form' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByRole('combobox', { name: 'Monday hours' })).toHaveValue(
       'unspecified'
     );
@@ -994,7 +1161,7 @@ describe('site admin resource templates', () => {
       ...resourceDefaults,
       openingHours: { sunday: [] },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByRole('combobox', { name: 'Monday hours' })).toHaveValue(
       'unspecified'
     );
@@ -1016,7 +1183,7 @@ describe('site admin resource templates', () => {
         initialPath: '/admin/resource-templates/1',
       }));
       fireEvent.click(
-        await screen.findByRole('button', { name: 'Resource defaults' })
+        await screen.findByRole('tab', { name: 'Resource defaults' })
       );
       if (invalidHours === 'reversed') {
         fireEvent.change(screen.getByLabelText('Monday closing time 1'), {
@@ -1027,16 +1194,16 @@ describe('site admin resource templates', () => {
           screen.getByRole('button', { name: 'Add Monday hours' })
         );
       }
-      fireEvent.click(screen.getByRole('button', { name: 'Preview form' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Preview form' }));
       expect(
         screen.queryByLabelText('Monday closing time 1')
       ).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
 
       expect(
-        await screen.findByRole('button', {
+        await screen.findByRole('tab', {
           name: 'Resource defaults',
-          pressed: true,
+          selected: true,
         })
       ).toBeInTheDocument();
       const closingTime = screen.getByLabelText('Monday closing time 1');
@@ -1087,7 +1254,12 @@ describe('site admin resource templates', () => {
       repair: '25.00',
       value: '-1',
     },
-    { field: 'Amount (USD) 1', kind: 'missing amount', repair: '25.00', value: '' },
+    {
+      field: 'Amount (USD) 1',
+      kind: 'missing amount',
+      repair: '25.00',
+      value: '',
+    },
     {
       field: 'Rate name 1',
       kind: 'missing name',
@@ -1107,21 +1279,21 @@ describe('site admin resource templates', () => {
         initialPath: '/admin/resource-templates/1',
       }));
       fireEvent.click(
-        await screen.findByRole('button', { name: 'Resource defaults' })
+        await screen.findByRole('tab', { name: 'Resource defaults' })
       );
       fireEvent.change(screen.getByRole('textbox', { name: field }), {
         target: { value },
       });
-      fireEvent.click(screen.getByRole('button', { name: 'Build form' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Build form' }));
       expect(
         screen.queryByRole('textbox', { name: field })
       ).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
 
       expect(
-        await screen.findByRole('button', {
+        await screen.findByRole('tab', {
           name: 'Resource defaults',
-          pressed: true,
+          selected: true,
         })
       ).toBeInTheDocument();
       expect(screen.getAllByRole('alert')[0]).toHaveTextContent(/rate/i);
@@ -1163,7 +1335,7 @@ describe('site admin resource templates', () => {
     ]);
     ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Resource defaults' })
+      await screen.findByRole('tab', { name: 'Resource defaults' })
     );
     fireEvent.change(screen.getByRole('textbox', { name: 'Rate name 1' }), {
       target: { value: '' },
@@ -1222,7 +1394,7 @@ describe('site admin resource templates', () => {
     ]);
     ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Resource defaults' })
+      await screen.findByRole('tab', { name: 'Resource defaults' })
     );
     fireEvent.change(screen.getByLabelText('Monday closing time 1'), {
       target: { value: '08:00' },
@@ -1269,15 +1441,19 @@ describe('site admin resource templates', () => {
     },
     {
       kind: 'future schema',
-      resourceDefaultsJson: '{ "schemaVersion": 2, "openingHours": { "monday": [] } }',
+      resourceDefaultsJson:
+        '{ "schemaVersion": 2, "openingHours": { "monday": [] } }',
     },
     {
       kind: 'unrecognized billing rates',
-      resourceDefaultsJson: '{ "schemaVersion": 1, "billingRates": { "hourly": 25 } }',
+      resourceDefaultsJson:
+        '{ "schemaVersion": 1, "billingRates": { "hourly": 25 } }',
     },
     {
       kind: 'oversized defaults',
-      resourceDefaultsJson: JSON.stringify({ padding: 'x'.repeat(1024 * 1024) }),
+      resourceDefaultsJson: JSON.stringify({
+        padding: 'x'.repeat(1024 * 1024),
+      }),
     },
   ])(
     'preserves unsupported saved defaults while saving metadata ($kind)',
@@ -1290,7 +1466,7 @@ describe('site admin resource templates', () => {
         initialPath: '/admin/resource-templates/1',
       }));
       fireEvent.click(
-        await screen.findByRole('button', { name: 'Resource defaults' })
+        await screen.findByRole('tab', { name: 'Resource defaults' })
       );
       expect(
         screen.getByText(
@@ -1305,7 +1481,7 @@ describe('site admin resource templates', () => {
       expect(
         screen.queryByRole('textbox', { name: 'Resource defaults JSON' })
       ).not.toBeInTheDocument();
-      fireEvent.change(screen.getByRole('textbox', { name: 'Template name' }), {
+      fireEvent.change(getTemplateName(), {
         target: { value: 'Renamed without changing defaults' },
       });
       fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
@@ -1318,11 +1494,14 @@ describe('site admin resource templates', () => {
 
   it('preserves unsupported defaults when saving a new form version', async () => {
     mockAdminAccess();
-    const resourceDefaultsJson = '{ "schemaVersion": 2, "futureSetting": true }';
+    const resourceDefaultsJson =
+      '{ "schemaVersion": 2, "futureSetting": true }';
     const { saves, templates } = mockTemplateStore([
       makeTemplate({ resourceDefaultsJson }),
     ]);
-    const rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
+    const rendered = renderRoute({
+      initialPath: '/admin/resource-templates/1',
+    });
     cleanup = rendered.cleanup;
     fireEvent.change(await screen.findByRole('textbox', { name: 'Label' }), {
       target: { value: 'Contact name' },
@@ -1335,7 +1514,10 @@ describe('site admin resource templates', () => {
       )
     );
     expect(saves[0].body).not.toHaveProperty('resourceDefaultsJson');
-    expect(templates.get(1)).toMatchObject({ isActive: false, resourceDefaultsJson });
+    expect(templates.get(1)).toMatchObject({
+      isActive: false,
+      resourceDefaultsJson,
+    });
     expect(templates.get(2)).toMatchObject({
       formSchemaVersion: 2,
       isActive: true,
@@ -1362,10 +1544,12 @@ describe('site admin resource templates', () => {
     const { saves, templates } = mockTemplateStore([
       makeTemplate({ resourceDefaultsJson: JSON.stringify(originalDefaults) }),
     ]);
-    const rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
+    const rendered = renderRoute({
+      initialPath: '/admin/resource-templates/1',
+    });
     cleanup = rendered.cleanup;
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Resource defaults' })
+      await screen.findByRole('tab', { name: 'Resource defaults' })
     );
     fireEvent.change(screen.getByLabelText('Monday opening time 1'), {
       target: { value: '10:00' },
@@ -1406,7 +1590,7 @@ describe('site admin resource templates', () => {
     mockAdminAccess();
     const { saves, templates } = mockTemplateStore();
     ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
-    const name = await screen.findByRole('textbox', { name: 'Template name' });
+    const name = await findTemplateName();
     const { promise: refreshStarted, resolve: markRefreshStarted } =
       Promise.withResolvers<void>();
     const { promise: refreshReady, resolve: releaseRefresh } =
@@ -1429,11 +1613,9 @@ describe('site admin resource templates', () => {
       expect(saves).toHaveLength(1);
       expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
       expect(name).toBeDisabled();
-      expect(
-        screen.getByRole('checkbox', { name: 'Active template' })
-      ).toBeDisabled();
-      expect(screen.getByRole('button', { name: 'Add Input' })).toBeDisabled();
-      expect(screen.getByRole('textbox', { name: 'Label' })).toBeDisabled();
+      expect(getActiveTemplate()).toBeDisabled();
+      expect(getBuildButton('Add Input')).toBeDisabled();
+      expect(getBuildLabel()).toBeDisabled();
       fireEvent.submit(name.closest('form')!);
     } finally {
       await act(async () => {
@@ -1453,12 +1635,13 @@ describe('site admin resource templates', () => {
       mockAdminAccess();
       const original = makeTemplate();
       const { saves, templates } = mockTemplateStore([original]);
-      ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
-      fireEvent.change(
-        await screen.findByRole('textbox', { name: 'Template name' }),
-        { target: { value: 'My unfinished version' } }
-      );
-      fireEvent.change(screen.getByRole('textbox', { name: 'Label' }), {
+      ({ cleanup } = renderRoute({
+        initialPath: '/admin/resource-templates/1',
+      }));
+      fireEvent.change(await findTemplateName(), {
+        target: { value: 'My unfinished version' },
+      });
+      fireEvent.change(getBuildLabel(), {
         target: { value: 'Contact name' },
       });
       const externalUpdate = {
@@ -1477,13 +1660,11 @@ describe('site admin resource templates', () => {
       expect(await screen.findByRole('alert')).toHaveTextContent(
         /changed|archived/i
       );
-      expect(screen.getByRole('textbox', { name: 'Template name' })).toHaveValue(
-        'My unfinished version'
-      );
-      expect(screen.getByRole('textbox', { name: 'Label' })).toHaveValue(
-        'Contact name'
-      );
-      expect(screen.getByRole('button', { name: 'Save template' })).toBeEnabled();
+      expect(getTemplateName()).toHaveValue('My unfinished version');
+      expect(getBuildLabel()).toHaveValue('Contact name');
+      expect(
+        screen.getByRole('button', { name: 'Save template' })
+      ).toBeEnabled();
       expect(saves).toHaveLength(0);
       expect(templates.size).toBe(1);
       expect(templates.get(1)).toEqual(externalUpdate);
@@ -1500,19 +1681,18 @@ describe('site admin resource templates', () => {
         { once: true }
       )
     );
-    const rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
+    const rendered = renderRoute({
+      initialPath: '/admin/resource-templates/1',
+    });
     cleanup = rendered.cleanup;
 
-    fireEvent.change(
-      await screen.findByRole('textbox', { name: 'Template name' }),
-      { target: { value: 'My unsaved changes' } }
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Move Visitor name down' }));
+    fireEvent.change(await findTemplateName(), {
+      target: { value: 'My unsaved changes' },
+    });
+    fireEvent.click(getBuildButton('Move Visitor name down'));
     fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
     expect(await screen.findByRole('alert')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Template name' })).toHaveValue(
-      'My unsaved changes'
-    );
+    expect(getTemplateName()).toHaveValue('My unsaved changes');
     expect(saves).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
 
@@ -1528,7 +1708,9 @@ describe('site admin resource templates', () => {
   it('blocks invalid length rules before sending changes to the server', async () => {
     mockAdminAccess();
     const { saves } = mockTemplateStore();
-    const rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
+    const rendered = renderRoute({
+      initialPath: '/admin/resource-templates/1',
+    });
     cleanup = rendered.cleanup;
 
     fireEvent.change(
@@ -1542,9 +1724,12 @@ describe('site admin resource templates', () => {
       )
     ).toBeInTheDocument();
     expect(saves).toHaveLength(0);
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Minimum length' }), {
-      target: { value: '5' },
-    });
+    fireEvent.change(
+      screen.getByRole('spinbutton', { name: 'Minimum length' }),
+      {
+        target: { value: '5' },
+      }
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
 
     await waitFor(() =>
@@ -1562,13 +1747,14 @@ describe('site admin resource templates', () => {
   it('preserves an open draft when a background refresh fails', async () => {
     mockAdminAccess();
     mockTemplateStore();
-    const rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
+    const rendered = renderRoute({
+      initialPath: '/admin/resource-templates/1',
+    });
     cleanup = rendered.cleanup;
-    fireEvent.change(
-      await screen.findByRole('textbox', { name: 'Template name' }),
-      { target: { value: 'Unfinished draft' } }
-    );
-    fireEvent.change(screen.getByRole('textbox', { name: 'Label' }), {
+    fireEvent.change(await findTemplateName(), {
+      target: { value: 'Unfinished draft' },
+    });
+    fireEvent.change(getBuildLabel(), {
       target: { value: 'Contact name' },
     });
     server.use(
@@ -1584,12 +1770,8 @@ describe('site admin resource templates', () => {
     });
 
     expect(rendered.queryClient.getQueryState(queryKey)?.status).toBe('error');
-    expect(screen.getByRole('textbox', { name: 'Template name' })).toHaveValue(
-      'Unfinished draft'
-    );
-    expect(screen.getByRole('textbox', { name: 'Label' })).toHaveValue(
-      'Contact name'
-    );
+    expect(getTemplateName()).toHaveValue('Unfinished draft');
+    expect(getBuildLabel()).toHaveValue('Contact name');
     expect(screen.getByRole('button', { name: 'Save template' })).toBeEnabled();
     expect(
       screen.queryByRole('heading', { name: 'Template not found' })
@@ -1599,13 +1781,14 @@ describe('site admin resource templates', () => {
   it('preserves an open draft when the query cache receives an unsupported form definition', async () => {
     mockAdminAccess();
     mockTemplateStore();
-    const rendered = renderRoute({ initialPath: '/admin/resource-templates/1' });
+    const rendered = renderRoute({
+      initialPath: '/admin/resource-templates/1',
+    });
     cleanup = rendered.cleanup;
-    fireEvent.change(
-      await screen.findByRole('textbox', { name: 'Template name' }),
-      { target: { value: 'Unfinished draft' } }
-    );
-    fireEvent.change(screen.getByRole('textbox', { name: 'Label' }), {
+    fireEvent.change(await findTemplateName(), {
+      target: { value: 'Unfinished draft' },
+    });
+    fireEvent.change(getBuildLabel(), {
       target: { value: 'Contact name' },
     });
 
@@ -1619,12 +1802,8 @@ describe('site admin resource templates', () => {
       );
     });
 
-    expect(screen.getByRole('textbox', { name: 'Template name' })).toHaveValue(
-      'Unfinished draft'
-    );
-    expect(screen.getByRole('textbox', { name: 'Label' })).toHaveValue(
-      'Contact name'
-    );
+    expect(getTemplateName()).toHaveValue('Unfinished draft');
+    expect(getBuildLabel()).toHaveValue('Contact name');
     expect(screen.getByRole('button', { name: 'Save template' })).toBeEnabled();
     expect(
       screen.queryByText('This template cannot be edited with this builder')
@@ -1644,21 +1823,22 @@ describe('site admin resource templates', () => {
       history.destroy();
       window.history.replaceState(previousState, '', previousUrl);
     };
-    fireEvent.change(
-      await screen.findByRole('textbox', { name: 'Template name' }),
-      { target: { value: 'Unfinished draft' } }
-    );
+    fireEvent.change(await findTemplateName(), {
+      target: { value: 'Unfinished draft' },
+    });
     fireEvent.click(screen.getByRole('link', { name: 'Resource templates' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Keep editing' }));
-
-    expect(screen.getByRole('textbox', { name: 'Template name' })).toHaveValue(
-      'Unfinished draft'
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Keep editing' })
     );
+
+    expect(getTemplateName()).toHaveValue('Unfinished draft');
     expect(rendered.router.state.location.pathname).toBe(
       '/admin/resource-templates/1'
     );
     fireEvent.click(screen.getByRole('link', { name: 'Resource templates' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Discard changes' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Discard changes' })
+    );
 
     expect(
       await screen.findByRole('heading', { name: 'Resource templates' })
@@ -1678,7 +1858,9 @@ describe('site admin resource templates', () => {
       mockAdminAccess();
       const original = makeTemplate(savedForm);
       const { saves, templates } = mockTemplateStore([original]);
-      ({ cleanup } = renderRoute({ initialPath: '/admin/resource-templates/1' }));
+      ({ cleanup } = renderRoute({
+        initialPath: '/admin/resource-templates/1',
+      }));
 
       expect(await screen.findByRole('alert')).toHaveTextContent(
         /not supported|cannot be edited safely|invalid revision/i

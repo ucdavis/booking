@@ -64,7 +64,7 @@ export function GeometricFooter() {
           <p className="text-sm text-base-content">
             © 2026–2027 Regents of the University of California
           </p>
-          <p className="text-xs text-base-content/65">
+          <p className="text-xs text-base-content/75">
             Version {packageInfo.version}
           </p>
         </div>

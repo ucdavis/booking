@@ -182,7 +182,7 @@ export function AddTeamMemberDialog({
           Add a team member
         </h2>
         <p
-          className="mt-2 text-base-content/70"
+          className="mt-2 text-base-content/80"
           id="add-team-member-description"
         >
           Find a person, review their details, and choose their roles on this
@@ -191,7 +191,7 @@ export function AddTeamMemberDialog({
 
         <form className="mt-6" onSubmit={searchPeople}>
           <label
-            className="mb-2 block text-sm font-semibold"
+            className="mb-2 block text-sm font-semibold text-base-content"
             htmlFor="team-person-search"
           >
             Email, IAM ID, or Kerberos ID
@@ -234,7 +234,7 @@ export function AddTeamMemberDialog({
 
         <div aria-live="polite" className="mt-5">
           {submittedQuery && peopleQuery.isFetching && (
-            <p className="text-base-content/70" role="status">
+            <p className="text-base-content/80" role="status">
               Searching for a matching person…
             </p>
           )}
@@ -252,13 +252,13 @@ export function AddTeamMemberDialog({
               </p>
             ) : (
               <fieldset>
-                <legend className="mb-3 font-semibold">
+                <legend className="mb-3 font-semibold text-base-content">
                   {people.length === 1
                     ? 'Review the matching person'
                     : 'Select a matching person'}
                 </legend>
                 {people.length === 10 && (
-                  <p className="mb-3 text-sm text-base-content/70">
+                  <p className="mb-3 text-sm text-base-content/80">
                     Showing the first 10 matches. Search by IAM ID or Kerberos
                     ID to narrow the results.
                   </p>
@@ -289,15 +289,21 @@ export function AddTeamMemberDialog({
                       />
                       <div className="min-w-0">
                         <p className="font-semibold">{person.name}</p>
-                        <dl className="mt-2 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
-                          <dt className="text-base-content/60">Email</dt>
-                          <dd className="break-all">
+                        <dl className="mt-2 grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
+                          <dt className="text-sm font-normal text-base-content/75">Email</dt>
+                          <dd className="break-all text-base font-normal text-base-content">
                             {person.email || 'Not available'}
                           </dd>
-                          <dt className="text-base-content/60">IAM ID</dt>
-                          <dd>{person.iamId}</dd>
-                          <dt className="text-base-content/60">Kerberos ID</dt>
-                          <dd>{person.kerberos || 'Not available'}</dd>
+                          <dt className="text-sm font-normal text-base-content/75">IAM ID</dt>
+                          <dd className="text-base font-normal text-base-content">
+                            {person.iamId}
+                          </dd>
+                          <dt className="text-sm font-normal text-base-content/75">
+                            Kerberos ID
+                          </dt>
+                          <dd className="text-base font-normal text-base-content">
+                            {person.kerberos || 'Not available'}
+                          </dd>
                         </dl>
                         {person.roles.length > 0 && (
                           <p className="mt-3 text-sm font-medium">

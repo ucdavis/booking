@@ -7,4 +7,6 @@ export interface Space {
   name: string;
   referenceNumber: string | null;
   slug: string;
+  /** Attached teams, populated by the site admin spaces list. */
+  teams?: { id: number; name: string; slug: string }[];
 }

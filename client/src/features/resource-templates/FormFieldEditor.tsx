@@ -25,7 +25,7 @@ export function FormFieldEditor({
       </legend>
       <div>
         <label
-          className="mb-2 block text-sm font-semibold"
+          className="mb-2 block text-sm font-semibold text-base-content"
           htmlFor={`${prefix}-label`}
         >
           {field.type === 'text' ? 'Text content' : 'Label'}
@@ -43,7 +43,7 @@ export function FormFieldEditor({
       </div>
       <div>
         <label
-          className="mb-2 block text-sm font-semibold"
+          className="mb-2 block text-sm font-semibold text-base-content"
           htmlFor={`${prefix}-help`}
         >
           Help text
@@ -60,7 +60,7 @@ export function FormFieldEditor({
         />
       </div>
       {field.type !== 'text' && (
-        <label className="flex items-center gap-3 text-sm font-semibold">
+        <label className="flex items-center gap-3 text-sm font-semibold text-base-content">
           <input
             checked={field.validation?.required ?? false}
             className="checkbox checkbox-primary"
@@ -78,7 +78,7 @@ export function FormFieldEditor({
             {(['minLength', 'maxLength'] as const).map((rule) => (
               <div key={rule}>
                 <label
-                  className="mb-2 block text-sm font-semibold"
+                  className="mb-2 block text-sm font-semibold text-base-content"
                   htmlFor={`${prefix}-${rule}`}
                 >
                   {rule === 'minLength' ? 'Minimum length' : 'Maximum length'}
@@ -105,7 +105,7 @@ export function FormFieldEditor({
             ))}
           </div>
           <p
-            className="mt-2 text-sm text-base-content/65"
+            className="mt-2 text-sm text-base-content/75"
             id={`${prefix}-length-help`}
           >
             Leave blank for no limit. Length limits apply when an answer is
@@ -122,11 +122,11 @@ export function FormFieldEditor({
       )}
       {isChoice && (
         <fieldset className="space-y-3">
-          <legend className="mb-2 text-sm font-semibold">Choices</legend>
+          <legend className="mb-2 text-sm font-semibold text-base-content">Choices</legend>
           {(field.options ?? []).map((option, index) => (
             <div key={option.id}>
               <label
-                className="mb-1 block text-sm"
+                className="mb-1 block text-sm font-semibold text-base-content"
                 htmlFor={`${prefix}-${option.id}`}
               >
                 Choice {index + 1}

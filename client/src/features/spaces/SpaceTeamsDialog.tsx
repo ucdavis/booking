@@ -1,3 +1,4 @@
+import { LinkSlashIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import type { Space } from './models/Space.ts';
@@ -5,41 +6,17 @@ import type { SpaceTeamAccess } from './models/SpaceTeamAccess.ts';
 import type { TeamSummary } from '@/features/teams/models/TeamSummary.ts';
 import { HttpError } from '@/lib/api.ts';
 import {
+  adminSpacesQueryKey,
   assignSpaceTeam,
+  confirmationResourceCount,
   spaceTeamsQueryOptions,
   unlinkSpaceTeam,
 } from '@/queries/admin-spaces.ts';
 import { adminTeamsQueryOptions } from '@/queries/admin.ts';
+import { teamSpacesQueryOptions } from '@/queries/teams.ts';
 import { resourceOptionsQueryOptions } from '@/queries/resources.ts';
 import { FieldWrapper } from '@/shared/forms/fieldWrapper.tsx';
 import { useAppForm } from '@/shared/forms/formContext.tsx';
-
-function confirmationResourceCount(error: unknown): number | undefined {
-  if (!(error instanceof HttpError) || error.status !== 409) {
-    return undefined;
-  }
-  let details = error.body;
-  if (typeof details === 'string') {
-    try {
-      details = JSON.parse(details);
-    } catch {
-      return undefined;
-    }
-  }
-  if (
-    details !== null &&
-    typeof details === 'object' &&
-    'code' in details &&
-    details.code === 'space_team_resources_confirmation_required' &&
-    'resourceCount' in details &&
-    typeof details.resourceCount === 'number' &&
-    Number.isSafeInteger(details.resourceCount) &&
-    details.resourceCount >= 0
-  ) {
-    return details.resourceCount;
-  }
-  return undefined;
-}
 
 export function SpaceTeamsDialog({
   onClose,
@@ -74,6 +51,13 @@ export function SpaceTeamsDialog({
 
   async function refreshTeamAccess(team: TeamSummary) {
     await Promise.all([
+      queryClient.invalidateQueries({
+        exact: true,
+        queryKey: adminSpacesQueryKey,
+      }),
+      queryClient.invalidateQueries({
+        queryKey: teamSpacesQueryOptions(team.slug).queryKey,
+      }),
       queryClient.invalidateQueries({
         queryKey: spaceTeamsQueryOptions(space.id).queryKey,
       }),
@@ -240,7 +224,7 @@ export function SpaceTeamsDialog({
         >
           Manage teams for {space.name}
         </h2>
-        <p className="mt-2 text-base-content/70" id="space-teams-description">
+        <p className="mt-2 text-base-content/80" id="space-teams-description">
           Assigned teams can create resources in this space while it is active.
         </p>
         {accessDenied ? (
@@ -289,7 +273,7 @@ export function SpaceTeamsDialog({
                   </button>
                 </div>
               ) : linkedTeamsQuery.data.length === 0 ? (
-                <p className="mt-3 text-base-content/70">
+                <p className="mt-3 text-base-content/80">
                   No teams are assigned to this space.
                 </p>
               ) : (
@@ -310,7 +294,7 @@ export function SpaceTeamsDialog({
                           <td>
                             <button
                               aria-label={`Unlink ${access.team.name}`}
-                              className="btn btn-ghost btn-sm text-error"
+                              className="btn btn-error btn-outline btn-sm"
                               disabled={
                                 isMutating ||
                                 !!confirmation ||
@@ -331,6 +315,10 @@ export function SpaceTeamsDialog({
                               }}
                               type="button"
                             >
+                              <LinkSlashIcon
+                                aria-hidden="true"
+                                className="h-4 w-4"
+                              />
                               Unlink
                             </button>
                           </td>
@@ -382,13 +370,14 @@ export function SpaceTeamsDialog({
                     Cancel unlink
                   </button>
                   <button
-                    className="btn btn-error btn-sm"
+                    className="btn btn-error btn-outline btn-sm"
                     disabled={isMutating}
                     onClick={() =>
                       void unlink(confirmation, confirmation.resourceCount)
                     }
                     type="button"
                   >
+                    <LinkSlashIcon aria-hidden="true" className="h-4 w-4" />
                     Confirm unlink
                   </button>
                 </div>
@@ -421,7 +410,7 @@ export function SpaceTeamsDialog({
                   </button>
                 </div>
               ) : linkedTeamsQuery.isSuccess && availableTeams.length === 0 ? (
-                <p className="mt-3 text-base-content/70">
+                <p className="mt-3 text-base-content/80">
                   No unassigned teams are available.
                 </p>
               ) : (

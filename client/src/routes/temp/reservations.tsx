@@ -35,7 +35,7 @@ function MyReservationsPage() {
     <main className="content-container py-6 sm:py-10">
       <nav
         aria-label="Breadcrumb"
-        className="mb-6 text-sm text-base-content/65"
+        className="mb-6 text-sm text-base-content/75"
       >
         <Link className="hover:text-primary hover:underline" to="/temp">
           Home
@@ -49,7 +49,7 @@ function MyReservationsPage() {
           <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
             My reservations
           </h1>
-          <p className="mt-3 max-w-2xl text-base leading-7 text-base-content/70">
+          <p className="mt-3 max-w-2xl text-base leading-7 text-base-content/80">
             Manage your upcoming room, bench, and equipment reservations.
           </p>
         </div>
@@ -66,14 +66,14 @@ function MyReservationsPage() {
           >
             Upcoming
           </h2>
-          <p className="text-sm text-base-content/65">
+          <p className="text-sm text-base-content/75">
             {reservations.length} scheduled
           </p>
         </div>
         <div className="mt-4 space-y-3">
           {reservations.map((reservation) => (
             <article
-              className="rounded-sm border border-base-300 bg-base-200 p-5 sm:p-6"
+              className="rounded-sm border border-base-300 bg-base-200 p-5 sm:p-6 shadow-sm"
               key={reservation.id}
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -97,7 +97,7 @@ function MyReservationsPage() {
                     <h3 className="text-lg font-semibold text-primary">
                       {reservation.resourceName}
                     </h3>
-                    <p className="mt-1 text-sm text-base-content/70">
+                    <p className="mt-1 text-sm text-base-content/80">
                       {reservation.purpose}
                     </p>
                   </div>
@@ -116,8 +116,8 @@ function MyReservationsPage() {
                     className="mt-0.5 h-4 w-4 shrink-0 text-base-content/55"
                   />
                   <div>
-                    <dt className="text-base-content/60">Date</dt>
-                    <dd className="mt-0.5 font-medium">
+                    <dt className="text-sm font-normal text-base-content/75">Date</dt>
+                    <dd className="mt-0.5 text-base font-normal text-base-content">
                       {dateFormatter.format(new Date(reservation.start))}
                     </dd>
                   </div>
@@ -128,8 +128,8 @@ function MyReservationsPage() {
                     className="mt-0.5 h-4 w-4 shrink-0 text-base-content/55"
                   />
                   <div>
-                    <dt className="text-base-content/60">Time</dt>
-                    <dd className="mt-0.5 font-medium">
+                    <dt className="text-sm font-normal text-base-content/75">Time</dt>
+                    <dd className="mt-0.5 text-base font-normal text-base-content">
                       {timeFormatter.format(new Date(reservation.start))}–
                       {timeFormatter.format(new Date(reservation.end))}
                     </dd>
@@ -141,8 +141,8 @@ function MyReservationsPage() {
                     className="mt-0.5 h-4 w-4 shrink-0 text-base-content/55"
                   />
                   <div>
-                    <dt className="text-base-content/60">Building</dt>
-                    <dd className="mt-0.5 font-medium">
+                    <dt className="text-sm font-normal text-base-content/75">Building</dt>
+                    <dd className="mt-0.5 text-base font-normal text-base-content">
                       {reservation.building}
                     </dd>
                   </div>
@@ -153,8 +153,8 @@ function MyReservationsPage() {
                     className="mt-0.5 h-4 w-4 shrink-0 text-base-content/55"
                   />
                   <div>
-                    <dt className="text-base-content/60">Resource type</dt>
-                    <dd className="mt-0.5 font-medium capitalize">
+                    <dt className="text-sm font-normal text-base-content/75">Resource type</dt>
+                    <dd className="mt-0.5 capitalize text-base font-normal text-base-content">
                       {reservation.resourceKind}
                     </dd>
                   </div>
@@ -196,7 +196,7 @@ function MyReservationsPage() {
           <h2 className="text-lg font-semibold text-primary" id="past-heading">
             Past reservations
           </h2>
-          <p className="mt-1 text-base-content/70">
+          <p className="mt-1 text-base-content/80">
             Your completed reservations will appear here.
           </p>
         </div>

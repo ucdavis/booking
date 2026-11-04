@@ -139,6 +139,36 @@ function silenceRouteErrors() {
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 }
 
+function getTemplateName() {
+  fireEvent.click(screen.getByRole('tab', { name: 'Template details' }));
+  return screen.getByLabelText('Template name');
+}
+
+async function findTemplateName() {
+  fireEvent.click(await screen.findByRole('tab', { name: 'Template details' }));
+  return screen.getByLabelText('Template name');
+}
+
+function getBuildButton(name: string) {
+  fireEvent.click(screen.getByRole('tab', { name: 'Build form' }));
+  return screen.getByRole('button', { name });
+}
+
+function getBuildLabel() {
+  fireEvent.click(screen.getByRole('tab', { name: 'Build form' }));
+  return screen.getByRole('textbox', { name: 'Label' });
+}
+
+function getPreviewAnswer() {
+  fireEvent.click(screen.getByRole('tab', { name: 'Preview form' }));
+  return screen.getByRole('textbox', { name: /Visitor name/ });
+}
+
+function getActiveTemplate() {
+  fireEvent.click(screen.getByRole('tab', { name: 'Template details' }));
+  return screen.getByLabelText('Active template');
+}
+
 describe('team resource templates', () => {
   it.each([
     { isSiteAdmin: false, role: 'editor' },
@@ -273,25 +303,21 @@ describe('team resource templates', () => {
     expect(
       await screen.findByRole('heading', { name: 'View resource template' })
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('textbox', { name: 'Template name' })
-    ).toBeDisabled();
-    expect(
-      screen.getByRole('checkbox', { name: 'Active template' })
-    ).toBeDisabled();
+    expect(getTemplateName()).toBeDisabled();
+    expect(getActiveTemplate()).toBeDisabled();
     expect(
       screen.queryByRole('button', { name: 'Save template' })
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: 'Build form' })
+      screen.queryByRole('tab', { name: 'Build form' })
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Add Input' })
     ).not.toBeInTheDocument();
-    const answer = screen.getByRole('textbox', { name: /Visitor name/ });
+    const answer = getPreviewAnswer();
     fireEvent.change(answer, { target: { value: 'Taylor' } });
     expect(answer).toHaveValue('Taylor');
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('09:00');
     expect(screen.getByLabelText('Monday opening time 1')).toBeDisabled();
     expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue(
@@ -309,11 +335,9 @@ describe('team resource templates', () => {
       'view',
       true
     );
-    expect(
-      screen.getByRole('textbox', { name: 'Template name' })
-    ).toBeEnabled();
+    expect(getTemplateName()).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Save template' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Build form' })).toBeEnabled();
+    expect(screen.getByRole('tab', { name: 'Build form' })).toBeEnabled();
   });
 
   it('shows active system templates and reveals older team versions without inactive system templates', async () => {
@@ -400,9 +424,7 @@ describe('team resource templates', () => {
     expect(
       await screen.findByRole('heading', { name: 'View resource template' })
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('textbox', { name: 'Template name' })
-    ).toBeDisabled();
+    expect(getTemplateName()).toBeDisabled();
     expect(
       screen.queryByRole('button', { name: 'Save template' })
     ).not.toBeInTheDocument();
@@ -412,10 +434,10 @@ describe('team resource templates', () => {
     expect(
       screen.queryByRole('button', { name: 'Add Input' })
     ).not.toBeInTheDocument();
-    const answer = screen.getByRole('textbox', { name: /Visitor name/ });
+    const answer = getPreviewAnswer();
     fireEvent.change(answer, { target: { value: 'Taylor' } });
     expect(answer).toHaveValue('Taylor');
-    fireEvent.click(screen.getByRole('button', { name: 'Resource defaults' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource defaults' }));
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('09:00');
     expect(screen.getByLabelText('Monday opening time 1')).toBeDisabled();
     expect(screen.getByRole('textbox', { name: 'Amount (USD) 1' })).toHaveValue(
@@ -437,9 +459,7 @@ describe('team resource templates', () => {
       await screen.findByRole('heading', { name: 'Edit resource template' })
     ).toBeInTheDocument();
     expect(rendered.router.state.location.pathname).toBe(`${listPath}/3`);
-    expect(screen.getByRole('textbox', { name: 'Template name' })).toHaveValue(
-      'System equipment (copy)'
-    );
+    expect(getTemplateName()).toHaveValue('System equipment (copy)');
     expect(screen.getByRole('button', { name: 'Save template' })).toBeEnabled();
     expect(token).toBe('team-template-token');
     expect(templates.get(2)).toEqual(original);
@@ -516,15 +536,9 @@ describe('team resource templates', () => {
     expect(
       await screen.findByRole('heading', { name: 'View resource template' })
     ).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Template name' })).toHaveValue(
-      'Archived team equipment'
-    );
-    expect(
-      screen.getByRole('textbox', { name: 'Template name' })
-    ).toBeDisabled();
-    expect(
-      screen.getByRole('checkbox', { name: 'Active template' })
-    ).not.toBeChecked();
+    expect(getTemplateName()).toHaveValue('Archived team equipment');
+    expect(getTemplateName()).toBeDisabled();
+    expect(getActiveTemplate()).not.toBeChecked();
     expect(
       screen.queryByRole('button', { name: 'Save template' })
     ).not.toBeInTheDocument();
@@ -555,19 +569,16 @@ describe('team resource templates', () => {
     fireEvent.click(
       await screen.findByRole('link', { name: 'Create template' })
     );
-    fireEvent.change(
-      await screen.findByRole('textbox', { name: 'Template name' }),
-      { target: { value: 'Camera checkout' } }
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Add Input' }));
+    fireEvent.change(await findTemplateName(), {
+      target: { value: 'Camera checkout' },
+    });
+    fireEvent.click(getBuildButton('Add Input'));
     fireEvent.click(screen.getByRole('button', { name: 'Create template' }));
 
     await waitFor(() =>
       expect(rendered.router.state.location.pathname).toBe(`${listPath}/10`)
     );
-    expect(
-      await screen.findByRole('textbox', { name: 'Template name' })
-    ).toHaveValue('Camera checkout');
+    expect(await findTemplateName()).toHaveValue('Camera checkout');
     expect(saved?.name).toBe('Camera checkout');
     expect(token).toBe('team-template-token');
     expect(
@@ -643,10 +654,8 @@ describe('team resource templates', () => {
       await screen.findByRole('heading', { name: 'View resource template' })
     ).toBeInTheDocument();
     expect(screen.getByText('Version 1')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: /Visitor name/ })).toBeEnabled();
-    expect(
-      screen.getByRole('textbox', { name: 'Template name' })
-    ).toBeDisabled();
+    expect(getPreviewAnswer()).toBeEnabled();
+    expect(getTemplateName()).toBeDisabled();
     expect(
       screen.queryByRole('button', { name: 'Save template' })
     ).not.toBeInTheDocument();
@@ -665,11 +674,10 @@ describe('team resource templates', () => {
         )
       );
       ({ cleanup } = renderRoute({ initialPath: `${listPath}/1` }));
-      fireEvent.change(
-        await screen.findByRole('textbox', { name: 'Template name' }),
-        { target: { value: 'Unfinished team draft' } }
-      );
-      fireEvent.change(screen.getByRole('textbox', { name: 'Label' }), {
+      fireEvent.change(await findTemplateName(), {
+        target: { value: 'Unfinished team draft' },
+      });
+      fireEvent.change(getBuildLabel(), {
         target: { value: 'Contact name' },
       });
       fireEvent.click(screen.getByRole('button', { name: 'Save template' }));
@@ -677,12 +685,8 @@ describe('team resource templates', () => {
       expect(await screen.findByRole('alert')).toHaveTextContent(
         status === 409 ? /changed|archived/i : /could not save/i
       );
-      expect(
-        screen.getByRole('textbox', { name: 'Template name' })
-      ).toHaveValue('Unfinished team draft');
-      expect(screen.getByRole('textbox', { name: 'Label' })).toHaveValue(
-        'Contact name'
-      );
+      expect(getTemplateName()).toHaveValue('Unfinished team draft');
+      expect(getBuildLabel()).toHaveValue('Contact name');
     }
   );
 
@@ -758,11 +762,10 @@ describe('team resource templates', () => {
       history.destroy();
       window.history.replaceState(previousState, '', previousUrl);
     };
-    fireEvent.change(
-      await screen.findByRole('textbox', { name: 'Template name' }),
-      { target: { value: 'Plant draft' } }
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Add Input' }));
+    fireEvent.change(await findTemplateName(), {
+      target: { value: 'Plant draft' },
+    });
+    fireEvent.click(getBuildButton('Add Input'));
     act(() => {
       void rendered.router.navigate({
         params: { teamSlug: otherTeam.slug },
@@ -772,9 +775,7 @@ describe('team resource templates', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'Keep editing' })
     );
-    expect(screen.getByRole('textbox', { name: 'Template name' })).toHaveValue(
-      'Plant draft'
-    );
+    expect(getTemplateName()).toHaveValue('Plant draft');
     expect(rendered.router.state.location.pathname).toBe(`${listPath}/new`);
     act(() => {
       void rendered.router.navigate({
@@ -791,9 +792,7 @@ describe('team resource templates', () => {
         '/teams/animal-science/resource-templates/new'
       )
     );
-    expect(screen.getByRole('textbox', { name: 'Template name' })).toHaveValue(
-      ''
-    );
+    expect(getTemplateName()).toHaveValue('');
     expect(
       screen.queryByRole('textbox', { name: 'Label' })
     ).not.toBeInTheDocument();

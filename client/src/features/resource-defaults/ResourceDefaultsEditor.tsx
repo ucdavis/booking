@@ -8,12 +8,14 @@ export const ResourceDefaultsEditor = withFieldGroup({
   props: {
     context: 'template' as 'template' | 'resource',
     disabled: false,
+    embedded: false,
     readOnly: false,
     unavailableReason: undefined as string | undefined,
   },
   render: function ResourceDefaultsEditor({
     context,
     disabled,
+    embedded,
     group,
     readOnly,
     unavailableReason,
@@ -23,13 +25,17 @@ export const ResourceDefaultsEditor = withFieldGroup({
         aria-label={
           context === 'resource' ? 'Hours and rates' : 'Resource defaults'
         }
-        className="space-y-5 rounded-sm border border-base-300 bg-base-100 p-5"
+        className={
+          embedded
+            ? 'space-y-5'
+            : 'space-y-5 rounded-sm border border-base-300 bg-base-100 p-5 shadow-sm'
+        }
       >
         <div>
           <h2 className="text-xl font-semibold text-primary">
             {context === 'resource' ? 'Hours and rates' : 'Resource defaults'}
           </h2>
-          <p className="mt-2 text-sm text-base-content/65">
+          <p className="mt-2 text-sm text-base-content/75">
             {context === 'resource'
               ? 'Opening hours and billing rates for this resource. Changes are saved with its configuration.'
               : 'Optional starting values for resources. These defaults are saved with the template and included when it is duplicated.'}

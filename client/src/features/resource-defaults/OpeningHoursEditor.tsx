@@ -37,7 +37,7 @@ export const OpeningHoursEditor = withFieldGroup({
               <legend className="mb-3 text-lg font-semibold text-primary">
                 Opening hours
               </legend>
-              <label className="flex items-center gap-3 text-sm font-semibold">
+              <label className="flex items-center gap-3 text-sm font-semibold text-base-content">
                 <input
                   checked={openingHours !== null}
                   className="checkbox checkbox-primary"
@@ -57,7 +57,7 @@ export const OpeningHoursEditor = withFieldGroup({
               {openingHours !== null && (
                 <>
                   <p
-                    className="text-sm text-base-content/65"
+                    className="text-sm text-base-content/75"
                     id={`${prefix}-help`}
                   >
                     Use local times in the resource space&apos;s time zone. No
@@ -65,7 +65,7 @@ export const OpeningHoursEditor = withFieldGroup({
                     Each period stays within its selected day, with closing time
                     after opening time.
                   </p>
-                  <div className="divide-y divide-base-300 rounded-sm border border-base-300">
+                  <div className="divide-y divide-base-300 rounded-sm border border-base-300 shadow-sm">
                     {resourceDefaultsDays.map((day) => (
                       <group.Field
                         key={day.key}
@@ -78,7 +78,7 @@ export const OpeningHoursEditor = withFieldGroup({
                             <div className="space-y-3 p-4">
                               <div className="flex flex-wrap items-center gap-3">
                                 <label
-                                  className="w-24 text-sm font-semibold"
+                                  className="w-24 text-sm font-semibold text-base-content"
                                   htmlFor={`${prefix}-${day.key}`}
                                 >
                                   {day.label}
@@ -129,7 +129,7 @@ export const OpeningHoursEditor = withFieldGroup({
                                       return (
                                         <div className="min-w-0 flex-1 sm:flex-none">
                                           <label
-                                            className="mb-1 block text-xs font-medium"
+                                            className="mb-1 block text-xs font-semibold text-base-content"
                                             htmlFor={`${prefix}-${day.key}-start-${index}`}
                                           >
                                             Opening time
@@ -179,7 +179,7 @@ export const OpeningHoursEditor = withFieldGroup({
                                       return (
                                         <div className="min-w-0 flex-1 sm:flex-none">
                                           <label
-                                            className="mb-1 block text-xs font-medium"
+                                            className="mb-1 block text-xs font-semibold text-base-content"
                                             htmlFor={`${prefix}-${day.key}-end-${index}`}
                                           >
                                             Closing time

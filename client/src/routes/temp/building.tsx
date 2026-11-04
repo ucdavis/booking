@@ -50,7 +50,7 @@ function TempBuildingPage() {
     <main className="content-container py-4 sm:py-6">
       <nav
         aria-label="Breadcrumb"
-        className="mb-4 text-xs text-base-content/70 uppercase"
+        className="mb-4 text-xs text-base-content/80 uppercase"
       >
         <ol className="flex flex-wrap items-center gap-2">
           <li>
@@ -67,7 +67,7 @@ function TempBuildingPage() {
         </ol>
       </nav>
 
-      <article className="overflow-hidden rounded-sm border border-base-300 bg-base-200">
+      <article className="overflow-hidden rounded-sm border border-base-300 bg-base-200 shadow-sm">
         <div className="border-b-8 border-secondary lg:grid lg:grid-cols-3">
           <div className="flex flex-col bg-primary text-primary-content lg:col-span-2">
             <div className="px-6 pb-2 pt-8 sm:px-10">
@@ -87,10 +87,10 @@ function TempBuildingPage() {
                     aria-hidden="true"
                     className="h-6 w-6 text-primary-content/70"
                   />
-                  <dt className="text-sm font-bold tracking-wide text-primary-content/70 uppercase">
+                  <dt className="text-sm font-normal text-primary-content/70">
                     Location
                   </dt>
-                  <dd className="col-start-2 text-base sm:col-start-3">
+                  <dd className="col-start-2 text-base sm:col-start-3 font-normal text-primary-content">
                     <a
                       className="text-primary-content/80 underline underline-offset-2 hover:text-primary-content"
                       href="https://www.google.com/maps/search/?api=1&query=123+Campus+Way%2C+Davis%2C+CA+95616"
@@ -106,10 +106,10 @@ function TempBuildingPage() {
                     aria-hidden="true"
                     className="h-6 w-6 text-primary-content/70"
                   />
-                  <dt className="text-sm font-bold tracking-wide text-primary-content/70 uppercase">
+                  <dt className="text-sm font-normal text-primary-content/70">
                     Building contact
                   </dt>
-                  <dd className="col-start-2 text-base sm:col-start-3">
+                  <dd className="col-start-2 text-base sm:col-start-3 font-normal text-primary-content">
                     Stephanie Machado
                     <a
                       className="mt-1 block break-all text-sm text-primary-content/80 underline underline-offset-2 hover:text-primary-content"
@@ -124,10 +124,12 @@ function TempBuildingPage() {
                     aria-hidden="true"
                     className="h-6 w-6 text-primary-content/70"
                   />
-                  <dt className="text-sm font-bold tracking-wide text-primary-content/70 uppercase">
+                  <dt className="text-sm font-normal text-primary-content/70">
                     Rooms
                   </dt>
-                  <dd className="col-start-2 text-base sm:col-start-3">55</dd>
+                  <dd className="col-start-2 text-base sm:col-start-3 font-normal text-primary-content">
+                    55
+                  </dd>
                 </div>
               </dl>
             </div>
@@ -157,7 +159,7 @@ function TempBuildingPage() {
             >
               Room Search
             </h2>
-            <p aria-live="polite" className="text-sm text-base-content/70">
+            <p aria-live="polite" className="text-sm text-base-content/80">
               Showing {visibleRooms.length} sample rooms
             </p>
           </div>
@@ -220,17 +222,17 @@ function TempBuildingPage() {
             {visibleRooms.map((room) => (
               <li key={room.name}>
                 <Link
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-base-300 bg-base-100 px-5 py-4 transition-colors hover:border-primary"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-base-300 bg-base-100 px-5 py-4 transition-colors hover:border-primary shadow-sm"
                   to="/temp/room"
                 >
                   <div>
                     <h3 className="font-semibold text-primary">{room.name}</h3>
-                    <p className="mt-1 text-sm text-base-content/70">
+                    <p className="mt-1 text-sm text-base-content/80">
                       {room.type} · Floor {room.floor}
                     </p>
                   </div>
                   <div className="flex items-center gap-5 text-sm">
-                    <span className="text-base-content/70">
+                    <span className="text-base-content/80">
                       Seats {room.capacity}
                     </span>
                     <span className="font-semibold text-primary">
@@ -242,7 +244,7 @@ function TempBuildingPage() {
             ))}
           </ul>
           {visibleRooms.length === 0 && (
-            <p className="mt-6 rounded-sm border border-base-300 bg-base-100 px-5 py-8 text-center text-base-content/70">
+            <p className="mt-6 rounded-sm border border-base-300 bg-base-100 px-5 py-8 text-center text-base-content/80 shadow-sm">
               No sample rooms match those filters.
             </p>
           )}

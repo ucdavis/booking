@@ -105,14 +105,14 @@ export function EmulateUserDialog({
         >
           Emulate user
         </h2>
-        <p className="mt-2 text-base-content/70" id="emulate-user-description">
+        <p className="mt-2 text-base-content/80" id="emulate-user-description">
           Find a person and use Booking with their access. You can return to
           your account from the user menu.
         </p>
 
         <form className="mt-6" onSubmit={searchCandidates}>
           <label
-            className="mb-2 block text-sm font-semibold"
+            className="mb-2 block text-sm font-semibold text-base-content"
             htmlFor="emulation-person-search"
           >
             Email, IAM ID, or Kerberos ID
@@ -155,7 +155,7 @@ export function EmulateUserDialog({
 
         <div aria-live="polite" className="mt-5">
           {submittedQuery && candidatesQuery.isFetching && (
-            <p className="text-base-content/70" role="status">
+            <p className="text-base-content/80" role="status">
               Searching for a matching person…
             </p>
           )}
@@ -176,13 +176,13 @@ export function EmulateUserDialog({
               </p>
             ) : (
               <fieldset>
-                <legend className="mb-3 font-semibold">
+                <legend className="mb-3 font-semibold text-base-content">
                   {candidates.length === 1
                     ? 'Review the matching person'
                     : 'Select a matching person'}
                 </legend>
                 {candidates.length === 10 && (
-                  <p className="mb-3 text-sm text-base-content/70">
+                  <p className="mb-3 text-sm text-base-content/80">
                     Showing the first 10 matches. Search by IAM ID or Kerberos
                     ID to narrow the results.
                   </p>
@@ -208,15 +208,21 @@ export function EmulateUserDialog({
                       />
                       <div className="min-w-0">
                         <p className="font-semibold">{candidate.name}</p>
-                        <dl className="mt-2 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
-                          <dt className="text-base-content/60">Email</dt>
-                          <dd className="break-all">
+                        <dl className="mt-2 grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
+                          <dt className="text-sm font-normal text-base-content/75">Email</dt>
+                          <dd className="break-all text-base font-normal text-base-content">
                             {candidate.email || 'Not available'}
                           </dd>
-                          <dt className="text-base-content/60">IAM ID</dt>
-                          <dd>{candidate.iamId}</dd>
-                          <dt className="text-base-content/60">Kerberos ID</dt>
-                          <dd>{candidate.kerberos || 'Not available'}</dd>
+                          <dt className="text-sm font-normal text-base-content/75">IAM ID</dt>
+                          <dd className="text-base font-normal text-base-content">
+                            {candidate.iamId}
+                          </dd>
+                          <dt className="text-sm font-normal text-base-content/75">
+                            Kerberos ID
+                          </dt>
+                          <dd className="text-base font-normal text-base-content">
+                            {candidate.kerberos || 'Not available'}
+                          </dd>
                         </dl>
                         {!candidate.isActive && (
                           <p className="mt-3 text-sm text-error">
@@ -228,7 +234,7 @@ export function EmulateUserDialog({
                   ))}
                 </div>
                 {selectedCandidate && (
-                  <p className="mt-4 text-sm text-base-content/70">
+                  <p className="mt-4 text-sm text-base-content/80">
                     You will use Booking as {selectedCandidate.name}.
                     {!selectedCandidate.hasUserAccount &&
                       ' A Booking account will be created for this person.'}
