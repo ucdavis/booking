@@ -64,15 +64,15 @@ function TeamOverviewPage() {
           </p>
         )}
       </section>
-      <TeamPaymentsSettings
-        canManage={canManage}
-        key={`${teamSlug}:${user.id}:${canManage}`}
-        teamSlug={teamSlug}
-      />
       <TeamSpaces
         canAttach={isSiteAdmin}
         key={`${teamSlug}:${user.id}:${isSiteAdmin}`}
         team={team}
+      />
+      <TeamPaymentsSettings
+        canManage={canManage}
+        key={`${teamSlug}:${user.id}:${canManage}`}
+        teamSlug={teamSlug}
       />
     </div>
   );
