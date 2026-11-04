@@ -16,7 +16,7 @@ function SiteAdminPage() {
     <main className="content-container py-4 sm:py-8">
       <nav
         aria-label="Breadcrumb"
-        className="mb-5 text-sm text-base-content/65"
+        className="mb-5 text-sm text-base-content/75"
       >
         <Link className="hover:text-primary hover:underline" to="/temp">
           Home
@@ -28,7 +28,7 @@ function SiteAdminPage() {
       <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
         Site administration
       </h1>
-      <p className="mt-3 max-w-2xl text-lg text-base-content/70">
+      <p className="mt-3 max-w-2xl text-lg text-base-content/80">
         Manage access and administration across Booking.
       </p>
 
@@ -44,7 +44,7 @@ function SiteAdminPage() {
           <h2 className="mt-4 text-xl font-semibold text-primary">
             Site admin users
           </h2>
-          <p className="mt-3 grow text-base-content/70">
+          <p className="mt-3 grow text-base-content/80">
             View site administrators and manage who has access to site
             administration.
           </p>
@@ -62,7 +62,7 @@ function SiteAdminPage() {
         >
           <UserGroupIcon aria-hidden="true" className="h-7 w-7 text-primary" />
           <h2 className="mt-4 text-xl font-semibold text-primary">Teams</h2>
-          <p className="mt-3 grow text-base-content/70">
+          <p className="mt-3 grow text-base-content/80">
             View all teams, open team administration, and create new teams.
           </p>
           <span className="mt-6 flex items-center gap-2 font-semibold text-primary">
@@ -79,7 +79,7 @@ function SiteAdminPage() {
         >
           <BuildingOfficeIcon aria-hidden="true" className="h-7 w-7 text-primary" />
           <h2 className="mt-4 text-xl font-semibold text-primary">Spaces</h2>
-          <p className="mt-3 grow text-base-content/70">
+          <p className="mt-3 grow text-base-content/80">
             Create and update buildings and other named locations.
           </p>
           <span className="mt-6 flex items-center gap-2 font-semibold text-primary">
@@ -96,7 +96,7 @@ function SiteAdminPage() {
         >
           <DocumentTextIcon aria-hidden="true" className="h-7 w-7 text-primary" />
           <h2 className="mt-4 text-xl font-semibold text-primary">Resource templates</h2>
-          <p className="mt-3 grow text-base-content/70">Build and preview reusable request forms, manage templates, and duplicate existing forms.</p>
+          <p className="mt-3 grow text-base-content/80">Build and preview reusable request forms, manage templates, and duplicate existing forms.</p>
           <span className="mt-6 flex items-center gap-2 font-semibold text-primary">
             Manage resource templates
             <ArrowRightIcon aria-hidden="true" className="h-4 w-4 transition-transform group-hover:translate-x-1" />

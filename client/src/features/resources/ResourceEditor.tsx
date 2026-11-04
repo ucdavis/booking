@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useBlocker } from '@tanstack/react-router';
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ResourceDetail } from './models/ResourceDetail.ts';
 import type { ResourceOptions } from './models/ResourceOptions.ts';
 import type { SaveResourceRequest } from './models/SaveResourceRequest.ts';
@@ -141,9 +141,9 @@ export function ResourceEditor({
     () => readConfiguration(baseline, selectedTemplate),
     [baseline, selectedTemplate]
   );
-  const [editorView, setEditorView] = useState<
-    'build' | 'preview' | 'defaults'
-  >('build');
+  const [editorView, setEditorView] = useState<'details' | 'build' | 'preview'>(
+    'details'
+  );
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const saveFlowRef = useRef(false);
@@ -151,6 +151,8 @@ export function ResourceEditor({
   const activeTemplates = options.templates.filter(
     (template) => template.isActive
   );
+  const onlySpace = options.spaces.length === 1 ? options.spaces[0] : undefined;
+  const onlySpaceId = onlySpace ? String(onlySpace.id) : undefined;
   const saveMutation = useMutation({
     mutationFn: (request: SaveResourceRequest) =>
       baseline
@@ -333,9 +335,26 @@ export function ResourceEditor({
     },
     onSubmitInvalid: ({ formApi }) => {
       void formApi.validate('change');
+      const errors = validate({ value: formApi.state.values })?.fields;
+      if (errors) {
+        setEditorView(
+          Object.keys(errors).some(
+            (key) => key !== 'definition' && !key.startsWith('resourceDefaults')
+          )
+            ? 'details'
+            : errors.definition
+              ? 'build'
+              : 'details'
+        );
+      }
     },
     validators: { onChange: validate },
   });
+  useEffect(() => {
+    if (!baseline && onlySpaceId && form.state.values.spaceId !== onlySpaceId) {
+      form.setFieldValue('spaceId', onlySpaceId);
+    }
+  }, [baseline, form, onlySpaceId]);
   const blocker = useBlocker({
     enableBeforeUnload: () => form.state.isDirty || saveFlowRef.current,
     shouldBlockFn: () => form.state.isDirty,
@@ -347,7 +366,7 @@ export function ResourceEditor({
     <section>
       <nav
         aria-label="Breadcrumb"
-        className="mb-5 text-sm text-base-content/65"
+        className="mb-5 text-sm text-base-content/75"
       >
         <Link
           className="hover:text-primary hover:underline"
@@ -366,10 +385,12 @@ export function ResourceEditor({
           <h2 className="text-2xl font-semibold tracking-tight text-primary">
             {baseline ? 'Edit resource' : 'Create resource'}
           </h2>
-          <p className="mt-3 max-w-2xl text-base-content/70">
+          <p className="mt-2 max-w-2xl text-base-content/80">
             {baseline
               ? 'Update this resource and its reservation settings.'
-              : 'Choose a space and template, then customize your resource.'}
+              : selectedTemplate
+                ? 'Set the resource details and reservation settings, then review your form.'
+                : 'Choose a template to get started.'}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-3 self-start">
@@ -404,13 +425,6 @@ export function ResourceEditor({
           )}
         </div>
       </div>
-      {baseline?.config && (
-        <p className="mt-3 max-w-3xl text-sm text-base-content/65">
-          Configuration version {baseline.config.version}. Form, hours, and rate
-          changes create a new version. Existing reservations keep their saved
-          settings.
-        </p>
-      )}
       {blocker.status === 'blocked' && (
         <section
           aria-label="Unsaved changes"
@@ -446,7 +460,7 @@ export function ResourceEditor({
         </section>
       )}
       <form
-        className="mt-8"
+        className="mt-6"
         id={formId}
         noValidate
         onSubmit={(event) => {
@@ -460,178 +474,38 @@ export function ResourceEditor({
                 resourceDefaultsFromForm(form.state.values.resourceDefaults)
               ).length
             ) {
-              setEditorView('defaults');
+              setEditorView('details');
             }
             void form.handleSubmit();
           }
         }}
       >
-        <form.Subscribe
-          selector={(state) =>
-            [state.isSubmitting, state.values.spaceId] as const
-          }
-        >
-          {([isSubmitting, spaceId]) => (
+        <form.Subscribe selector={(state) => state.isSubmitting}>
+          {(isSubmitting) => (
             <fieldset className="space-y-6" disabled={isSaving || isSubmitting}>
-              <section
-                aria-label="Resource setup"
-                className="rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
-              >
-                <div
-                  className={
-                    baseline
-                      ? undefined
-                      : 'grid items-start gap-6 lg:grid-cols-2'
-                  }
-                >
-                  {baseline && (
-                    <section
-                      aria-label="Resource location"
-                      className="space-y-4"
-                    >
-                      <h3 className="text-xl font-semibold text-primary">
-                        Location
-                      </h3>
-                      <p className="font-semibold">{baseline.space.name}</p>
-                      {(baseline.space.description?.trim() ||
-                        baseline.space.address?.trim()) && (
-                        <div className="space-y-3 rounded-sm bg-base-200/60 p-4 text-sm text-base-content/75">
-                          {baseline.space.description?.trim() && (
-                            <p className="whitespace-pre-line">
-                              {baseline.space.description.trim()}
-                            </p>
-                          )}
-                          {baseline.space.address?.trim() && (
-                            <dl>
-                              <dt className="text-sm font-normal text-base-content/65">
-                                Address
-                              </dt>
-                              <dd className="mt-1 text-base font-normal whitespace-pre-line text-base-content">
-                                {baseline.space.address.trim()}
-                              </dd>
-                            </dl>
-                          )}
-                        </div>
-                      )}
-                      <p className="text-sm text-base-content/65">
-                        The resource stays in its current location.
-                      </p>
-                    </section>
-                  )}
-                  {!baseline && (
-                    <section
-                      aria-label="Resource location"
-                      className="space-y-4"
-                    >
-                      <h3 className="text-xl font-semibold text-primary">
-                        1. Choose a space
-                      </h3>
-                      {options.spaces.length === 0 ? (
-                        <p className="alert alert-warning" role="status">
-                          No active locations are available for this team. A
-                          location must be made available to the team before a
-                          resource can be created.
-                        </p>
-                      ) : (
-                        <form.AppField name="spaceId">
-                          {(field) => {
-                            const hasError =
-                              field.state.meta.isTouched &&
-                              !field.state.meta.isValid;
-                            return (
-                              <fieldset
-                                aria-describedby={
-                                  hasError
-                                    ? 'resource-location-error'
-                                    : undefined
-                                }
-                                aria-invalid={hasError || undefined}
-                                className="space-y-3"
-                              >
-                                <legend className="sr-only">Location</legend>
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                  {options.spaces.map((space) => {
-                                    const selected =
-                                      String(space.id) === field.state.value;
-                                    return (
-                                      <label
-                                        className={`flex cursor-pointer items-start gap-3 rounded-sm border p-4 transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary ${selected ? 'border-primary bg-primary/5' : 'border-base-300 bg-base-200 hover:border-primary/40'}`}
-                                        key={space.id}
-                                      >
-                                        <input
-                                          aria-label={space.name}
-                                          checked={selected}
-                                          className="radio radio-primary radio-sm mt-1 shrink-0"
-                                          name={field.name}
-                                          onBlur={field.handleBlur}
-                                          onChange={() =>
-                                            field.handleChange(String(space.id))
-                                          }
-                                          required
-                                          type="radio"
-                                          value={String(space.id)}
-                                        />
-                                        <span className="block min-w-0 space-y-2 break-words">
-                                          <span className="block font-semibold text-base-content">
-                                            {space.name}
-                                          </span>
-                                          {space.description?.trim() && (
-                                            <span className="block text-sm whitespace-pre-line text-base-content/75">
-                                              {space.description.trim()}
-                                            </span>
-                                          )}
-                                          {space.address?.trim() && (
-                                            <span className="block text-sm whitespace-pre-line text-base-content/65">
-                                              {space.address.trim()}
-                                            </span>
-                                          )}
-                                        </span>
-                                      </label>
-                                    );
-                                  })}
-                                </div>
-                                {hasError && (
-                                  <p
-                                    className="text-sm text-error"
-                                    id="resource-location-error"
-                                    role="alert"
-                                  >
-                                    {field.state.meta.errors
-                                      .filter(Boolean)
-                                      .join(', ')}
-                                  </p>
-                                )}
-                              </fieldset>
-                            );
-                          }}
-                        </form.AppField>
-                      )}
-                    </section>
+              {!baseline && (
+                <section aria-label="Resource setup" className="max-w-3xl">
+                  {options.spaces.length === 0 && (
+                    <p className="alert alert-warning mb-4" role="status">
+                      No active locations are available for this team. A
+                      location must be made available to the team before a
+                      resource can be created.
+                    </p>
                   )}
                   {!baseline && (
                     <section
                       aria-label="Resource template"
-                      className="space-y-3"
+                      className="space-y-2"
                     >
-                      <h3 className="text-xl font-semibold text-primary">
-                        2. Choose a resource template
-                      </h3>
                       {selectedTemplate ? (
-                        <>
-                          <p className="font-semibold">
-                            {selectedTemplate.name}
-                          </p>
-                          {selectedTemplate.description && (
-                            <p className="text-sm text-base-content/70">
-                              {selectedTemplate.description}
+                        <dl className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+                          <dt className="text-base-content/75">Template</dt>
+                          <dd className="min-w-0">
+                            <p className="font-semibold">
+                              {selectedTemplate.name}
                             </p>
-                          )}
-                          <p className="text-sm text-base-content/65">
-                            This resource has its own copy of the template.
-                            Later template changes will not change this
-                            resource.
-                          </p>
-                        </>
+                          </dd>
+                        </dl>
                       ) : activeTemplates.length ? (
                         <form.Field name="sourceTemplateId">
                           {(field) => {
@@ -654,20 +528,12 @@ export function ResourceEditor({
                                   }
                                   aria-invalid={hasError || undefined}
                                   className="select select-bordered w-full"
-                                  disabled={
-                                    !options.spaces.some(
-                                      (space) => String(space.id) === spaceId
-                                    )
-                                  }
+                                  disabled={options.spaces.length === 0}
                                   id="resource-template"
                                   name={field.name}
                                   onBlur={field.handleBlur}
                                   onChange={(event) => {
-                                    if (
-                                      !options.spaces.some(
-                                        (space) => String(space.id) === spaceId
-                                      )
-                                    ) {
+                                    if (options.spaces.length === 0) {
                                       return;
                                     }
                                     const template = activeTemplates.find(
@@ -738,299 +604,466 @@ export function ResourceEditor({
                       )}
                     </section>
                   )}
-                </div>
-              </section>
-              {canEdit && (
-                <div className="grid items-start gap-6 lg:grid-cols-2">
-                  <section
-                    aria-label="Resource details"
-                    className="min-w-0 space-y-5 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
+                </section>
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+                {canEdit && (
+                  <div
+                    aria-label="Configuration view"
+                    className="tabs tabs-border shrink-0"
+                    onKeyDown={(event) => {
+                      if (
+                        !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
+                          event.key
+                        )
+                      ) {
+                        return;
+                      }
+                      const tabs = Array.from(
+                        event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                          '[role="tab"]'
+                        )
+                      );
+                      const current = tabs.indexOf(
+                        document.activeElement as HTMLButtonElement
+                      );
+                      const next =
+                        event.key === 'Home'
+                          ? 0
+                          : event.key === 'End'
+                            ? tabs.length - 1
+                            : (current +
+                                (event.key === 'ArrowRight' ? 1 : -1) +
+                                tabs.length) %
+                              tabs.length;
+                      event.preventDefault();
+                      tabs[next]?.focus();
+                      tabs[next]?.click();
+                    }}
+                    role="tablist"
                   >
-                    <h3 className="text-xl font-semibold text-primary">
-                      {baseline
-                        ? 'Resource details'
-                        : '3. Describe the resource'}
-                    </h3>
-                    <div className="grid gap-5 sm:grid-cols-2">
-                      <form.AppField name="category">
-                        {(field) => (
-                          <field.SelectField
-                            label="Category"
-                            options={[...standardCategories, 'Other'].map(
-                              (category) => ({
-                                label: category,
-                                value: category,
-                              })
-                            )}
-                            placeholder="Choose a category"
-                          />
-                        )}
-                      </form.AppField>
-                      <form.Subscribe
-                        selector={(state) => state.values.category}
+                    {(
+                      [
+                        { label: 'Resource details', value: 'details' },
+                        { label: 'Customize form', value: 'build' },
+                        { label: 'Preview form', value: 'preview' },
+                      ] as const
+                    ).map(({ label, value }) => (
+                      <button
+                        aria-controls={`${formId}-${value === 'details' ? 'details-panel' : 'panel'}`}
+                        aria-selected={editorView === value}
+                        className={`tab font-semibold ${editorView === value ? 'tab-active text-primary' : ''}`}
+                        id={`${formId}-${value}`}
+                        key={value}
+                        onClick={() => setEditorView(value)}
+                        role="tab"
+                        tabIndex={editorView === value ? 0 : -1}
+                        type="button"
                       >
-                        {(category) =>
-                          category === 'Other' && (
-                            <form.AppField name="customCategory">
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <form.Subscribe
+                  selector={(state) =>
+                    [
+                      state.errors,
+                      state.isDirty,
+                      state.submissionAttempts,
+                    ] as const
+                  }
+                >
+                  {([errors, isDirty, submissionAttempts]) => (
+                    <div
+                      aria-live="polite"
+                      className="min-w-0 text-sm sm:ml-auto sm:max-w-xl sm:text-right"
+                    >
+                      {submissionAttempts > 0 && errors.length > 0 ? (
+                        <p className="text-error" role="alert">
+                          {[...new Set(errors)].join(' ')}
+                        </p>
+                      ) : saveMutation.isError ? (
+                        <p className="text-error" role="alert">
+                          {resourceErrorMessage(saveMutation.error)}
+                        </p>
+                      ) : saved && !isDirty ? (
+                        <p className="text-success" role="status">
+                          Resource saved.
+                        </p>
+                      ) : baseline && isDirty ? (
+                        <p className="text-base-content/75">
+                          You have unsaved changes.
+                        </p>
+                      ) : null}
+                    </div>
+                  )}
+                </form.Subscribe>
+              </div>
+              {canEdit && (
+                <>
+                  <div
+                    aria-labelledby={`${formId}-details`}
+                    className="grid items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
+                    hidden={editorView !== 'details'}
+                    id={`${formId}-details-panel`}
+                    role="tabpanel"
+                  >
+                    <section
+                      aria-label="Resource details"
+                      className="min-w-0 space-y-5 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
+                    >
+                      <h3 className="text-xl font-semibold text-primary">
+                        Resource details
+                      </h3>
+                      <section
+                        aria-label="Resource location"
+                        className="space-y-2"
+                      >
+                        {baseline || onlySpace ? (
+                          <dl className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                            <dt className="text-sm text-base-content/75">
+                              Location
+                            </dt>
+                            <dd>{baseline?.space.name ?? onlySpace?.name}</dd>
+                          </dl>
+                        ) : (
+                          <form.AppField name="spaceId">
+                            {(field) => {
+                              const hasError =
+                                field.state.meta.isTouched &&
+                                !field.state.meta.isValid;
+                              const space = options.spaces.find(
+                                (space) =>
+                                  String(space.id) === field.state.value
+                              );
+                              return (
+                                <>
+                                  <FieldWrapper
+                                    controlId="resource-location"
+                                    label="Location"
+                                  >
+                                    <select
+                                      aria-describedby={`resource-location-help${hasError ? ' resource-location-error' : ''}`}
+                                      aria-invalid={hasError || undefined}
+                                      className={`select select-bordered w-full ${hasError ? 'select-error' : ''}`}
+                                      id="resource-location"
+                                      name={field.name}
+                                      onBlur={field.handleBlur}
+                                      onChange={(event) =>
+                                        field.handleChange(event.target.value)
+                                      }
+                                      required
+                                      value={field.state.value}
+                                    >
+                                      <option value="">Choose a space</option>
+                                      {options.spaces.map((space) => (
+                                        <option
+                                          key={space.id}
+                                          value={String(space.id)}
+                                        >
+                                          {space.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </FieldWrapper>
+                                  <div
+                                    className="space-y-1 text-sm text-base-content/75"
+                                    id="resource-location-help"
+                                  >
+                                    {space?.description?.trim() && (
+                                      <p className="whitespace-pre-line">
+                                        {space.description.trim()}
+                                      </p>
+                                    )}
+                                    {space?.address?.trim() && (
+                                      <p className="whitespace-pre-line">
+                                        {space.address.trim()}
+                                      </p>
+                                    )}
+                                  </div>
+                                  {hasError && (
+                                    <p
+                                      className="text-sm text-error"
+                                      id="resource-location-error"
+                                      role="alert"
+                                    >
+                                      {field.state.meta.errors
+                                        .filter(Boolean)
+                                        .join(', ')}
+                                    </p>
+                                  )}
+                                </>
+                              );
+                            }}
+                          </form.AppField>
+                        )}
+                      </section>
+                      <div className="grid gap-5 sm:grid-cols-2">
+                        <form.AppField name="category">
+                          {(field) => (
+                            <field.SelectField
+                              label="Category"
+                              options={[...standardCategories, 'Other'].map(
+                                (category) => ({
+                                  label: category,
+                                  value: category,
+                                })
+                              )}
+                              placeholder="Choose a category"
+                            />
+                          )}
+                        </form.AppField>
+                        <form.Subscribe
+                          selector={(state) => state.values.category}
+                        >
+                          {(category) =>
+                            category === 'Other' && (
+                              <form.AppField name="customCategory">
+                                {(field) => (
+                                  <field.TextField
+                                    label="Other category"
+                                    placeholder="Enter a category"
+                                  />
+                                )}
+                              </form.AppField>
+                            )
+                          }
+                        </form.Subscribe>
+                      </div>
+                      <div className="grid gap-5 sm:grid-cols-2">
+                        <form.Subscribe
+                          selector={(state) => state.values.category}
+                        >
+                          {(category) => (
+                            <form.AppField
+                              listeners={{
+                                onChange: ({ value }) => {
+                                  if (!baseline && !slugEditedRef.current) {
+                                    form.setFieldValue(
+                                      'slug',
+                                      suggestSlug(value)
+                                    );
+                                  }
+                                },
+                              }}
+                              name="name"
+                            >
                               {(field) => (
                                 <field.TextField
-                                  label="Other category"
-                                  placeholder="Enter a category"
+                                  label="Resource name"
+                                  placeholder={
+                                    category === 'Room'
+                                      ? 'Enter a room name or number'
+                                      : 'Enter the resource name'
+                                  }
                                 />
                               )}
                             </form.AppField>
-                          )
-                        }
-                      </form.Subscribe>
-                    </div>
-                    <div className="grid gap-5 sm:grid-cols-2">
-                      <form.Subscribe
-                        selector={(state) => state.values.category}
-                      >
-                        {(category) => (
-                          <form.AppField
-                            listeners={{
-                              onChange: ({ value }) => {
-                                if (!baseline && !slugEditedRef.current) {
-                                  form.setFieldValue(
-                                    'slug',
-                                    suggestSlug(value)
-                                  );
-                                }
-                              },
-                            }}
-                            name="name"
-                          >
-                            {(field) => (
-                              <field.TextField
-                                label="Resource name"
-                                placeholder={
-                                  category === 'Room'
-                                    ? 'Enter a room name or number'
-                                    : 'Enter the resource name'
-                                }
+                          )}
+                        </form.Subscribe>
+                        <form.AppField name="capacity">
+                          {(field) => (
+                            <field.TextField
+                              label="Capacity (optional)"
+                              placeholder="Leave blank if not applicable"
+                            />
+                          )}
+                        </form.AppField>
+                      </div>
+                      <form.AppField name="slug">
+                        {(field) => {
+                          const hasError =
+                            field.state.meta.isTouched &&
+                            !field.state.meta.isValid;
+                          return (
+                            <FieldWrapper
+                              controlId="resource-slug"
+                              label="Resource slug"
+                            >
+                              <input
+                                aria-describedby={`resource-slug-help${hasError ? ' resource-slug-error' : ''}`}
+                                aria-invalid={hasError || undefined}
+                                autoCapitalize="none"
+                                autoComplete="off"
+                                className={`input input-bordered w-full ${hasError ? 'input-error' : ''}`}
+                                id="resource-slug"
+                                maxLength={120}
+                                name={field.name}
+                                onBlur={field.handleBlur}
+                                onChange={(event) => {
+                                  slugEditedRef.current = true;
+                                  field.handleChange(event.target.value);
+                                }}
+                                required
+                                spellCheck={false}
+                                type="text"
+                                value={field.state.value}
                               />
-                            )}
-                          </form.AppField>
-                        )}
-                      </form.Subscribe>
-                      <form.AppField name="capacity">
-                        {(field) => (
-                          <field.TextField
-                            label="Capacity (optional)"
-                            placeholder="Leave blank if not applicable"
-                          />
-                        )}
-                      </form.AppField>
-                    </div>
-                    <form.AppField name="slug">
-                      {(field) => {
-                        const hasError =
-                          field.state.meta.isTouched &&
-                          !field.state.meta.isValid;
-                        return (
-                          <FieldWrapper
-                            controlId="resource-slug"
-                            label="Resource slug"
-                          >
-                            <input
-                              aria-describedby={`resource-slug-help${hasError ? ' resource-slug-error' : ''}`}
-                              aria-invalid={hasError || undefined}
-                              autoCapitalize="none"
-                              autoComplete="off"
-                              className={`input input-bordered w-full ${hasError ? 'input-error' : ''}`}
-                              id="resource-slug"
-                              maxLength={120}
-                              name={field.name}
-                              onBlur={field.handleBlur}
-                              onChange={(event) => {
-                                slugEditedRef.current = true;
-                                field.handleChange(event.target.value);
-                              }}
-                              required
-                              spellCheck={false}
-                              type="text"
-                              value={field.state.value}
-                            />
-                            <p
-                              className="mt-2 text-sm text-base-content/65"
-                              id="resource-slug-help"
-                            >
-                              Use lowercase letters, numbers, and single hyphens
-                              between words. You can change the suggested slug.
-                              It must be unique within this team’s resources.
-                            </p>
-                          </FieldWrapper>
-                        );
-                      }}
-                    </form.AppField>
-                    <form.Field name="description">
-                      {(field) => {
-                        const hasError =
-                          field.state.meta.isTouched &&
-                          !field.state.meta.isValid;
-                        return (
-                          <div>
-                            <label
-                              className="mb-2 block text-sm font-semibold text-base-content"
-                              htmlFor="resource-description"
-                            >
-                              Description (optional)
-                            </label>
-                            <textarea
-                              aria-describedby={
-                                hasError
-                                  ? 'resource-description-error'
-                                  : undefined
-                              }
-                              aria-invalid={hasError || undefined}
-                              className="textarea textarea-bordered w-full"
-                              id="resource-description"
-                              maxLength={10_000}
-                              name={field.name}
-                              onBlur={field.handleBlur}
-                              onChange={(event) =>
-                                field.handleChange(event.target.value)
-                              }
-                              rows={3}
-                              value={field.state.value}
-                            />
-                            {hasError && (
                               <p
-                                className="mt-2 text-sm text-error"
-                                id="resource-description-error"
-                                role="alert"
+                                className="mt-2 text-sm text-base-content/75"
+                                id="resource-slug-help"
                               >
-                                {field.state.meta.errors.join(' ')}
+                                Use lowercase letters, numbers, and single
+                                hyphens between words. You can change the
+                                suggested slug. It must be unique within this
+                                team’s resources.
                               </p>
-                            )}
-                          </div>
-                        );
-                      }}
-                    </form.Field>
-                  </section>
-                  <section
-                    aria-label="Reservation settings"
-                    className="min-w-0 space-y-5 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
-                  >
-                    <h3 className="text-xl font-semibold text-primary">
-                      Reservation settings
-                    </h3>
-                    <div className="grid gap-5 sm:grid-cols-2">
-                      <form.AppField name="approvalMode">
-                        {(field) => (
-                          <field.SelectField
-                            label="Reservation approval"
-                            options={[
-                              { label: 'Manual approval', value: 'manual' },
-                              {
-                                label: 'Automatic approval',
-                                value: 'automatic',
-                              },
-                            ]}
-                          />
-                        )}
+                            </FieldWrapper>
+                          );
+                        }}
                       </form.AppField>
-                      {baseline?.parentResourceId == null ? (
-                        <form.AppField name="publicAccess">
+                      <form.Field name="description">
+                        {(field) => {
+                          const hasError =
+                            field.state.meta.isTouched &&
+                            !field.state.meta.isValid;
+                          return (
+                            <div>
+                              <label
+                                className="mb-2 block text-sm font-semibold text-base-content"
+                                htmlFor="resource-description"
+                              >
+                                Description (optional)
+                              </label>
+                              <textarea
+                                aria-describedby={
+                                  hasError
+                                    ? 'resource-description-error'
+                                    : undefined
+                                }
+                                aria-invalid={hasError || undefined}
+                                className="textarea textarea-bordered w-full"
+                                id="resource-description"
+                                maxLength={10_000}
+                                name={field.name}
+                                onBlur={field.handleBlur}
+                                onChange={(event) =>
+                                  field.handleChange(event.target.value)
+                                }
+                                rows={3}
+                                value={field.state.value}
+                              />
+                              {hasError && (
+                                <p
+                                  className="mt-2 text-sm text-error"
+                                  id="resource-description-error"
+                                  role="alert"
+                                >
+                                  {field.state.meta.errors.join(' ')}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        }}
+                      </form.Field>
+                      <div className="border-t border-base-300 pt-5">
+                        <ResourceDefaultsEditor
+                          context="resource"
+                          disabled={isSaving || isSubmitting}
+                          embedded
+                          fields="resourceDefaults"
+                          form={form}
+                          readOnly={false}
+                          unavailableReason={
+                            configuration.detailsUnavailableReason
+                          }
+                        />
+                      </div>
+                    </section>
+                    <section
+                      aria-label="Reservation settings"
+                      className="min-w-0 space-y-5 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
+                    >
+                      <h3 className="text-xl font-semibold text-primary">
+                        Reservation settings
+                      </h3>
+                      <div className="grid gap-5 sm:grid-cols-2">
+                        <form.AppField name="approvalMode">
                           {(field) => (
                             <field.SelectField
-                              label="Public visibility"
+                              label="Reservation approval"
                               options={[
+                                { label: 'Manual approval', value: 'manual' },
                                 {
-                                  label: 'Hidden from the public',
-                                  value: 'none',
-                                },
-                                {
-                                  label: 'Availability only',
-                                  value: 'availability',
-                                },
-                                {
-                                  label: 'Resource details and availability',
-                                  value: 'details',
+                                  label: 'Automatic approval',
+                                  value: 'automatic',
                                 },
                               ]}
                             />
                           )}
                         </form.AppField>
-                      ) : (
-                        <p className="self-center text-sm text-base-content/65">
-                          Public visibility is inherited from the parent
-                          resource.
-                        </p>
-                      )}
-                    </div>
-                    {(
-                      [
-                        ['isActive', 'Active resource'],
-                        [
-                          'isReservable',
-                          'Allow reservations for this resource',
-                        ],
-                        ['followTeamCalendar', 'Follow the team calendar'],
-                        [
-                          'allowReservationSharing',
-                          'Allow reservation sharing',
-                        ],
-                      ] as const
-                    ).map(([name, label]) => (
-                      <form.Field key={name} name={name}>
-                        {(field) => (
-                          <label className="flex items-center gap-3 font-semibold text-base-content">
-                            <input
-                              checked={field.state.value}
-                              className="checkbox checkbox-primary"
-                              name={field.name}
-                              onBlur={field.handleBlur}
-                              onChange={(event) =>
-                                field.handleChange(event.target.checked)
-                              }
-                              type="checkbox"
-                            />
-                            {label}
-                          </label>
+                        {baseline?.parentResourceId == null ? (
+                          <form.AppField name="publicAccess">
+                            {(field) => (
+                              <field.SelectField
+                                label="Public visibility"
+                                options={[
+                                  {
+                                    label: 'Hidden from the public',
+                                    value: 'none',
+                                  },
+                                  {
+                                    label: 'Availability only',
+                                    value: 'availability',
+                                  },
+                                  {
+                                    label: 'Resource details and availability',
+                                    value: 'details',
+                                  },
+                                ]}
+                              />
+                            )}
+                          </form.AppField>
+                        ) : (
+                          <p className="self-center text-sm text-base-content/75">
+                            Public visibility is inherited from the parent
+                            resource.
+                          </p>
                         )}
-                      </form.Field>
-                    ))}
-                    <p className="text-sm text-base-content/65">
-                      Clear Active resource and save to deactivate it. Check it
-                      again and save to reactivate. Existing reservations and
-                      history are kept.
-                    </p>
-                  </section>
-                </div>
+                      </div>
+                      {(
+                        [
+                          ['isActive', 'Active resource'],
+                          [
+                            'isReservable',
+                            'Allow reservations for this resource',
+                          ],
+                          ['followTeamCalendar', 'Follow the team calendar'],
+                          [
+                            'allowReservationSharing',
+                            'Allow reservation sharing',
+                          ],
+                        ] as const
+                      ).map(([name, label]) => (
+                        <form.Field key={name} name={name}>
+                          {(field) => (
+                            <label className="flex items-center gap-3 font-semibold text-base-content">
+                              <input
+                                checked={field.state.value}
+                                className="checkbox checkbox-primary"
+                                name={field.name}
+                                onBlur={field.handleBlur}
+                                onChange={(event) =>
+                                  field.handleChange(event.target.checked)
+                                }
+                                type="checkbox"
+                              />
+                              {label}
+                            </label>
+                          )}
+                        </form.Field>
+                      ))}
+                      <p className="text-sm text-base-content/75">
+                        Clear Active resource and save to deactivate it. Check
+                        it again and save to reactivate. Existing reservations
+                        and history are kept.
+                      </p>
+                    </section>
+                  </div>
+                </>
               )}
             </fieldset>
-          )}
-        </form.Subscribe>
-        <form.Subscribe
-          selector={(state) =>
-            [state.errors, state.isDirty, state.submissionAttempts] as const
-          }
-        >
-          {([errors, isDirty, submissionAttempts]) => (
-            <div aria-live="polite" className="mt-5">
-              {submissionAttempts > 0 && errors.length > 0 && (
-                <p className="text-error" role="alert">
-                  {[...new Set(errors)].join(' ')}
-                </p>
-              )}
-              {saveMutation.isError && (
-                <p className="text-error" role="alert">
-                  {resourceErrorMessage(saveMutation.error)}
-                </p>
-              )}
-              {saved && !isDirty && (
-                <p className="text-success" role="status">
-                  Resource saved.
-                </p>
-              )}
-              {isDirty && (
-                <p className="mt-2 text-sm text-base-content/65">
-                  You have unsaved changes.
-                </p>
-              )}
-            </div>
           )}
         </form.Subscribe>
       </form>
@@ -1038,83 +1071,27 @@ export function ResourceEditor({
         <form.Subscribe selector={(state) => state.isSubmitting}>
           {(isSubmitting) => (
             <fieldset
-              className="mt-6 min-w-0 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
+              className="min-w-0 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
               disabled={isSaving || isSubmitting}
+              hidden={editorView === 'details'}
             >
-              <div
-                aria-label="Configuration view"
-                className="tabs tabs-border mb-6"
-                onKeyDown={(event) => {
-                  if (
-                    !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
-                      event.key
-                    )
-                  ) {
-                    return;
-                  }
-                  const tabs = Array.from(
-                    event.currentTarget.querySelectorAll<HTMLButtonElement>(
-                      '[role="tab"]'
-                    )
-                  );
-                  const current = tabs.indexOf(
-                    document.activeElement as HTMLButtonElement
-                  );
-                  const next =
-                    event.key === 'Home'
-                      ? 0
-                      : event.key === 'End'
-                        ? tabs.length - 1
-                        : (current +
-                            (event.key === 'ArrowRight' ? 1 : -1) +
-                            tabs.length) %
-                          tabs.length;
-                  event.preventDefault();
-                  tabs[next]?.focus();
-                  tabs[next]?.click();
-                }}
-                role="tablist"
-              >
-                {(
-                  [
-                    { label: 'Reservation form', value: 'build' },
-                    { label: 'Preview form', value: 'preview' },
-                    { label: 'Hours and rates', value: 'defaults' },
-                  ] as const
-                ).map(({ label, value }) => (
-                  <button
-                    aria-controls={`${formId}-panel`}
-                    aria-selected={editorView === value}
-                    className={`tab font-semibold ${editorView === value ? 'tab-active text-primary' : ''}`}
-                    id={`${formId}-${value}`}
-                    key={value}
-                    onClick={() => setEditorView(value)}
-                    role="tab"
-                    tabIndex={editorView === value ? 0 : -1}
-                    type="button"
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
               <div
                 aria-labelledby={`${formId}-${editorView}`}
                 id={`${formId}-panel`}
                 role="tabpanel"
               >
-                {editorView !== 'defaults' &&
-                  configuration.formUnavailableReason && (
-                    <div
-                      className="rounded-sm border border-warning bg-warning/10 p-4"
-                      role="status"
-                    >
-                      <p>{configuration.formUnavailableReason}</p>
-                      <p className="mt-2 text-sm">
-                        The saved form will be preserved when you save other
-                        resource changes.
-                      </p>
-                    </div>
-                  )}
+                {configuration.formUnavailableReason && (
+                  <div
+                    className="rounded-sm border border-warning bg-warning/10 p-4"
+                    role="status"
+                  >
+                    <p>{configuration.formUnavailableReason}</p>
+                    <p className="mt-2 text-sm">
+                      The saved form will be preserved when you save other
+                      resource changes.
+                    </p>
+                  </div>
+                )}
                 {editorView === 'build' &&
                   !configuration.formUnavailableReason && (
                     <form.Field name="definition">
@@ -1128,17 +1105,6 @@ export function ResourceEditor({
                       )}
                     </form.Field>
                   )}
-                {editorView === 'defaults' && (
-                  <ResourceDefaultsEditor
-                    context="resource"
-                    disabled={isSaving || isSubmitting}
-                    embedded
-                    fields="resourceDefaults"
-                    form={form}
-                    readOnly={false}
-                    unavailableReason={configuration.detailsUnavailableReason}
-                  />
-                )}
                 {editorView === 'preview' &&
                   !configuration.formUnavailableReason && (
                     <form.Subscribe

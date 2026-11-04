@@ -90,7 +90,7 @@ function FormComponent() {
         {/* Header Section */}
         <header className="text-center mb-16">
           <h1 className="text-5xl font-bold mb-4">Form Example</h1>
-          <p className="text-xl max-w-2xl mx-auto text-base-content/70">
+          <p className="text-xl max-w-2xl mx-auto text-base-content/80">
             This page demonstrates our custom form components built with
             TanStack Form and Zod validation. The form includes real-time
             validation, async validation, loading states, and modern styling
@@ -104,7 +104,7 @@ function FormComponent() {
             <div className="card bg-base-100 rounded-sm border border-base-300 shadow-sm">
               <div className="card-body">
                 <h2 className="card-title text-2xl mb-6">Contact Form</h2>
-                <p className="text-base-content/70 mb-6">
+                <p className="text-base-content/80 mb-6">
                   Fill out the form below to see the custom form components with
                   Zod validation in action. Try submitting to see the loading
                   state and validation errors.
@@ -204,7 +204,7 @@ function FormComponent() {
                 <h3 className="card-title justify-center mb-2">
                   Zod Validation
                 </h3>
-                <p className="text-base-content/70">
+                <p className="text-base-content/80">
                   Schema-based validation with Zod for type-safe, declarative
                   validation rules
                 </p>
@@ -231,7 +231,7 @@ function FormComponent() {
                 <h3 className="card-title justify-center mb-2">
                   Loading States
                 </h3>
-                <p className="text-base-content/70">
+                <p className="text-base-content/80">
                   Beautiful loading indicators during form submission
                 </p>
               </div>
@@ -255,7 +255,7 @@ function FormComponent() {
                   </svg>
                 </div>
                 <h3 className="card-title justify-center mb-2">Type Safe</h3>
-                <p className="text-base-content/70">
+                <p className="text-base-content/80">
                   Full TypeScript support with type-safe form handling
                 </p>
               </div>

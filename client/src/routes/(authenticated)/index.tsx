@@ -13,7 +13,7 @@ function RouteComponent() {
       <img alt="UC Davis College of Agricultural and Environmental Sciences" height={77} src="/caes.svg" width={419} />
       <h1 className="mt-12 text-5xl font-bold">Booking</h1>
       <p className="mt-6 text-xl">Welcome, {user.name}.</p>
-      <p className="mt-2 text-base-content/70">
+      <p className="mt-2 text-base-content/80">
         Booking is in development. Application features will be added here.
       </p>
       <nav aria-label="Account" className="mt-6 flex gap-4">
@@ -22,7 +22,7 @@ function RouteComponent() {
       </nav>
       <section className="mt-12 border-t border-base-300 pt-8">
         <h2 className="text-2xl font-semibold">Development examples</h2>
-        <p className="mt-2 text-base-content/70">
+        <p className="mt-2 text-base-content/80">
           These pages came with the starter and use sample data.
         </p>
         <nav aria-label="Development examples" className="mt-4 flex flex-wrap gap-4">

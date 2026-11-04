@@ -9,7 +9,7 @@ export const Route = createFileRoute('/temp/admin/resources')({
 function ManageResourcesPage() {
   return (
     <main className="content-container py-4 sm:py-8">
-      <nav aria-label="Breadcrumb" className="mb-5 text-sm text-base-content/65">
+      <nav aria-label="Breadcrumb" className="mb-5 text-sm text-base-content/75">
         <Link className="hover:text-primary hover:underline" to="/temp">Home</Link>{' '}
         <span aria-hidden="true">/</span>{' '}
         <span aria-current="page">Manage resources</span>
@@ -17,14 +17,14 @@ function ManageResourcesPage() {
       <div className="flex flex-wrap items-end justify-between gap-5">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">Resource inventory</h1>
-          <p className="mt-3 max-w-2xl text-lg text-base-content/70">Maintain buildings, rooms, benches, and standalone equipment from one inventory.</p>
+          <p className="mt-3 max-w-2xl text-lg text-base-content/80">Maintain buildings, rooms, benches, and standalone equipment from one inventory.</p>
         </div>
         <button className="btn btn-primary" type="button"><PlusIcon aria-hidden="true" className="h-5 w-5" /> Add resource</button>
       </div>
 
       <section aria-labelledby="inventory-heading" className="mt-10 overflow-hidden rounded-sm border border-base-300 bg-base-200 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-base-300 px-5 py-5 sm:px-6">
-          <div><h2 className="font-semibold text-primary" id="inventory-heading">All resources</h2><p className="mt-1 text-sm text-base-content/65">{resources.length} items shown</p></div>
+          <div><h2 className="font-semibold text-primary" id="inventory-heading">All resources</h2><p className="mt-1 text-sm text-base-content/75">{resources.length} items shown</p></div>
           <label className="input input-sm flex items-center gap-2"><span className="sr-only">Search inventory</span><input placeholder="Search inventory" type="search" /></label>
         </div>
         <div className="overflow-x-auto">

@@ -91,7 +91,7 @@ export function TeamPaymentsSettings({
           check your permissions.
         </p>
       ) : paymentsQuery.isPending ? (
-        <p className="mt-5 text-base-content/70" role="status">
+        <p className="mt-5 text-base-content/80" role="status">
           Loading payments settings…
         </p>
       ) : (
@@ -109,13 +109,13 @@ export function TeamPaymentsSettings({
               >
                 {statusLabels[settings.status]}
               </p>
-              <p className="mt-2 text-sm text-base-content/70">
+              <p className="mt-2 text-sm text-base-content/80">
                 {settings.message || statusMessages[settings.status]}
               </p>
               <dl className="mt-5 grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
                 {settings.paymentsTeamName && (
                   <>
-                    <dt className="text-sm font-normal text-base-content/65">
+                    <dt className="text-sm font-normal text-base-content/75">
                       Payments team
                     </dt>
                     <dd className="break-words text-base font-normal text-base-content">
@@ -125,7 +125,7 @@ export function TeamPaymentsSettings({
                 )}
                 {settings.paymentsTeamSlug && (
                   <>
-                    <dt className="text-sm font-normal text-base-content/65">
+                    <dt className="text-sm font-normal text-base-content/75">
                       Payments team slug
                     </dt>
                     <dd className="break-all text-base font-normal text-base-content">
@@ -135,7 +135,7 @@ export function TeamPaymentsSettings({
                 )}
                 {canManage && settings.maskedApiKey && (
                   <>
-                    <dt className="text-sm font-normal text-base-content/65">
+                    <dt className="text-sm font-normal text-base-content/75">
                       Saved API key
                     </dt>
                     <dd className="break-all font-mono text-base font-normal text-base-content">

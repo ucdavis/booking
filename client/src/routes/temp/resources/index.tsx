@@ -56,7 +56,7 @@ function ResourceDirectoryPage() {
 
   return (
     <main className="content-container py-4 sm:py-8">
-      <nav aria-label="Breadcrumb" className="mb-5 text-sm text-base-content/65">
+      <nav aria-label="Breadcrumb" className="mb-5 text-sm text-base-content/75">
         <Link className="hover:text-primary hover:underline" to="/temp">
           Home
         </Link>{' '}
@@ -66,7 +66,7 @@ function ResourceDirectoryPage() {
 
       <div className="max-w-3xl">
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-primary sm:text-4xl">Find available resources</h1>
-        <p className="mt-3 text-lg leading-7 text-base-content/70">Search reservable rooms, lab benches, and equipment. Every result includes its building and location details.</p>
+        <p className="mt-3 text-lg leading-7 text-base-content/80">Search reservable rooms, lab benches, and equipment. Every result includes its building and location details.</p>
       </div>
 
       <section aria-labelledby="filters-heading" className="mt-8 rounded-sm border border-base-300 bg-base-200 p-5 sm:p-6 shadow-sm">
@@ -105,7 +105,7 @@ function ResourceDirectoryPage() {
       <section aria-labelledby="results-heading" className="mt-10">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="text-xl font-semibold text-primary" id="results-heading">{filteredResources.length} resources found</h2>
-          <p className="text-sm text-base-content/65">Availability is shown for today, September 24.</p>
+          <p className="text-sm text-base-content/75">Availability is shown for today, September 24.</p>
         </div>
         {filteredResources.length > 0 ? (
           <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -114,7 +114,7 @@ function ResourceDirectoryPage() {
         ) : (
           <div className="mt-5 rounded-sm border border-dashed border-base-300 bg-base-200 px-6 py-14 text-center">
             <h3 className="text-lg font-semibold">No resources match those filters</h3>
-            <p className="mt-2 text-base-content/70">Try removing a filter or search for a different feature.</p>
+            <p className="mt-2 text-base-content/80">Try removing a filter or search for a different feature.</p>
           </div>
         )}
       </section>

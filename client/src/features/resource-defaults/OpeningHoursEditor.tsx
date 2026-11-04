@@ -57,7 +57,7 @@ export const OpeningHoursEditor = withFieldGroup({
               {openingHours !== null && (
                 <>
                   <p
-                    className="text-sm text-base-content/65"
+                    className="text-sm text-base-content/75"
                     id={`${prefix}-help`}
                   >
                     Use local times in the resource space&apos;s time zone. No

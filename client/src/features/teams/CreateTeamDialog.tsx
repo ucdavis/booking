@@ -96,7 +96,7 @@ export function CreateTeamDialog({
         >
           Create a team
         </h2>
-        <p className="mt-2 text-base-content/70" id="create-team-description">
+        <p className="mt-2 text-base-content/80" id="create-team-description">
           Choose a name and URL for the new team.
         </p>
         <p className="mt-5 rounded-sm border border-warning/40 bg-warning/10 p-4 text-sm">
@@ -222,7 +222,7 @@ export function CreateTeamDialog({
                       value={field.state.value}
                     />
                     <p
-                      className="mt-2 text-sm text-base-content/65"
+                      className="mt-2 text-sm text-base-content/75"
                       id="create-team-slug-help"
                     >
                       Use lowercase letters, numbers, and hyphens. Team URL:{' '}

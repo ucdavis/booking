@@ -205,7 +205,7 @@ export function ResourceTemplateEditor({
     >
       <nav
         aria-label="Breadcrumb"
-        className="mb-5 text-sm text-base-content/65"
+        className="mb-5 text-sm text-base-content/75"
       >
         {!teamSlug && (
           <>
@@ -245,7 +245,7 @@ export function ResourceTemplateEditor({
               )
             }
           </form.Subscribe>
-          <p className="mt-3 max-w-2xl text-base-content/70">
+          <p className="mt-3 max-w-2xl text-base-content/80">
             {isArchived
               ? 'Review this archived template.'
               : isSystemTemplate
@@ -286,7 +286,7 @@ export function ResourceTemplateEditor({
         </div>
       </div>
       {currentTemplate && (
-        <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-base-content/65">
+        <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-base-content/75">
           <span className="badge badge-soft">
             Version {currentTemplate.formSchemaVersion}
           </span>
@@ -347,62 +347,98 @@ export function ResourceTemplateEditor({
               aria-label="Template editor"
               className="min-w-0 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
             >
-              <div
-                aria-label="Editor view"
-                className="tabs tabs-border mb-6"
-                onKeyDown={(event) => {
-                  if (
-                    !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
-                      event.key
-                    )
-                  ) {
-                    return;
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+                <div
+                  aria-label="Editor view"
+                  className="tabs tabs-border shrink-0"
+                  onKeyDown={(event) => {
+                    if (
+                      !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
+                        event.key
+                      )
+                    ) {
+                      return;
+                    }
+                    const tabs = Array.from(
+                      event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                        '[role="tab"]'
+                      )
+                    );
+                    const current = tabs.indexOf(
+                      document.activeElement as HTMLButtonElement
+                    );
+                    const next =
+                      event.key === 'Home'
+                        ? 0
+                        : event.key === 'End'
+                          ? tabs.length - 1
+                          : (current +
+                              (event.key === 'ArrowRight' ? 1 : -1) +
+                              tabs.length) %
+                            tabs.length;
+                    event.preventDefault();
+                    tabs[next]?.focus();
+                    tabs[next]?.click();
+                  }}
+                  role="tablist"
+                >
+                  {[
+                    { label: 'Template details', value: 'details' as const },
+                    ...(!isReadOnly
+                      ? [{ label: 'Build form', value: 'build' as const }]
+                      : []),
+                    { label: 'Preview form', value: 'preview' as const },
+                    { label: 'Resource defaults', value: 'defaults' as const },
+                  ].map(({ label, value }) => (
+                    <button
+                      aria-controls={`${formId}-panel`}
+                      aria-selected={activeView === value}
+                      className={`tab font-semibold ${activeView === value ? 'tab-active text-primary' : ''}`}
+                      id={`${formId}-${value}`}
+                      key={value}
+                      onClick={() => setEditorView(value)}
+                      role="tab"
+                      tabIndex={activeView === value ? 0 : -1}
+                      type="button"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <form.Subscribe
+                  selector={(state) =>
+                    [
+                      state.errors,
+                      state.isDirty,
+                      state.submissionAttempts,
+                    ] as const
                   }
-                  const tabs = Array.from(
-                    event.currentTarget.querySelectorAll<HTMLButtonElement>(
-                      '[role="tab"]'
-                    )
-                  );
-                  const current = tabs.indexOf(
-                    document.activeElement as HTMLButtonElement
-                  );
-                  const next =
-                    event.key === 'Home'
-                      ? 0
-                      : event.key === 'End'
-                        ? tabs.length - 1
-                        : (current +
-                            (event.key === 'ArrowRight' ? 1 : -1) +
-                            tabs.length) %
-                          tabs.length;
-                  event.preventDefault();
-                  tabs[next]?.focus();
-                  tabs[next]?.click();
-                }}
-                role="tablist"
-              >
-                {[
-                  { label: 'Template details', value: 'details' as const },
-                  ...(!isReadOnly
-                    ? [{ label: 'Build form', value: 'build' as const }]
-                    : []),
-                  { label: 'Preview form', value: 'preview' as const },
-                  { label: 'Resource defaults', value: 'defaults' as const },
-                ].map(({ label, value }) => (
-                  <button
-                    aria-controls={`${formId}-panel`}
-                    aria-selected={activeView === value}
-                    className={`tab font-semibold ${activeView === value ? 'tab-active text-primary' : ''}`}
-                    id={`${formId}-${value}`}
-                    key={value}
-                    onClick={() => setEditorView(value)}
-                    role="tab"
-                    tabIndex={activeView === value ? 0 : -1}
-                    type="button"
-                  >
-                    {label}
-                  </button>
-                ))}
+                >
+                  {([errors, isDirty, submissionAttempts]) => (
+                    <div
+                      aria-live="polite"
+                      className="min-w-0 text-sm sm:ml-auto sm:max-w-xl sm:text-right"
+                    >
+                      {submissionAttempts > 0 && errors.length > 0 ? (
+                        <p className="text-error" role="alert">
+                          {[...new Set(errors)].join(' ')}
+                        </p>
+                      ) : saveMutation.isError ? (
+                        <p className="text-error" role="alert">
+                          {resourceTemplateErrorMessage(saveMutation.error)}
+                        </p>
+                      ) : saved && !isDirty ? (
+                        <p className="text-success" role="status">
+                          Template saved.
+                        </p>
+                      ) : isDirty ? (
+                        <p className="text-base-content/75">
+                          You have unsaved changes.
+                        </p>
+                      ) : null}
+                    </div>
+                  )}
+                </form.Subscribe>
               </div>
               <div
                 aria-labelledby={`${formId}-${activeView}`}
@@ -515,7 +551,7 @@ export function ResourceTemplateEditor({
                               value={field.state.value}
                             />
                             <p
-                              className="mt-2 text-sm text-base-content/65"
+                              className="mt-2 text-sm text-base-content/75"
                               id="template-description-help"
                             >
                               Optional. Describe what this template is for in
@@ -535,7 +571,7 @@ export function ResourceTemplateEditor({
                       }}
                     </form.Field>
                     {currentTemplate && !isReadOnly && (
-                      <p className="text-sm text-base-content/65">
+                      <p className="text-sm text-base-content/75">
                         Clear Active template and save to archive this version.
                         Save form or default changes before archiving.
                       </p>
@@ -575,36 +611,6 @@ export function ResourceTemplateEditor({
               </div>
             </section>
           </fieldset>
-        )}
-      </form.Subscribe>
-      <form.Subscribe
-        selector={(state) =>
-          [state.errors, state.isDirty, state.submissionAttempts] as const
-        }
-      >
-        {([errors, isDirty, submissionAttempts]) => (
-          <div aria-live="polite" className="mt-5">
-            {submissionAttempts > 0 && errors.length > 0 && (
-              <p className="text-error" role="alert">
-                {[...new Set(errors)].join(' ')}
-              </p>
-            )}
-            {saveMutation.isError && (
-              <p className="text-error" role="alert">
-                {resourceTemplateErrorMessage(saveMutation.error)}
-              </p>
-            )}
-            {saved && !isDirty && (
-              <p className="text-success" role="status">
-                Template saved.
-              </p>
-            )}
-            {isDirty && (
-              <p className="mt-2 text-sm text-base-content/65">
-                You have unsaved changes.
-              </p>
-            )}
-          </div>
         )}
       </form.Subscribe>
     </Container>

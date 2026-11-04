@@ -141,7 +141,7 @@ function ReservationHomePage() {
                 {title}
               </h3>
               <div className="mt-1 flex items-end justify-between gap-4">
-                <p className="text-sm leading-6 text-base-content/70">
+                <p className="text-sm leading-6 text-base-content/80">
                   {description}
                 </p>
                 <ArrowRightIcon
@@ -198,7 +198,7 @@ function ReservationHomePage() {
                     <h3 className="font-semibold">
                       {reservation.resourceName}
                     </h3>
-                    <p className="mt-1 text-sm text-base-content/70">
+                    <p className="mt-1 text-sm text-base-content/80">
                       {reservation.building} ·{' '}
                       {timeFormatter.format(new Date(reservation.start))}–
                       {timeFormatter.format(new Date(reservation.end))}
@@ -234,7 +234,7 @@ function ReservationHomePage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="font-semibold">{building.name}</h3>
-                    <p className="mt-1 text-sm text-base-content/70">
+                    <p className="mt-1 text-sm text-base-content/80">
                       {building.resourceCount} reservable resources
                     </p>
                   </div>

@@ -61,7 +61,7 @@ function RouteComponent() {
             <h2 className="text-2xl font-bold" id="gunrock-fonts">
               Gunrock font preview
             </h2>
-            <p className="text-base-content/70">
+            <p className="text-base-content/80">
               Gunrock Tailwind 2.6.0 provides fourteen Proxima Nova faces.
             </p>
           </div>
@@ -72,7 +72,7 @@ function RouteComponent() {
                 key={label}
               >
                 <div className="card-body gap-2 p-5">
-                  <p className="text-sm text-base-content/70">
+                  <p className="text-sm text-base-content/80">
                     Proxima Nova {label}
                   </p>
                   <p className={`font-sans text-2xl ${className}`}>
@@ -84,7 +84,7 @@ function RouteComponent() {
           </div>
           <article className="card border border-base-300 bg-base-100 rounded-sm shadow-sm">
             <div className="card-body gap-2">
-              <p className="text-sm text-base-content/70">Ryman display</p>
+              <p className="text-sm text-base-content/80">Ryman display</p>
               <p className="font-display text-5xl">Aggies lead the way</p>
             </div>
           </article>
@@ -113,7 +113,7 @@ function RouteComponent() {
               placeholder="My awesome page"
               type="text"
             />
-            <p className="text-base-content/65">
+            <p className="text-base-content/75">
               You can edit page title later on from settings
             </p>
           </fieldset>

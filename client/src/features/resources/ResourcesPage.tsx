@@ -54,7 +54,7 @@ export function ResourcesPage({ teamSlug }: { teamSlug: string }) {
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold text-primary">Resources</h2>
-          <p className="mt-3 max-w-2xl text-base-content/70">
+          <p className="mt-3 max-w-2xl text-base-content/80">
             Manage your team’s rooms, equipment, and other resources. Start with
             a template, then customize each resource’s settings.
           </p>
@@ -111,7 +111,7 @@ export function ResourcesPage({ teamSlug }: { teamSlug: string }) {
         ) : resources.length === 0 ? (
           <div className="mt-6 rounded-sm border border-dashed border-base-300 p-8">
             <h3 className="text-lg font-semibold">No resources yet</h3>
-            <p className="mt-2 text-base-content/70">
+            <p className="mt-2 text-base-content/80">
               Create your first resource from a team or system template. Choose
               one of the locations that a site administrator has made available
               to your team.
@@ -161,7 +161,7 @@ export function ResourcesPage({ teamSlug }: { teamSlug: string }) {
                     <td>{resource.capacity ?? '—'}</td>
                     <td>
                       <span
-                        className={`badge badge-sm ${resource.isActive ? 'badge-success' : 'badge-ghost'}`}
+                        className={`badge badge-sm ${resource.isActive ? 'badge-success' : 'badge-neutral'}`}
                       >
                         {resource.isActive ? 'Active' : 'Inactive'}
                       </span>

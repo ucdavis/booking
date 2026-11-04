@@ -224,7 +224,7 @@ export function SpaceTeamsDialog({
         >
           Manage teams for {space.name}
         </h2>
-        <p className="mt-2 text-base-content/70" id="space-teams-description">
+        <p className="mt-2 text-base-content/80" id="space-teams-description">
           Assigned teams can create resources in this space while it is active.
         </p>
         {accessDenied ? (
@@ -273,7 +273,7 @@ export function SpaceTeamsDialog({
                   </button>
                 </div>
               ) : linkedTeamsQuery.data.length === 0 ? (
-                <p className="mt-3 text-base-content/70">
+                <p className="mt-3 text-base-content/80">
                   No teams are assigned to this space.
                 </p>
               ) : (
@@ -410,7 +410,7 @@ export function SpaceTeamsDialog({
                   </button>
                 </div>
               ) : linkedTeamsQuery.isSuccess && availableTeams.length === 0 ? (
-                <p className="mt-3 text-base-content/70">
+                <p className="mt-3 text-base-content/80">
                   No unassigned teams are available.
                 </p>
               ) : (

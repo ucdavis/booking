@@ -72,7 +72,7 @@ function SiteAdminUsersPage() {
         accessorKey: 'isActive',
         cell: ({ row }) => (
           <span
-            className={`badge badge-sm ${row.original.isActive ? 'badge-success badge-outline' : 'badge-ghost'}`}
+            className={`badge badge-sm ${row.original.isActive ? 'badge-success' : 'badge-neutral'}`}
           >
             {row.original.isActive ? 'Active' : 'Inactive'}
           </span>
@@ -112,7 +112,7 @@ function SiteAdminUsersPage() {
     <main className="content-container py-4 sm:py-8">
       <nav
         aria-label="Breadcrumb"
-        className="mb-5 text-sm text-base-content/65"
+        className="mb-5 text-sm text-base-content/75"
       >
         <Link className="hover:text-primary hover:underline" to="/temp">
           Home
@@ -130,7 +130,7 @@ function SiteAdminUsersPage() {
           <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
             Site admin users
           </h1>
-          <p className="mt-3 max-w-2xl text-base-content/70">
+          <p className="mt-3 max-w-2xl text-base-content/80">
             Manage who can administer Booking. You can add a person or remove
             another user&apos;s admin access.
           </p>
@@ -181,7 +181,7 @@ function SiteAdminUsersPage() {
         className="mt-8 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
       >
         {usersQuery.isPending ? (
-          <p className="py-8 text-center text-base-content/70" role="status">
+          <p className="py-8 text-center text-base-content/80" role="status">
             Loading admin users…
           </p>
         ) : usersQuery.isError ? (
@@ -198,7 +198,7 @@ function SiteAdminUsersPage() {
             </button>
           </div>
         ) : usersQuery.data.length === 0 ? (
-          <p className="py-8 text-center text-base-content/70">
+          <p className="py-8 text-center text-base-content/80">
             There are no site admin users.
           </p>
         ) : (

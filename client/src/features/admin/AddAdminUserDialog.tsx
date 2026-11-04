@@ -106,7 +106,7 @@ export function AddAdminUserDialog({
         >
           Add a site admin user
         </h2>
-        <p className="mt-2 text-base-content/70" id="add-admin-description">
+        <p className="mt-2 text-base-content/80" id="add-admin-description">
           Find a person, review their details, and grant access to site
           administration.
         </p>
@@ -158,7 +158,7 @@ export function AddAdminUserDialog({
 
         <div aria-live="polite" className="mt-5">
           {submittedQuery && peopleQuery.isFetching && (
-            <p className="text-base-content/70" role="status">
+            <p className="text-base-content/80" role="status">
               Searching for a matching person…
             </p>
           )}
@@ -185,7 +185,7 @@ export function AddAdminUserDialog({
                     : 'Select a matching person'}
                 </legend>
                 {people.length === 10 && (
-                  <p className="mb-3 text-sm text-base-content/70">
+                  <p className="mb-3 text-sm text-base-content/80">
                     Showing the first 10 matches. Search by IAM ID or Kerberos
                     ID to narrow the results.
                   </p>
@@ -216,15 +216,15 @@ export function AddAdminUserDialog({
                       <div className="min-w-0">
                         <p className="font-semibold">{person.name}</p>
                         <dl className="mt-2 grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
-                          <dt className="text-sm font-normal text-base-content/65">Email</dt>
+                          <dt className="text-sm font-normal text-base-content/75">Email</dt>
                           <dd className="break-all text-base font-normal text-base-content">
                             {person.email || 'Not available'}
                           </dd>
-                          <dt className="text-sm font-normal text-base-content/65">IAM ID</dt>
+                          <dt className="text-sm font-normal text-base-content/75">IAM ID</dt>
                           <dd className="text-base font-normal text-base-content">
                             {person.iamId}
                           </dd>
-                          <dt className="text-sm font-normal text-base-content/65">
+                          <dt className="text-sm font-normal text-base-content/75">
                             Kerberos ID
                           </dt>
                           <dd className="text-base font-normal text-base-content">
@@ -248,7 +248,7 @@ export function AddAdminUserDialog({
                 {selectedPerson &&
                   !selectedPerson.isAdmin &&
                   selectedPerson.isActive && (
-                    <p className="mt-4 text-sm text-base-content/70">
+                    <p className="mt-4 text-sm text-base-content/80">
                       Adding {selectedPerson.name} grants access to site
                       administration, including managing other site admin users.
                     </p>

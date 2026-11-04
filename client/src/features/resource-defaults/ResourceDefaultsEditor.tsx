@@ -35,7 +35,7 @@ export const ResourceDefaultsEditor = withFieldGroup({
           <h2 className="text-xl font-semibold text-primary">
             {context === 'resource' ? 'Hours and rates' : 'Resource defaults'}
           </h2>
-          <p className="mt-2 text-sm text-base-content/65">
+          <p className="mt-2 text-sm text-base-content/75">
             {context === 'resource'
               ? 'Opening hours and billing rates for this resource. Changes are saved with its configuration.'
               : 'Optional starting values for resources. These defaults are saved with the template and included when it is duplicated.'}

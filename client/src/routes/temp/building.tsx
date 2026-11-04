@@ -50,7 +50,7 @@ function TempBuildingPage() {
     <main className="content-container py-4 sm:py-6">
       <nav
         aria-label="Breadcrumb"
-        className="mb-4 text-xs text-base-content/70 uppercase"
+        className="mb-4 text-xs text-base-content/80 uppercase"
       >
         <ol className="flex flex-wrap items-center gap-2">
           <li>
@@ -159,7 +159,7 @@ function TempBuildingPage() {
             >
               Room Search
             </h2>
-            <p aria-live="polite" className="text-sm text-base-content/70">
+            <p aria-live="polite" className="text-sm text-base-content/80">
               Showing {visibleRooms.length} sample rooms
             </p>
           </div>
@@ -227,12 +227,12 @@ function TempBuildingPage() {
                 >
                   <div>
                     <h3 className="font-semibold text-primary">{room.name}</h3>
-                    <p className="mt-1 text-sm text-base-content/70">
+                    <p className="mt-1 text-sm text-base-content/80">
                       {room.type} · Floor {room.floor}
                     </p>
                   </div>
                   <div className="flex items-center gap-5 text-sm">
-                    <span className="text-base-content/70">
+                    <span className="text-base-content/80">
                       Seats {room.capacity}
                     </span>
                     <span className="font-semibold text-primary">
@@ -244,7 +244,7 @@ function TempBuildingPage() {
             ))}
           </ul>
           {visibleRooms.length === 0 && (
-            <p className="mt-6 rounded-sm border border-base-300 bg-base-100 px-5 py-8 text-center text-base-content/70 shadow-sm">
+            <p className="mt-6 rounded-sm border border-base-300 bg-base-100 px-5 py-8 text-center text-base-content/80 shadow-sm">
               No sample rooms match those filters.
             </p>
           )}

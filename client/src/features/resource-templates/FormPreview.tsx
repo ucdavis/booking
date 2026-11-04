@@ -68,7 +68,7 @@ export function FormPreview({
       }
     >
       <h2 className="text-xl font-semibold text-primary">Preview</h2>
-      <p className="mt-1 text-sm text-base-content/65">
+      <p className="mt-1 text-sm text-base-content/75">
         Try the form as an end user. Preview answers are not saved.
       </p>
       <form
@@ -82,7 +82,7 @@ export function FormPreview({
         }}
       >
         {!definition.fields.length && (
-          <p className="text-base-content/65">
+          <p className="text-base-content/75">
             Add fields to preview your form.
           </p>
         )}
@@ -95,7 +95,7 @@ export function FormPreview({
               <div className="space-y-2 break-words" key={definitionField.id}>
                 <p className="whitespace-pre-wrap">{definitionField.label}</p>
                 {definitionField.helpText && (
-                  <p className="whitespace-pre-wrap text-sm text-base-content/65">
+                  <p className="whitespace-pre-wrap text-sm text-base-content/75">
                     {definitionField.helpText}
                   </p>
                 )}
@@ -272,7 +272,7 @@ export function FormPreview({
                     )}
                     {definitionField.helpText && (
                       <p
-                        className="mt-2 whitespace-pre-wrap break-words text-sm text-base-content/65"
+                        className="mt-2 whitespace-pre-wrap break-words text-sm text-base-content/75"
                         id={helpId}
                       >
                         {definitionField.helpText}

@@ -36,29 +36,29 @@ function TeamOverviewPage() {
       <section className="min-w-0 rounded-sm border border-base-300 bg-base-200 p-6 shadow-sm sm:p-8">
         <h2 className="text-xl font-semibold text-primary">Team overview</h2>
         <dl className="mt-6 grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
-          <dt className="text-sm font-normal text-base-content/65">
+          <dt className="text-sm font-normal text-base-content/75">
             Team name
           </dt>
           <dd className="mb-3 break-words sm:mb-0 text-base font-normal text-base-content">
             {team.name}
           </dd>
-          <dt className="text-sm font-normal text-base-content/65">Team URL</dt>
+          <dt className="text-sm font-normal text-base-content/75">Team URL</dt>
           <dd className="mb-3 break-all sm:mb-0 text-base font-normal text-base-content">
             /teams/{team.slug}
           </dd>
-          <dt className="text-sm font-normal text-base-content/65">
+          <dt className="text-sm font-normal text-base-content/75">
             Your access
           </dt>
           <dd className="text-base font-normal text-base-content">
             {accessLabels.join(', ') || 'Team access'}
           </dd>
         </dl>
-        <p className="mt-6 text-sm text-base-content/65">
+        <p className="mt-6 text-sm text-base-content/75">
           The team name and URL slug were set when this team was created and
           cannot be changed.
         </p>
         {isSiteAdmin && roles.length === 0 && (
-          <p className="mt-3 text-sm text-base-content/65">
+          <p className="mt-3 text-sm text-base-content/75">
             You have access through site administration. You do not have a
             separate role on this team.
           </p>

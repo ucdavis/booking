@@ -157,7 +157,7 @@ export function TeamSpaces({
         </h2>
       </div>
       {spacesQuery.isPending ? (
-        <p className="mt-5 text-base-content/70" role="status">
+        <p className="mt-5 text-base-content/80" role="status">
           Loading spaces…
         </p>
       ) : spacesQuery.isError ? (
@@ -172,7 +172,7 @@ export function TeamSpaces({
           </button>
         </div>
       ) : spacesQuery.data.length === 0 ? (
-        <p className="mt-5 text-base-content/70">
+        <p className="mt-5 text-base-content/80">
           No spaces are attached to this team.
         </p>
       ) : (
@@ -182,7 +182,7 @@ export function TeamSpaces({
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold">{space.name}</span>
                 {!space.isActive && (
-                  <span className="badge badge-soft">Inactive</span>
+                  <span className="badge badge-neutral">Inactive</span>
                 )}
                 {canAttach && (
                   <button
@@ -203,7 +203,7 @@ export function TeamSpaces({
                 )}
               </div>
               {space.address && (
-                <p className="mt-1 text-sm text-base-content/70">
+                <p className="mt-1 text-sm text-base-content/80">
                   {space.address}
                 </p>
               )}
@@ -359,7 +359,7 @@ export function TeamSpaces({
             </fieldset>
           </form>
           {availableQuery.isPending ? (
-            <p className="mt-3 text-sm text-base-content/65" role="status">
+            <p className="mt-3 text-sm text-base-content/75" role="status">
               Loading available spaces…
             </p>
           ) : availableQuery.isError ? (
@@ -377,7 +377,7 @@ export function TeamSpaces({
               </button>
             </div>
           ) : spacesQuery.isSuccess && availableSpaces.length === 0 ? (
-            <p className="mt-3 text-sm text-base-content/65">
+            <p className="mt-3 text-sm text-base-content/75">
               All available spaces are already attached.
             </p>
           ) : null}

@@ -105,7 +105,7 @@ export function FormFieldEditor({
             ))}
           </div>
           <p
-            className="mt-2 text-sm text-base-content/65"
+            className="mt-2 text-sm text-base-content/75"
             id={`${prefix}-length-help`}
           >
             Leave blank for no limit. Length limits apply when an answer is

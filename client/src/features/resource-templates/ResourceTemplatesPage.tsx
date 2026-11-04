@@ -139,7 +139,7 @@ export function ResourceTemplatesPage({ teamSlug }: { teamSlug?: string }) {
     },
     {
       accessorKey: 'isActive',
-      cell: ({ row }) => <span className={`badge ${row.original.isActive ? 'badge-success badge-outline' : 'badge-ghost'}`}>{row.original.isActive ? 'Active' : 'Archived'}</span>,
+      cell: ({ row }) => <span className={`badge ${row.original.isActive ? 'badge-success' : 'badge-neutral'}`}>{row.original.isActive ? 'Active' : 'Archived'}</span>,
       header: 'Status',
     },
     {
@@ -185,28 +185,28 @@ export function ResourceTemplatesPage({ teamSlug }: { teamSlug?: string }) {
 
   return (
     <Container className={teamSlug ? undefined : 'content-container py-4 sm:py-8'}>
-      {!teamSlug && <nav aria-label="Breadcrumb" className="mb-5 text-sm text-base-content/65">
+      {!teamSlug && <nav aria-label="Breadcrumb" className="mb-5 text-sm text-base-content/75">
         <Link className="hover:text-primary hover:underline" to="/admin">Site admin</Link>{' / '}<span aria-current="page">Resource templates</span>
       </nav>}
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Heading className="text-2xl font-semibold tracking-tight text-primary">Resource templates</Heading>
-          <p className="mt-3 max-w-2xl text-base-content/70">{teamSlug
+          <p className="mt-3 max-w-2xl text-base-content/80">{teamSlug
             ? 'Manage reusable forms for your team. Start with a system template or create your own, and view older team versions by including archived templates.'
             : 'Create reusable forms for resource requests. Site templates are managed here without a team assignment.'}</p>
         </div>
         <Link className="btn btn-primary shrink-0 self-start" {...createLink}><PlusIcon aria-hidden="true" className="h-5 w-5" />Create template</Link>
       </div>
       {duplicateMutation.isError && <p className="mt-6 text-error" role="alert">{duplicateError}</p>}
-      {templatesQuery.isPending ? <p className="py-8 text-center text-base-content/70" role="status">Loading templates…</p>
+      {templatesQuery.isPending ? <p className="py-8 text-center text-base-content/80" role="status">Loading templates…</p>
         : templatesQuery.isError ? <div className="py-6 text-center"><p role="alert">We could not load the resource templates. Please try again.</p><button className="btn btn-outline mt-4" onClick={() => void templatesQuery.refetch()} type="button">Try again</button></div>
         : sections.map(({ isSystem, templates, title }) => (
           <section aria-label={title} className="mt-8 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6" key={title}>
             {teamSlug && <h3 className="mb-4 text-xl font-semibold text-primary">{title}</h3>}
             {isSystem
-              ? <p className="mb-6 text-sm text-base-content/70">View a system template or duplicate it into your team to customize it.</p>
+              ? <p className="mb-6 text-sm text-base-content/80">View a system template or duplicate it into your team to customize it.</p>
               : <label className="mb-6 flex items-center gap-3 text-sm font-semibold text-base-content"><input checked={showArchived} className="checkbox checkbox-sm" onChange={(event) => setShowArchived(event.target.checked)} type="checkbox" />Include archived templates</label>}
-            {templates.length === 0 ? <p className="py-8 text-center text-base-content/70">{isSystem
+            {templates.length === 0 ? <p className="py-8 text-center text-base-content/80">{isSystem
               ? 'No active system templates are available.'
               : showArchived ? 'No templates have been created yet. Create a template to get started.' : 'No active templates. Create a template or include archived templates.'}</p>
               : <DataTable columns={columns} data={templates} filterPlaceholder="Search templates…" initialState={{ pagination: { pageSize: 10 }, sorting: [{ desc: false, id: 'name' }] }} />}

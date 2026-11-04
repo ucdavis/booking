@@ -80,7 +80,7 @@ function TempRoomPage() {
     <main className="content-container py-8 sm:py-10">
       <nav
         aria-label="Breadcrumb"
-        className="mb-4 text-xs text-base-content/70 uppercase"
+        className="mb-4 text-xs text-base-content/80 uppercase"
       >
         <ol className="flex flex-wrap items-center gap-2">
           <li>
@@ -311,7 +311,7 @@ function TempRoomPage() {
               >
                 Reservation details
               </h3>
-              <p className="mt-2 text-sm text-base-content/70">
+              <p className="mt-2 text-sm text-base-content/80">
                 {selectedDates.length > 0
                   ? selectedDates.map(dateFormatter.format).join(', ')
                   : 'Select one or more dates on the calendar to begin.'}
@@ -465,7 +465,7 @@ function TempRoomPage() {
                       </select>
                     </label>
 
-                    <p className="border-t border-base-300 pt-4 text-xs text-base-content/70">
+                    <p className="border-t border-base-300 pt-4 text-xs text-base-content/80">
                       Repeats every {repeatInterval} {repeatUnit}
                       {repeatUnit === 'week' && repeatDays.length > 0
                         ? ` on ${repeatDays.map((day) => weekdays[day]).join(', ')}`
@@ -478,7 +478,7 @@ function TempRoomPage() {
 
               <div className="mt-6 rounded-sm border border-base-300 bg-base-200 p-4 text-sm shadow-sm">
                 <p className="font-semibold text-primary">Your selection</p>
-                <p className="mt-2 text-base-content/70">
+                <p className="mt-2 text-base-content/80">
                   {selectedDates.length > 0 && selectedTime
                     ? `${selectedDates.map(dateFormatter.format).join(', ')} at ${selectedTime} for ${duration} ${duration === 1 ? 'hour' : 'hours'}`
                     : 'Choose one or more dates and a start time to see your reservation.'}
@@ -499,7 +499,7 @@ function TempRoomPage() {
               </button>
               <p
                 aria-live="polite"
-                className="mt-3 text-sm text-base-content/70"
+                className="mt-3 text-sm text-base-content/80"
               >
                 {reservationMessage || 'Reservations are not submitted yet.'}
               </p>

@@ -58,7 +58,7 @@ function SiteAdminSpacesPage() {
               ))}
             </ul>
           ) : (
-            <span className="text-base-content/65">No teams attached</span>
+            <span className="text-base-content/75">No teams attached</span>
           ),
         header: 'Attached teams',
         id: 'teams',
@@ -66,7 +66,7 @@ function SiteAdminSpacesPage() {
       {
         accessorKey: 'slug',
         cell: ({ row }) => (
-          <span className="break-all text-base-content/70">
+          <span className="break-all text-base-content/80">
             {row.original.slug}
           </span>
         ),
@@ -112,7 +112,7 @@ function SiteAdminSpacesPage() {
     <main className="content-container py-4 sm:py-8">
       <nav
         aria-label="Breadcrumb"
-        className="mb-5 text-sm text-base-content/65"
+        className="mb-5 text-sm text-base-content/75"
       >
         <Link className="hover:text-primary hover:underline" to="/temp">
           Home
@@ -130,7 +130,7 @@ function SiteAdminSpacesPage() {
           <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
             Spaces
           </h1>
-          <p className="mt-3 max-w-2xl text-base-content/70">
+          <p className="mt-3 max-w-2xl text-base-content/80">
             Create and update buildings and other named locations in Booking.
           </p>
         </div>
@@ -155,7 +155,7 @@ function SiteAdminSpacesPage() {
         className="mt-8 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
       >
         {spacesQuery.isPending ? (
-          <p className="py-8 text-center text-base-content/70" role="status">
+          <p className="py-8 text-center text-base-content/80" role="status">
             Loading spaces…
           </p>
         ) : spacesQuery.isError ? (
@@ -170,7 +170,7 @@ function SiteAdminSpacesPage() {
             </button>
           </div>
         ) : spacesQuery.data.length === 0 ? (
-          <p className="py-8 text-center text-base-content/70">
+          <p className="py-8 text-center text-base-content/80">
             No spaces have been created yet. Create a space to get started.
           </p>
         ) : (

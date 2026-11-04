@@ -110,7 +110,7 @@ export function NotificationExample() {
           <h1 className="mb-4 text-5xl font-bold">
             Razor templates, MJML, and SMTP in one shared flow
           </h1>
-          <p className="mx-auto max-w-3xl text-xl text-base-content/70">
+          <p className="mx-auto max-w-3xl text-xl text-base-content/80">
             This page exercises the reusable email notification system that
             lives in <code>server.core</code>. The page keeps the request path
             easy to trace while showing where to add real templates and
@@ -125,7 +125,7 @@ export function NotificationExample() {
                 <h2 className="card-title text-2xl">
                   How the rendering pipeline works
                 </h2>
-                <p className="mt-2 text-base-content/70">
+                <p className="mt-2 text-base-content/80">
                   The shared notification pipeline separates template rendering,
                   MJML conversion, and SMTP delivery so feature-specific
                   services can focus on message composition.
@@ -138,7 +138,7 @@ export function NotificationExample() {
                     <div className="badge badge-primary badge-outline">
                       1. Razor
                     </div>
-                    <p className="text-sm text-base-content/70">
+                    <p className="text-sm text-base-content/80">
                       Templated markup starts in
                       <br />
                       <code>server/Examples/Notifications/Views</code>.
@@ -151,7 +151,7 @@ export function NotificationExample() {
                     <div className="badge badge-primary badge-outline">
                       2. MJML
                     </div>
-                    <p className="text-sm text-base-content/70">
+                    <p className="text-sm text-base-content/80">
                       The shared renderer transforms MJML into responsive HTML
                       before delivery.
                     </p>
@@ -163,7 +163,7 @@ export function NotificationExample() {
                     <div className="badge badge-primary badge-outline">
                       3. SMTP
                     </div>
-                    <p className="text-sm text-base-content/70">
+                    <p className="text-sm text-base-content/80">
                       The SMTP sender delivers the message using the configured
                       SMTP server.
                     </p>
@@ -176,7 +176,7 @@ export function NotificationExample() {
                   <h3 className="card-title text-lg">
                     Starter files to inspect
                   </h3>
-                  <div className="space-y-3 text-sm text-base-content/70">
+                  <div className="space-y-3 text-sm text-base-content/80">
                     <p>
                       Shared layout:
                       <br />
@@ -214,7 +214,7 @@ export function NotificationExample() {
           <article className="card bg-base-100 rounded-sm border border-base-300 shadow-sm">
             <div className="card-body">
               <h2 className="card-title text-2xl">Send a notification email</h2>
-              <p className="text-base-content/70">
+              <p className="text-base-content/80">
                 The API route is development-only. If the recipient field stays
                 empty, the backend falls back to your current sign-in.
               </p>
@@ -330,7 +330,7 @@ export function NotificationExample() {
                   <h3 className="card-title text-lg">
                     Send the 5-row table email
                   </h3>
-                  <p className="text-sm text-base-content/70">
+                  <p className="text-sm text-base-content/80">
                     This posts five dummy rows to the dedicated table template
                     endpoint and renders the total in the last row of the email.
                   </p>

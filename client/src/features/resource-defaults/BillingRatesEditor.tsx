@@ -51,14 +51,14 @@ export const BillingRatesEditor = withFieldGroup({
               {billingRates !== null && (
                 <>
                   <p
-                    className="text-sm text-base-content/65"
+                    className="text-sm text-base-content/75"
                     id={`${prefix}-help`}
                   >
                     Enter a rate name and a nonnegative amount in US dollars.
                     Rates can apply per hour, per day, or per booking.
                   </p>
                   {billingRates.length === 0 && (
-                    <p className="rounded-sm border border-dashed border-base-300 p-4 text-sm text-base-content/65">
+                    <p className="rounded-sm border border-dashed border-base-300 p-4 text-sm text-base-content/75">
                       No billing rates are configured.
                     </p>
                   )}

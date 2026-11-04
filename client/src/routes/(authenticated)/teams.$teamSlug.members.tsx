@@ -264,7 +264,7 @@ function TeamMembersPage() {
         accessorKey: 'isActive',
         cell: ({ row }) => (
           <span
-            className={`badge badge-sm ${row.original.isActive ? 'badge-success badge-outline' : 'badge-ghost'}`}
+            className={`badge badge-sm ${row.original.isActive ? 'badge-success' : 'badge-neutral'}`}
           >
             {row.original.isActive ? 'Active' : 'Inactive'}
           </span>
@@ -329,7 +329,7 @@ function TeamMembersPage() {
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold text-primary">Team members</h2>
-          <p className="mt-3 max-w-2xl text-base-content/70">
+          <p className="mt-3 max-w-2xl text-base-content/80">
             Add people and manage their roles on this team. Changes that remove
             your own administrator access require confirmation.
           </p>
@@ -402,7 +402,7 @@ function TeamMembersPage() {
         className="mt-8 rounded-sm border border-base-300 bg-base-200 p-4 shadow-sm sm:p-6"
       >
         {membersQuery.data.length === 0 ? (
-          <p className="py-8 text-center text-base-content/70">
+          <p className="py-8 text-center text-base-content/80">
             This team does not have any members yet.
           </p>
         ) : (
@@ -457,7 +457,7 @@ function TeamMembersError({ error }: { error: unknown }) {
             ? 'Team not found'
             : 'We could not load team members'}
       </h2>
-      <p className="mt-4 text-base-content/70">
+      <p className="mt-4 text-base-content/80">
         {isForbidden
           ? "You don't have permission to manage members of this team."
           : isNotFound

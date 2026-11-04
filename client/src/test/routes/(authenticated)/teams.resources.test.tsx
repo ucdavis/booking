@@ -283,7 +283,7 @@ describe('team resources', () => {
   });
 
   it.each([true, false])(
-    'shows the saved read-only location first even when it is unavailable for new resources (details: %s)',
+    'shows the saved read-only location inside resource details even when it is unavailable for new resources (details: %s)',
     async (hasDetails) => {
       mockAccess();
       const savedResource = resource();
@@ -299,27 +299,18 @@ describe('team resources', () => {
       const location = within(locationSection);
       expect(location.getByText(savedResource.space.name)).toBeInTheDocument();
       expect(
-        locationSection.compareDocumentPosition(
-          screen.getByRole('region', { name: 'Resource details' })
-        ) & Node.DOCUMENT_POSITION_FOLLOWING
-      ).toBeTruthy();
+        screen.getByRole('region', { name: 'Resource details' })
+      ).toContainElement(locationSection);
+      expect(location.queryByRole('combobox')).not.toBeInTheDocument();
       expect(
-        location.queryByRole('combobox', { name: 'Location' })
+        location.queryByText('The resource stays in its current location.')
       ).not.toBeInTheDocument();
-      expect(
-        location.getByText('The resource stays in its current location.')
-      ).toBeInTheDocument();
       if (hasDetails) {
         expect(
-          location.getByText(savedResource.space.description!)
-        ).toBeInTheDocument();
+          location.queryByText(savedResource.space.description!)
+        ).not.toBeInTheDocument();
         expect(
-          location.getByText(savedResource.space.address!)
-        ).toBeInTheDocument();
-      } else {
-        expect(location.queryByText('Address')).not.toBeInTheDocument();
-        expect(
-          location.queryByText('Shared teaching and research laboratories.')
+          location.queryByText(savedResource.space.address!)
         ).not.toBeInTheDocument();
       }
       expect(
@@ -386,29 +377,16 @@ describe('team resources', () => {
     const template = await screen.findByRole('combobox', {
       name: 'Resource template',
     });
-    const location = screen.getByRole('radio', { name: 'Teaching laboratory' });
-    expect(location).toBeChecked();
     expect(template).toBeEnabled();
-    expect(
-      location.compareDocumentPosition(template) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    const locationSection = within(
-      screen.getByRole('region', { name: 'Resource location' })
-    );
-    expect(
-      locationSection.getByText(options.spaces[0].description!)
-    ).toBeInTheDocument();
-    expect(
-      locationSection.getByText(options.spaces[0].address!)
-    ).toBeInTheDocument();
-    expect(
-      locationSection.queryByText('America/Los_Angeles')
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('textbox', { name: 'Resource name' })
-    ).not.toBeInTheDocument();
     fireEvent.change(template, { target: { value: '1' } });
+    const location = screen.getByRole('region', { name: 'Resource location' });
+    expect(within(location).queryByRole('combobox')).not.toBeInTheDocument();
+    expect(
+      within(location).getByText(options.spaces[0].name)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'Resource details' })
+    ).toContainElement(location);
     fireEvent.change(
       await screen.findByRole('textbox', { name: 'Resource name' }),
       { target: { value: 'New microscope' } }
@@ -431,7 +409,6 @@ describe('team resources', () => {
         ).value,
       },
     });
-    expect(location).toBeChecked();
     expect(
       within(location).queryByRole('option', { name: 'Add a new location' })
     ).not.toBeInTheDocument();
@@ -444,7 +421,13 @@ describe('team resources', () => {
     expect(
       screen.queryByRole('textbox', { name: 'Time zone' })
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: 'Hours and rates' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource details' }));
+    expect(
+      screen.queryByRole('tab', { name: 'Hours and rates' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'Resource details' })
+    ).toContainElement(screen.getByRole('region', { name: 'Hours and rates' }));
     expect(screen.getByLabelText('Monday opening time 1')).toHaveValue('09:00');
     expect(screen.getByRole('textbox', { name: 'Rate name 1' })).toHaveValue(
       'Standard'
@@ -621,7 +604,7 @@ describe('team resources', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('chooses a location before the template, displays its details, and preserves the draft after a refresh', async () => {
+  it('chooses a location inside resource details and preserves the draft after tabs and a refresh', async () => {
     mockAccess();
     const availableOptions = {
       ...options,
@@ -655,45 +638,44 @@ describe('team resources', () => {
     );
     const rendered = renderRoute({ initialPath: `${listPath}/new` });
     cleanup = rendered.cleanup;
-    const location = await screen.findByRole('group', { name: 'Location' });
-    const template = screen.getByRole('combobox', {
+    const template = await screen.findByRole('combobox', {
       name: 'Resource template',
     });
-    expect(within(location).getAllByRole('radio').every((radio) => !(radio as HTMLInputElement).checked)).toBe(true);
-    expect(template).toBeDisabled();
+    fireEvent.change(template, { target: { value: '1' } });
+    const location = screen.getByRole('combobox', { name: 'Location' });
     expect(
-      location.compareDocumentPosition(template) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    expect(
-      within(location)
-        .getAllByRole('radio')
-        .map((radio) => radio.getAttribute('aria-label'))
-    ).toEqual(['Teaching laboratory', 'Annex laboratory']);
-    expect(screen.getByText('Specialist equipment in the annex.')).toBeInTheDocument();
-    fireEvent.click(within(location).getByRole('radio', { name: 'Annex laboratory' }));
-    expect(template).toBeEnabled();
+      screen.getByRole('region', { name: 'Resource details' })
+    ).toContainElement(location);
+    expect(location).toHaveValue('');
+    fireEvent.change(location, { target: { value: '3' } });
+    expect(screen.getByText('2 Annex Road')).toBeInTheDocument();
     expect(
       screen.getByText('Specialist equipment in the annex.')
     ).toBeInTheDocument();
-    const address = screen.getByText('2 Annex Road');
-    expect(
-      location.compareDocumentPosition(address) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    fireEvent.change(template, { target: { value: '1' } });
-    expect(within(location).getByRole('radio', { name: 'Annex laboratory' })).toBeChecked();
     fireEvent.change(screen.getByRole('textbox', { name: 'Resource name' }), {
       target: { value: 'Annex microscope' },
     });
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview form' }));
+    expect(
+      screen.queryByRole('textbox', { name: 'Resource name' })
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Create resource' }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('tab', { name: 'Resource details' })
+      ).toHaveAttribute('aria-selected', 'true')
+    );
+    expect(requests).toHaveLength(0);
+    expect(screen.getByRole('textbox', { name: 'Resource name' })).toHaveValue(
+      'Annex microscope'
+    );
     fireEvent.change(screen.getByRole('combobox', { name: 'Category' }), {
       target: { value: 'Equipment' },
     });
-    expect(requests).toHaveLength(0);
-    fireEvent.click(within(location).getByRole('radio', { name: 'Teaching laboratory' }));
+    fireEvent.change(location, { target: { value: '2' } });
     expect(screen.getByText('1 Science Way')).toBeInTheDocument();
-    expect(screen.getByText('2 Annex Road')).toBeInTheDocument();
-    fireEvent.click(within(location).getByRole('radio', { name: 'Annex laboratory' }));
+    expect(screen.queryByText('2 Annex Road')).not.toBeInTheDocument();
+    fireEvent.change(location, { target: { value: '3' } });
     await act(async () => {
       rendered.queryClient.setQueryData(
         resourceOptionsQueryOptions(team.slug).queryKey,
@@ -714,20 +696,16 @@ describe('team resources', () => {
     });
     await waitFor(() =>
       expect(
-        within(location).getByRole('radio', { name: 'East Hall' })
+        within(location).getByRole('option', { name: 'East Hall' })
       ).toBeInTheDocument()
     );
-    expect(within(location).getByRole('radio', { name: 'Annex laboratory' })).toBeChecked();
-    expect(screen.getByText('2 Annex Road')).toBeInTheDocument();
-    fireEvent.click(within(location).getByRole('radio', { name: 'East Hall' }));
-    expect(screen.getByText('2 Annex Road')).toBeInTheDocument();
-    expect(screen.getByText('Specialist equipment in the annex.')).toBeInTheDocument();
+    expect(location).toHaveValue('3');
+    fireEvent.change(location, { target: { value: '4' } });
+    expect(screen.queryByText('2 Annex Road')).not.toBeInTheDocument();
     expect(
-      within(
-        screen.getByRole('region', { name: 'Resource location' })
-      ).queryByText('Address')
+      screen.queryByText('Specialist equipment in the annex.')
     ).not.toBeInTheDocument();
-    fireEvent.click(within(location).getByRole('radio', { name: 'Annex laboratory' }));
+    fireEvent.change(location, { target: { value: '3' } });
     expect(screen.getByRole('textbox', { name: 'Resource name' })).toHaveValue(
       'Annex microscope'
     );
@@ -792,14 +770,12 @@ describe('team resources', () => {
     server.use(http.post('/api/teams/:teamSlug/resources', create));
     const rendered = renderRoute({ initialPath: `${listPath}/new` });
     cleanup = rendered.cleanup;
-    const location = await screen.findByRole('group', { name: 'Location' });
-    fireEvent.click(within(location).getByRole('radio', { name: 'Annex laboratory' }));
     fireEvent.change(
-      screen.getByRole('combobox', { name: 'Resource template' }),
-      {
-        target: { value: '1' },
-      }
+      await screen.findByRole('combobox', { name: 'Resource template' }),
+      { target: { value: '1' } }
     );
+    const location = screen.getByRole('combobox', { name: 'Location' });
+    fireEvent.change(location, { target: { value: '3' } });
     fireEvent.change(screen.getByRole('textbox', { name: 'Resource name' }), {
       target: { value: 'My draft microscope' },
     });
@@ -809,12 +785,22 @@ describe('team resources', () => {
     await act(async () => {
       rendered.queryClient.setQueryData(
         resourceOptionsQueryOptions(team.slug).queryKey,
-        options
+        {
+          ...options,
+          spaces: [
+            ...options.spaces,
+            { ...options.spaces[0], id: 4, name: 'East Hall' },
+          ],
+        }
       );
     });
-    await waitFor(() => expect(within(location).queryByRole('radio', { name: 'Annex laboratory' })).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        within(location).queryByRole('option', { name: 'Annex laboratory' })
+      ).not.toBeInTheDocument()
+    );
     expect(
-      within(location).queryByRole('radio', { name: 'Annex laboratory' })
+      within(location).queryByRole('option', { name: 'Annex laboratory' })
     ).not.toBeInTheDocument();
     expect(screen.queryByText('2 Annex Road')).not.toBeInTheDocument();
     expect(
@@ -1006,7 +992,7 @@ describe('team resources', () => {
     );
     ({ cleanup } = renderRoute({ initialPath: `${listPath}/1` }));
     fireEvent.click(
-      await screen.findByRole('tab', { name: 'Hours and rates' })
+      await screen.findByRole('tab', { name: 'Resource details' })
     );
     fireEvent.change(screen.getByRole('textbox', { name: 'Rate name 1' }), {
       target: { value: 'Updated rate' },
@@ -1108,7 +1094,7 @@ describe('team resources', () => {
     expect(
       screen.getByText(/saved form is not valid JSON/)
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: 'Hours and rates' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Resource details' }));
     expect(
       screen.getByText(/These settings use a newer format/)
     ).toBeInTheDocument();

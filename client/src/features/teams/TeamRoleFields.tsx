@@ -63,7 +63,7 @@ export const TeamRoleFields = withFieldGroup({
                     {teamRoleLabels[role]}
                   </label>
                   <p
-                    className="mt-1 text-sm text-base-content/65"
+                    className="mt-1 text-sm text-base-content/75"
                     id={`${prefix}-${role}-help`}
                   >
                     {descriptions[role]}

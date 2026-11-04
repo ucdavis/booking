@@ -112,7 +112,7 @@ export function EditTeamPaymentsDialog({
           {isReplacing ? 'Replace payments API key' : 'Set payments API key'}
         </h2>
         <p
-          className="mt-2 text-base-content/70"
+          className="mt-2 text-base-content/80"
           id="edit-team-payments-description"
         >
           Enter your team&apos;s Payments API key. We will verify it before
