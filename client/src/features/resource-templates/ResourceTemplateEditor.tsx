@@ -583,7 +583,6 @@ export function ResourceTemplateEditor({
                     {(field) => (
                       <FormBuilder
                         disabled={isSaving || isSubmitting}
-                        embedded
                         onChange={field.handleChange}
                         value={field.state.value}
                       />

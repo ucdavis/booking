@@ -1,4 +1,8 @@
-import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  TrashIcon,
+} from '@heroicons/react/24/outline';
 import { useState } from 'react';
 import { FormFieldEditor } from './FormFieldEditor.tsx';
 import { createField, fieldTypeLabels } from './formDefinition.ts';
@@ -16,12 +20,10 @@ const fieldTypes: FormField['type'][] = [
 
 export function FormBuilder({
   disabled = false,
-  embedded = false,
   onChange,
   value,
 }: {
   disabled?: boolean;
-  embedded?: boolean;
   onChange: (value: FormDefinition) => void;
   value: FormDefinition;
 }) {
@@ -99,10 +101,13 @@ export function FormBuilder({
                 {value.fields.length} / 100
               </span>
             </div>
-            <ol aria-label="Form fields" className="space-y-2">
+            <ol
+              aria-label="Form fields"
+              className="divide-y divide-base-300 overflow-hidden rounded-sm border border-base-300 bg-base-100"
+            >
               {value.fields.map((field, index) => (
                 <li
-                  className={`rounded-sm border p-3 ${selectedField?.id === field.id ? 'border-primary bg-primary/5' : 'border-base-300 bg-base-100'}`}
+                  className={`relative flex items-center gap-2 border-s-[3px] p-3 transition-colors ${selectedField?.id === field.id ? 'border-s-primary bg-primary/5' : 'border-s-transparent'}`}
                   key={field.id}
                   onDragOver={(event) => {
                     if (!disabled && draggedId) {
@@ -118,65 +123,68 @@ export function FormBuilder({
                     setDraggedId(null);
                   }}
                 >
-                  <div className="flex items-start gap-2">
-                    <button
-                      aria-label={`Drag ${field.label || fieldTypeLabels[field.type]} to reorder`}
-                      className="btn btn-ghost btn-sm cursor-grab"
-                      disabled={disabled}
-                      draggable={!disabled}
-                      onDragEnd={() => setDraggedId(null)}
-                      onDragStart={(event) => {
-                        setDraggedId(field.id);
-                        event.dataTransfer.setData('text/plain', field.id);
-                        event.dataTransfer.effectAllowed = 'move';
-                      }}
-                      tabIndex={-1}
-                      type="button"
-                    >
-                      <span aria-hidden="true">⠿</span>
-                    </button>
-                    <button
-                      aria-pressed={selectedField?.id === field.id}
-                      className="min-w-0 flex-1 rounded text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
-                      disabled={disabled}
-                      onClick={() => setSelectedId(field.id)}
-                      type="button"
-                    >
-                      <span className="flex items-baseline justify-between gap-2 text-xs text-base-content/60">
-                        <span className="font-semibold tracking-wide">
-                          {index + 1}. {fieldTypeLabels[field.type]}
-                        </span>
-                        {field.validation?.required && (
-                          <span className="shrink-0">Required</span>
-                        )}
+                  <button
+                    aria-label={`Drag ${field.label || fieldTypeLabels[field.type]} to reorder`}
+                    className="btn btn-ghost btn-square btn-xs relative z-10 shrink-0 cursor-grab active:cursor-grabbing"
+                    disabled={disabled}
+                    draggable={!disabled}
+                    onDragEnd={() => setDraggedId(null)}
+                    onDragStart={(event) => {
+                      setDraggedId(field.id);
+                      event.dataTransfer.setData('text/plain', field.id);
+                      event.dataTransfer.effectAllowed = 'move';
+                    }}
+                    tabIndex={-1}
+                    type="button"
+                  >
+                    <span aria-hidden="true">⠿</span>
+                  </button>
+                  <button
+                    aria-pressed={selectedField?.id === field.id}
+                    className="min-w-0 flex-1 cursor-pointer text-left after:absolute after:inset-0 after:transition-colors enabled:hover:after:bg-primary/5 focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-primary disabled:cursor-default"
+                    disabled={disabled}
+                    onClick={() => setSelectedId(field.id)}
+                    title={field.label || 'Untitled field'}
+                    type="button"
+                  >
+                    <span className="block truncate text-sm font-semibold">
+                      {field.label || 'Untitled field'}
+                    </span>
+                    <span className="mt-1 flex items-baseline gap-2 text-xs text-base-content/70">
+                      <span className="truncate">
+                        {index + 1}. {fieldTypeLabels[field.type]}
                       </span>
-                      <span className="mt-1 block truncate font-medium">
-                        {field.label || 'Untitled field'}
-                      </span>
-                    </button>
-                  </div>
-                  <div className="mt-2 flex items-center gap-1">
-                    <button
-                      aria-label={`Move ${field.label} up`}
-                      className="btn btn-ghost btn-square btn-xs"
-                      disabled={disabled || index === 0}
-                      onClick={() => moveField(field.id, index - 1)}
-                      type="button"
-                    >
-                      <ChevronUpIcon aria-hidden="true" className="size-4" />
-                    </button>
-                    <button
-                      aria-label={`Move ${field.label} down`}
-                      className="btn btn-ghost btn-square btn-xs"
-                      disabled={disabled || index === value.fields.length - 1}
-                      onClick={() => moveField(field.id, index + 1)}
-                      type="button"
-                    >
-                      <ChevronDownIcon aria-hidden="true" className="size-4" />
-                    </button>
+                      {field.validation?.required && (
+                        <span className="shrink-0">Required</span>
+                      )}
+                    </span>
+                  </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <div className="flex flex-col">
+                      <button
+                        aria-label={`Move ${field.label} up`}
+                        className="btn btn-ghost btn-square btn-xs relative z-10"
+                        disabled={disabled || index === 0}
+                        onClick={() => moveField(field.id, index - 1)}
+                        title="Move up"
+                        type="button"
+                      >
+                        <ChevronUpIcon aria-hidden="true" className="size-4" />
+                      </button>
+                      <button
+                        aria-label={`Move ${field.label} down`}
+                        className="btn btn-ghost btn-square btn-xs relative z-10"
+                        disabled={disabled || index === value.fields.length - 1}
+                        onClick={() => moveField(field.id, index + 1)}
+                        title="Move down"
+                        type="button"
+                      >
+                        <ChevronDownIcon aria-hidden="true" className="size-4" />
+                      </button>
+                    </div>
                     <button
                       aria-label={`Remove ${field.label || fieldTypeLabels[field.type]}`}
-                      className="btn btn-ghost btn-xs ml-auto text-error"
+                      className="btn btn-ghost btn-square btn-xs relative z-10 text-error"
                       disabled={disabled}
                       onClick={() => {
                         onChange({
@@ -188,9 +196,10 @@ export function FormBuilder({
                           `${field.label || fieldTypeLabels[field.type]} removed.`
                         );
                       }}
+                      title="Remove field"
                       type="button"
                     >
-                      Remove
+                      <TrashIcon aria-hidden="true" className="size-4" />
                     </button>
                   </div>
                 </li>
@@ -198,13 +207,7 @@ export function FormBuilder({
             </ol>
           </div>
           {selectedField && (
-            <div
-              className={
-                embedded
-                  ? 'min-w-0 rounded-sm border border-base-300 bg-base-100 p-4 sm:p-6'
-                  : 'rounded-sm border border-base-300 bg-base-100 p-5 shadow-sm'
-              }
-            >
+            <div className="min-w-0">
               <FormFieldEditor
                 disabled={disabled}
                 field={selectedField}
